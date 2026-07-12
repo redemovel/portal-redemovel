@@ -83,7 +83,42 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('inp-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
   document.getElementById('inp-user').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('inp-pass').focus(); });
   init();
+
+  // Auto-refresh quando o utilizador volta ao separador
+  let ultimoRefresh = Date.now();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !SESSION) return;
+    // Não recarregar se voltou ao separador há menos de 10 segundos
+    if (Date.now() - ultimoRefresh < 10000) return;
+    ultimoRefresh = Date.now();
+    refrescarVistaActual();
+  });
 });
+
+// Recarrega os dados da vista actualmente visível — sem UI intrusiva
+function refrescarVistaActual() {
+  const vistaVisivel = document.querySelector('.view.active');
+  if (!vistaVisivel) return;
+  const id = vistaVisivel.id.replace('view-', '');
+
+  try {
+    if (id === 'assiduidade') { assCarregarPonto(); assCarregarProximosDias(); }
+    else if (id === 'gestao') {
+      const painelActivo = document.querySelector('.gestao-panel.active');
+      if (!painelActivo) { carregarAprovacoesBadge(); return; }
+      const pid = painelActivo.id.replace('gpanel-', '');
+      if (pid === 'aprovacoes') carregarAprovacoes();
+      else if (pid === 'ferias') carregarFerias();
+      else if (pid === 'mapa') { if (document.getElementById('mapa-local').value && document.getElementById('mapa-mes').value) carregarMapa(); }
+      else if (pid === 'horarios') { if (document.getElementById('hor-local').value && document.getElementById('hor-semana').value) carregarAmbasVistas(); if (typeof carregarAtribuicoes === 'function') carregarAtribuicoes(); }
+      else if (pid === 'turnos') carregarTurnos();
+      else if (pid === 'ips') carregarIPs();
+      else if (pid === 'utilizadores') carregarUtilizadores();
+      carregarAprovacoesBadge();
+    }
+    else if (id === 'dashboard') carregarAprovacoesBadge();
+  } catch(_) {}
+}
 
 // ═══════════════════════════════════════
 //  DASHBOARD
