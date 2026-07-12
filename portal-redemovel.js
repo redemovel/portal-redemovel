@@ -1,7 +1,9 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
 
-let SESSION = null;
-let modalResetTarget = null;
+window.SESSION = null;
+window.modalResetTarget = null;
+var SESSION = window.SESSION;
+var modalResetTarget = window.modalResetTarget;
 
 // ═══════════════════════════════════════
 //  INICIALIZAÇÃO
@@ -87,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-refresh quando o utilizador volta ao separador
   let ultimoRefresh = Date.now();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !SESSION) return;
+    if (document.visibilityState !== 'visible' || !window.SESSION) return;
     // Não recarregar se voltou ao separador há menos de 10 segundos
     if (Date.now() - ultimoRefresh < 10000) return;
     ultimoRefresh = Date.now();
