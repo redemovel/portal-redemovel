@@ -2,15 +2,6 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3
 
 window.SESSION = null;
 window.modalResetTarget = null;
-window.LOCAIS_CACHE = [];
-window.COLABORADORES_CACHE = [];
-window.TURNOS_CACHE = [];
-window.HORARIOS_TIPO_CACHE = [];
-window.MAPA_CACHE = null;
-window.ASS_REGISTO_HOJE = null;
-window.ASS_COLEGAS_CACHE = [];
-window.ASS_LOCAL_ID = null;
-window.ASS_TURNO_ID = null;
 var SESSION = window.SESSION;
 var modalResetTarget = window.modalResetTarget;
 
@@ -784,6 +775,12 @@ function assActivar() { if (SESSION) assIniciar(); }
 // ═══════════════════════════════════════
 //  GESTÃO — TABS
 // ═══════════════════════════════════════
+let LOCAIS_CACHE = [];
+let COLABORADORES_CACHE = [];
+let TURNOS_CACHE = [];
+let HORARIOS_TIPO_CACHE = [];
+let MAPA_CACHE = null;
+
 function showGestaoTab(id, btn) {
   document.querySelectorAll('.gestao-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.gestao-tab').forEach(t=>t.classList.remove('active'));
@@ -1317,9 +1314,9 @@ function abrirModalConflitosAtribuicao(conflitos, payloadBase) {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'modal-conflito-atrib';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:none;align-items:center;justify-content:center;padding:1rem';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100000;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)';
     overlay.innerHTML = `
-      <div style="background:var(--card-bg);border-radius:14px;padding:1.25rem 1.5rem;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3);font-family:inherit">
+      <div style="background:var(--card-bg);border-radius:14px;padding:1.25rem 1.5rem;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);font-family:inherit;position:relative;z-index:100001">
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
           <span style="font-size:1.4rem">⚠</span>
           <div style="font-weight:700;font-size:1.05rem">Conflito de atribuição</div>
@@ -1340,6 +1337,9 @@ function abrirModalConflitosAtribuicao(conflitos, payloadBase) {
     document.getElementById('conf-atrib-cancelar').onclick = () => atCancelarConflitos();
   }
   overlay.style.display = 'flex';
+  // Esconder temporariamente o modal principal de atribuir para não interferir visualmente
+  const modalPrincipal = document.getElementById('modal-atribuir');
+  if (modalPrincipal) modalPrincipal.style.visibility = 'hidden';
   atMostrarProximoConflito();
 }
 
@@ -1348,6 +1348,9 @@ function atMostrarProximoConflito() {
   if (!est) return;
   if (!est.restantes.length) {
     document.getElementById('modal-conflito-atrib').style.display = 'none';
+    // Restaurar visibilidade do modal principal (fica com o overlay a resultar de sucesso)
+    const modalPrincipal = document.getElementById('modal-atribuir');
+    if (modalPrincipal) modalPrincipal.style.visibility = '';
     atSubmeterComDecisoes();
     return;
   }
@@ -1380,6 +1383,9 @@ function atResolverConflito(accao) {
 
 function atCancelarConflitos() {
   document.getElementById('modal-conflito-atrib').style.display = 'none';
+  // Restaurar visibilidade do modal principal
+  const modalPrincipal = document.getElementById('modal-atribuir');
+  if (modalPrincipal) modalPrincipal.style.visibility = '';
   ATRIB_CONFLITOS_ESTADO = null;
   const err = document.getElementById('atribuir-err');
   if (err) { err.textContent = 'Operação cancelada.'; err.style.display = 'block'; }
