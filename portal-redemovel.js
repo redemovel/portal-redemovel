@@ -2,6 +2,15 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3
 
 window.SESSION = null;
 window.modalResetTarget = null;
+window.LOCAIS_CACHE = [];
+window.COLABORADORES_CACHE = [];
+window.TURNOS_CACHE = [];
+window.HORARIOS_TIPO_CACHE = [];
+window.MAPA_CACHE = null;
+window.ASS_REGISTO_HOJE = null;
+window.ASS_COLEGAS_CACHE = [];
+window.ASS_LOCAL_ID = null;
+window.ASS_TURNO_ID = null;
 var SESSION = window.SESSION;
 var modalResetTarget = window.modalResetTarget;
 
@@ -775,12 +784,6 @@ function assActivar() { if (SESSION) assIniciar(); }
 // ═══════════════════════════════════════
 //  GESTÃO — TABS
 // ═══════════════════════════════════════
-let LOCAIS_CACHE = [];
-let COLABORADORES_CACHE = [];
-let TURNOS_CACHE = [];
-let HORARIOS_TIPO_CACHE = [];
-let MAPA_CACHE = null;
-
 function showGestaoTab(id, btn) {
   document.querySelectorAll('.gestao-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.gestao-tab').forEach(t=>t.classList.remove('active'));
