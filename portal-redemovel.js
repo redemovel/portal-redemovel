@@ -1139,35 +1139,263 @@ function abrirModalAtribuir() {
   document.getElementById('atribuir-err').style.display='none';
   document.getElementById('atribuir-ok').style.display='none';
   delete document.getElementById('modal-atribuir').dataset.editId;
-  document.querySelector('#modal-atribuir .modal-title').textContent = 'Atribuir Horário à Semana';
+  document.querySelector('#modal-atribuir .modal-title').textContent = 'Atribuir Horário à Semana(s)';
   popularColaboradoresSelect('at-colaborador');
   popularSelectLocal('at-local');
   popularHorariosTipoSelect('at-horario-tipo');
   const semAtual=document.getElementById('hor-semana').value;
   if (semAtual) document.getElementById('at-semana').value=semAtual;
+  // Novo: injectar UI de multi-colaborador + repetição no modo criar
+  injectarUIMultiAtribuicao(false);
   document.getElementById('modal-atribuir').classList.add('open');
+}
+
+// Adiciona (uma vez) a UI de multi-select e repetição ao modal.
+// Se modoEdicao=true, esconde essa UI; se false, mostra e prepara.
+function injectarUIMultiAtribuicao(modoEdicao) {
+  const selColab = document.getElementById('at-colaborador');
+  if (!selColab) return;
+
+  // Detectar se já foi injectado — se sim, só actualizar visibilidade
+  let bloco = document.getElementById('at-multi-bloco');
+  if (!bloco) {
+    // Container do bloco novo, inserido logo depois do select antigo de colaborador
+    bloco = document.createElement('div');
+    bloco.id = 'at-multi-bloco';
+    bloco.style.cssText = 'margin-top:.5rem';
+    bloco.innerHTML = `
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">
+        Colaboradores adicionais (opcional — para atribuir a vários de uma vez)
+      </div>
+      <div id="at-checkboxes" style="max-height:130px;overflow-y:auto;border:1px solid var(--gray-light);border-radius:8px;padding:.4rem .6rem;background:var(--off-white);display:flex;flex-wrap:wrap;gap:.35rem .8rem;font-size:.78rem"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:.3rem;font-size:.7rem">
+        <button type="button" onclick="atMarcarTodosColab(true)" style="background:none;border:none;color:var(--teal);cursor:pointer;font-family:inherit;padding:0;font-weight:600">✓ Selecionar todos</button>
+        <button type="button" onclick="atMarcarTodosColab(false)" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-family:inherit;padding:0">Limpar</button>
+      </div>
+
+      <div style="margin-top:1rem;border-top:1px solid var(--gray-light);padding-top:.75rem">
+        <div class="form-label" style="margin-bottom:.4rem">Repetir</div>
+        <div style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem">
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+            <input type="radio" name="at-repetir" value="nao" checked onchange="atAtualizarUIRepetir()">
+            <span>Apenas esta semana</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+            <input type="radio" name="at-repetir" value="nSemanas" onchange="atAtualizarUIRepetir()">
+            <span>Por</span>
+            <input type="number" id="at-rep-nsemanas" min="2" max="60" value="4" disabled style="width:60px;padding:.25rem .4rem;border:1px solid var(--gray-light);border-radius:6px;font-family:inherit">
+            <span>semanas</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+            <input type="radio" name="at-repetir" value="ateData" onchange="atAtualizarUIRepetir()">
+            <span>Até</span>
+            <input type="date" id="at-rep-ate" disabled style="padding:.25rem .4rem;border:1px solid var(--gray-light);border-radius:6px;font-family:inherit">
+          </label>
+        </div>
+      </div>
+    `;
+    // Inserir logo a seguir ao container do select colaborador
+    const grupoColab = selColab.closest('.form-group') || selColab.parentElement;
+    if (grupoColab && grupoColab.parentElement) grupoColab.parentElement.insertBefore(bloco, grupoColab.nextSibling);
+  }
+
+  // Preencher checkboxes com todos os colaboradores
+  const div = document.getElementById('at-checkboxes');
+  if (div) {
+    div.innerHTML = COLABORADORES_CACHE.map(c =>
+      `<label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;white-space:nowrap"><input type="checkbox" class="at-chk-colab" value="${c.username}"><span>${c.nome}</span></label>`
+    ).join('');
+  }
+
+  // Mostrar ou esconder conforme modo
+  bloco.style.display = modoEdicao ? 'none' : 'block';
+}
+
+function atAtualizarUIRepetir() {
+  const modo = (document.querySelector('input[name="at-repetir"]:checked')||{}).value;
+  document.getElementById('at-rep-nsemanas').disabled = (modo !== 'nSemanas');
+  document.getElementById('at-rep-ate').disabled = (modo !== 'ateData');
+}
+
+function atMarcarTodosColab(marcar) {
+  document.querySelectorAll('.at-chk-colab').forEach(c => c.checked = !!marcar);
+}
+
+// Recolhe todos os usernames seleccionados: o do select principal + checkboxes
+function atRecolherUsernames() {
+  const principal = document.getElementById('at-colaborador').value;
+  const marcados = Array.from(document.querySelectorAll('.at-chk-colab:checked')).map(c => c.value);
+  const set = new Set();
+  if (principal) set.add(principal);
+  marcados.forEach(u => set.add(u));
+  return Array.from(set);
+}
+
+function atRecolherRepetir() {
+  const el = document.querySelector('input[name="at-repetir"]:checked');
+  const modo = el ? el.value : 'nao';
+  if (modo === 'nao') return null;
+  if (modo === 'nSemanas') {
+    const n = Number(document.getElementById('at-rep-nsemanas').value);
+    if (!(n >= 2)) return null;
+    return {modo:'nSemanas', valor:n};
+  }
+  if (modo === 'ateData') {
+    const v = document.getElementById('at-rep-ate').value;
+    if (!v) return null;
+    return {modo:'ateData', valor:v};
+  }
+  return null;
 }
 
 async function guardarAtribuicao() {
   const err=document.getElementById('atribuir-err'), ok=document.getElementById('atribuir-ok');
   err.style.display='none'; ok.style.display='none';
-  const atribuicao={username:document.getElementById('at-colaborador').value,localId:document.getElementById('at-local').value,semanaInicio:document.getElementById('at-semana').value,horarioTipoId:document.getElementById('at-horario-tipo').value};
-  if (!atribuicao.username||!atribuicao.localId||!atribuicao.semanaInicio||!atribuicao.horarioTipoId) { err.textContent='Preencha todos os campos.'; err.style.display='block'; return; }
+  const localId = document.getElementById('at-local').value;
+  const semanaInicio = document.getElementById('at-semana').value;
+  const horarioTipoId = document.getElementById('at-horario-tipo').value;
   const editId = document.getElementById('modal-atribuir').dataset.editId;
-  let r;
+
+  // ── MODO EDIÇÃO — comportamento antigo (single) ──
   if (editId) {
-    r = await assApi({acao:'editarAtribuicaoSemana', id:editId, atribuicao});
-  } else {
-    r = await assApi({acao:'atribuirSemana', atribuicao});
-  }
-  if (!r.ok) { err.textContent=r.erro; err.style.display='block'; return; }
-  ok.textContent='✅ '+r.mensagem; ok.style.display='block';
-  if (editId) {
+    const atribuicao = {
+      username: document.getElementById('at-colaborador').value,
+      localId, semanaInicio, horarioTipoId
+    };
+    if (!atribuicao.username || !localId || !semanaInicio || !horarioTipoId) {
+      err.textContent = 'Preencha todos os campos.'; err.style.display = 'block'; return;
+    }
+    const r = await assApi({acao:'editarAtribuicaoSemana', id:editId, atribuicao});
+    if (!r.ok) { err.textContent = r.erro; err.style.display = 'block'; return; }
+    ok.textContent = '✅ '+r.mensagem; ok.style.display = 'block';
     delete document.getElementById('modal-atribuir').dataset.editId;
     setTimeout(() => closeModal('modal-atribuir'), 1000);
-  } else {
-    document.getElementById('at-colaborador').value='';
+    carregarAmbasVistas();
+    if (typeof carregarAtribuicoes === 'function') carregarAtribuicoes();
+    return;
   }
+
+  // ── MODO CRIAÇÃO — multi-colaborador + repetição + conflitos ──
+  const usernames = atRecolherUsernames();
+  const repetir = atRecolherRepetir();
+  if (!usernames.length || !localId || !semanaInicio || !horarioTipoId) {
+    err.textContent = 'Preencha todos os campos (incluindo pelo menos um colaborador).';
+    err.style.display = 'block'; return;
+  }
+
+  const payloadBase = {acao:'atribuirSemana', usernames, localId, semanaInicio, horarioTipoId, repetir};
+  const r = await assApi(payloadBase);
+
+  if (r.ok) {
+    ok.textContent = '✅ '+r.mensagem; ok.style.display = 'block';
+    setTimeout(() => closeModal('modal-atribuir'), 1200);
+    carregarAmbasVistas();
+    if (typeof carregarAtribuicoes === 'function') carregarAtribuicoes();
+    return;
+  }
+
+  if (r.conflitos && r.conflitos.length) {
+    // Fecha o modal principal e abre resolução de conflitos
+    abrirModalConflitosAtribuicao(r.conflitos, payloadBase);
+    return;
+  }
+
+  err.textContent = r.erro || 'Erro ao atribuir.'; err.style.display = 'block';
+}
+
+// ═══════════════════════════════════════
+//  MODAL — Resolução de conflitos de atribuição
+// ═══════════════════════════════════════
+let ATRIB_CONFLITOS_ESTADO = null;
+
+function abrirModalConflitosAtribuicao(conflitos, payloadBase) {
+  ATRIB_CONFLITOS_ESTADO = { restantes: conflitos.slice(), decisoes: [], payloadBase };
+  let overlay = document.getElementById('modal-conflito-atrib');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modal-conflito-atrib';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:none;align-items:center;justify-content:center;padding:1rem';
+    overlay.innerHTML = `
+      <div style="background:var(--card-bg);border-radius:14px;padding:1.25rem 1.5rem;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3);font-family:inherit">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
+          <span style="font-size:1.4rem">⚠</span>
+          <div style="font-weight:700;font-size:1.05rem">Conflito de atribuição</div>
+        </div>
+        <div id="conf-atrib-body" style="font-size:.85rem;color:var(--text-main);line-height:1.55;margin-bottom:1rem"></div>
+        <div style="display:flex;flex-direction:column;gap:.4rem">
+          <button id="conf-atrib-manter" style="padding:.55rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-main);font-weight:600;font-size:.85rem;cursor:pointer;font-family:inherit">Manter existente</button>
+          <button id="conf-atrib-subst"  style="padding:.55rem;border-radius:8px;border:none;background:var(--teal);color:white;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit">Substituir</button>
+          <button id="conf-atrib-substodos" style="padding:.55rem;border-radius:8px;border:none;background:#d97706;color:white;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit">Substituir tudo</button>
+          <button id="conf-atrib-cancelar" style="padding:.4rem;border:none;background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;font-family:inherit;margin-top:.2rem">Cancelar tudo</button>
+        </div>
+        <div id="conf-atrib-progresso" style="font-size:.72rem;color:var(--text-muted);margin-top:.5rem;text-align:right"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('conf-atrib-manter').onclick   = () => atResolverConflito('manter');
+    document.getElementById('conf-atrib-subst').onclick    = () => atResolverConflito('substituir');
+    document.getElementById('conf-atrib-substodos').onclick= () => atResolverConflito('substituirTudo');
+    document.getElementById('conf-atrib-cancelar').onclick = () => atCancelarConflitos();
+  }
+  overlay.style.display = 'flex';
+  atMostrarProximoConflito();
+}
+
+function atMostrarProximoConflito() {
+  const est = ATRIB_CONFLITOS_ESTADO;
+  if (!est) return;
+  if (!est.restantes.length) {
+    document.getElementById('modal-conflito-atrib').style.display = 'none';
+    atSubmeterComDecisoes();
+    return;
+  }
+  const c = est.restantes[0];
+  const colab = (COLABORADORES_CACHE.find(x => x.username === c.username)||{}).nome || c.username;
+  const nomeNovo = (HORARIOS_TIPO_CACHE.find(h => h.id === est.payloadBase.horarioTipoId)||{}).nome || est.payloadBase.horarioTipoId;
+  document.getElementById('conf-atrib-body').innerHTML =
+    `<div style="font-weight:700;font-size:.95rem;margin-bottom:.35rem">${colab}</div>
+     <div>Semana de <strong>${assFormatarData(String(c.semanaInicio).slice(0,10))}</strong></div>
+     <div style="margin-top:.5rem;color:var(--text-muted)">Já tem atribuído:</div>
+     <div style="font-weight:600">${c.horarioNomeActual || c.horarioTipoIdActual}</div>
+     <div style="margin-top:.5rem;color:var(--text-muted)">Vais atribuir:</div>
+     <div style="font-weight:600;color:var(--teal)">${nomeNovo}</div>`;
+  document.getElementById('conf-atrib-progresso').textContent = `Restantes: ${est.restantes.length}`;
+}
+
+function atResolverConflito(accao) {
+  const est = ATRIB_CONFLITOS_ESTADO;
+  if (!est) return;
+  if (accao === 'substituirTudo') {
+    est.restantes.forEach(c => est.decisoes.push({username:c.username, semanaInicio:c.semanaInicio, accao:'substituir'}));
+    est.restantes = [];
+    atMostrarProximoConflito();
+    return;
+  }
+  const c = est.restantes.shift();
+  est.decisoes.push({username:c.username, semanaInicio:c.semanaInicio, accao});
+  atMostrarProximoConflito();
+}
+
+function atCancelarConflitos() {
+  document.getElementById('modal-conflito-atrib').style.display = 'none';
+  ATRIB_CONFLITOS_ESTADO = null;
+  const err = document.getElementById('atribuir-err');
+  if (err) { err.textContent = 'Operação cancelada.'; err.style.display = 'block'; }
+}
+
+async function atSubmeterComDecisoes() {
+  const est = ATRIB_CONFLITOS_ESTADO;
+  if (!est) return;
+  const payload = Object.assign({}, est.payloadBase, {decisoesConflito: est.decisoes});
+  ATRIB_CONFLITOS_ESTADO = null;
+  const r = await assApi(payload);
+  const err = document.getElementById('atribuir-err');
+  const ok  = document.getElementById('atribuir-ok');
+  if (!r.ok) {
+    if (err) { err.textContent = r.erro || 'Erro ao atribuir.'; err.style.display = 'block'; }
+    return;
+  }
+  if (ok) { ok.textContent = '✅ '+r.mensagem; ok.style.display = 'block'; }
+  setTimeout(() => closeModal('modal-atribuir'), 1200);
   carregarAmbasVistas();
   if (typeof carregarAtribuicoes === 'function') carregarAtribuicoes();
 }
@@ -1241,6 +1469,8 @@ function editarAtribuicao(id) {
       document.getElementById('at-semana').value = String(a.semanaInicio).slice(0,10);
       document.getElementById('at-horario-tipo').value = a.horarioTipoId;
     });
+    // Modo edição: esconder o bloco de multi-select + repetição
+    injectarUIMultiAtribuicao(true);
     document.getElementById('modal-atribuir').dataset.editId = id;
     document.querySelector('#modal-atribuir .modal-title').textContent = 'Editar Atribuição';
     document.getElementById('modal-atribuir').classList.add('open');
