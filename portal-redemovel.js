@@ -484,6 +484,62 @@ function assConfirmarSaida() {
   });
 }
 
+// assAbrirModalLocalManual — modal para registar entrada num local diferente do habitual
+function assAbrirModalLocalManual() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  const opcoesLocais = LOCAIS_CACHE.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
+  overlay.innerHTML=`
+    <div style="background:var(--card-bg);border-radius:14px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+      <div style="font-size:1.5rem;margin-bottom:.5rem;text-align:center">📍</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:.75rem;color:var(--text-main);text-align:center">Registar entrada noutro local</div>
+      <label style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:.3rem">Local</label>
+      <select id="local-manual-select" style="width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--gray-light);font-family:'Outfit',sans-serif;margin-bottom:.75rem">
+        <option value="">Selecionar local…</option>
+        ${opcoesLocais}
+      </select>
+      <label style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:.3rem">Justificação (obrigatória)</label>
+      <textarea id="local-manual-justif" rows="3" style="width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--gray-light);font-family:'Outfit',sans-serif;resize:vertical;margin-bottom:.5rem" placeholder="Ex: Deslocação de emergência à loja de Ovar"></textarea>
+      <div id="local-manual-err" style="display:none;color:var(--danger);font-size:.78rem;margin-bottom:.5rem"></div>
+      <div style="display:flex;gap:.75rem;justify-content:center;margin-top:.5rem">
+        <button id="local-manual-cancelar" style="flex:1;padding:.55rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-main);font-weight:600;font-size:.85rem;cursor:pointer;font-family:'Outfit',sans-serif">Cancelar</button>
+        <button id="local-manual-confirmar" style="flex:1;padding:.55rem;border-radius:8px;border:none;background:#00a878;color:white;font-weight:700;font-size:.85rem;cursor:pointer;font-family:'Outfit',sans-serif">Confirmar Entrada</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('local-manual-cancelar').onclick = () => document.body.removeChild(overlay);
+  overlay.onclick = (e) => { if(e.target===overlay) document.body.removeChild(overlay); };
+  document.getElementById('local-manual-confirmar').onclick = async () => {
+    const localId = document.getElementById('local-manual-select').value;
+    const justificativa = document.getElementById('local-manual-justif').value.trim();
+    const err = document.getElementById('local-manual-err');
+    err.style.display='none';
+    if (!localId) { err.textContent='Selecione um local.'; err.style.display='block'; return; }
+    if (!justificativa) { err.textContent='A justificação é obrigatória.'; err.style.display='block'; return; }
+    document.body.removeChild(overlay);
+    await assRegistarEntradaLocalManual(localId, justificativa);
+  };
+}
+
+// assRegistarEntradaLocalManual — regista entrada com localId escolhido manualmente
+async function assRegistarEntradaLocalManual(localId, justificativa) {
+  document.getElementById('ass-err').style.display='none';
+  document.getElementById('ass-warn').style.display='none';
+  document.getElementById('ass-ok').style.display='none';
+  let r;
+  try {
+    r = await assApi({acao:'registarEntrada', localId, localManual:true, justificativa});
+  } catch(e) { r={ok:false,erro:'Erro de ligação. Tente novamente.'}; }
+  if (!r) { await assCarregarPonto(); return; }
+  if (!r.ok) {
+    const el=document.getElementById('ass-err'); el.textContent=r.erro; el.style.display='block';
+  } else {
+    if (r.aviso) { const el=document.getElementById('ass-warn'); el.textContent=r.aviso; el.style.display='block'; }
+    else { const el=document.getElementById('ass-ok'); el.textContent='✅ Registo efectuado com sucesso.'; el.style.display='block'; setTimeout(()=>{el.style.display='none';},4000); }
+  }
+  try { await assCarregarPonto(); } catch(e) { console.error('Erro a recarregar:', e); }
+}
+
 // assAcao — versão única com feedback visual e protecção anti-duplo-clique
 async function assAcao(tipo) {
   // Confirmação antes de saída
