@@ -529,6 +529,7 @@ async function assRegistarEntradaLocalManual(localId, justificativa) {
   let r;
   try {
     r = await assApi({acao:'registarEntrada', localId, localManual:true, justificativa});
+    if (r && r.ok) ASS_LOCAL_ID = localId;
   } catch(e) { r={ok:false,erro:'Erro de ligação. Tente novamente.'}; }
   if (!r) { await assCarregarPonto(); return; }
   if (!r.ok) {
