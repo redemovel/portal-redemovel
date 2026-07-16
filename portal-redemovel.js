@@ -589,6 +589,8 @@ function assAtualizarUI() {
   const btnE=document.getElementById('ass-btn-entrada'), btnP=document.getElementById('ass-btn-pausa');
   const btnR=document.getElementById('ass-btn-retorno'), btnS=document.getElementById('ass-btn-saida');
   const status=document.getElementById('ass-status');
+  const linkLocalManual=document.getElementById('ass-link-local-manual');
+  if (linkLocalManual) linkLocalManual.style.display = reg ? 'none' : 'block';
 
   // Cores originais por estado activo
   const COR_ENTRADA = '#00a878';
