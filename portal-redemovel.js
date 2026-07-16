@@ -384,6 +384,11 @@ async function assIniciar() {
         if (turnoIdHoje) ASS_TURNO_ID = turnoIdHoje;
       }
     }
+    // O local do turno do dia tem prioridade sobre o local da atribuição semanal
+    if (ASS_TURNO_ID && rTurnos.ok) {
+      const turnoHoje = rTurnos.turnos.find(t => t.id === ASS_TURNO_ID);
+      if (turnoHoje && turnoHoje.localId) ASS_LOCAL_ID = turnoHoje.localId;
+    }
   }
 
   // Fallback: se não houver atribuição, usar 1º local
