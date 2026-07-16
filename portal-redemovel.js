@@ -454,6 +454,7 @@ async function assCarregarPonto() {
     ASS_COLEGAS_CACHE = r.registos;
     const hoje=assDataHoje();
     ASS_REGISTO_HOJE=r.registos.find(x=>x.username===SESSION.username&&x.data===hoje)||null;
+    alert('DEBUG carregarPonto: ASS_LOCAL_ID=' + ASS_LOCAL_ID + ' hoje=' + hoje + ' total registos devolvidos=' + r.registos.length + ' registoHoje encontrado=' + !!ASS_REGISTO_HOJE);
   }
   assAtualizarUI();
   assMostrarMeusRegistos();
