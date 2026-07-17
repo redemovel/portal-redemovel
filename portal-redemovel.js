@@ -1584,7 +1584,7 @@ function abrirModalFerias() {
 async function guardarFerias() {
   const err=document.getElementById('mferias-err'), conf=document.getElementById('mferias-conflitos');
   err.style.display='none'; conf.style.display='none';
-  const ferias={username:document.getElementById('fer-colaborador').value,localId:document.getElementById('fer-local').value,dataInicio:document.getElementById('fer-inicio').value,dataFim:document.getElementById('fer-fim').value};
+  const ferias={username:document.getElementById('fer-colaborador').value,localId:document.getElementById('fer-local').value,dataInicio:document.getElementById('fer-inicio').value,dataFim:document.getElementById('fer-fim').value,tipo:(document.getElementById('fer-tipo')?document.getElementById('fer-tipo').value:'ferias')};
   if (!ferias.username||!ferias.localId||!ferias.dataInicio||!ferias.dataFim) { err.textContent='Preencha todos os campos.'; err.style.display='block'; return; }
   const r=await assApi({acao:'registarFerias',ferias});
   if (!r.ok) { err.textContent=r.erro; err.style.display='block'; return; }
