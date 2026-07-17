@@ -1097,7 +1097,8 @@ async function carregarGantt() {
       let conteudo;
       if (!info || info.folga || !info.turno) {
         if (info && info.emFerias) {
-          conteudo = '<div style="height:24px;display:flex;align-items:center;justify-content:flex-start;padding-left:.5rem"><span style="font-size:.7rem;background:#e0f2ff;color:#0369a1;border-radius:4px;padding:2px 8px">🏖 Férias</span></div>';
+          const ausLbl={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Ausência'}[info.tipoAusencia]||'🏖 Férias';
+          conteudo = '<div style="height:24px;display:flex;align-items:center;justify-content:flex-start;padding-left:.5rem"><span style="font-size:.7rem;background:#e0f2ff;color:#0369a1;border-radius:4px;padding:2px 8px">'+ausLbl+'</span></div>';
         } else {
           conteudo = '<div style="height:24px;display:flex;align-items:center;padding-left:.5rem;color:var(--text-muted);font-size:.7rem;font-style:italic">Folga</div>';
         }
@@ -1184,8 +1185,7 @@ async function carregarGanttMensal() {
       const d=diasMes[dia], info=d?.colaboradores.find(c=>c.username===col.username), ds=new Date(dia+'T12:00:00').getDay();
       const fundo=(ds===0||ds===6)?'background:rgba(0,0,0,.03);':'';
       if (!info||info.folga||!info.turno) {
-        if (info?.emFerias) return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;display:flex;align-items:center;justify-content:center;padding:.2rem 0"><span style="font-size:.55rem">🏖</span></div>`;
-        return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px"></div>`;
+        if (info?.emFerias) { const ausIco={ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;display:flex;align-items:center;justify-content:center;padding:.2rem 0"><span style="font-size:.55rem">${ausIco}</span></div>`; }
       }
       const t=info.turno, cor=info.especial?'#f59e0b':'var(--teal)';
       const label=minParaHora(t.inicioMin).replace(':','h').replace(/^0/,'');
@@ -1815,7 +1815,7 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
       const info  = dInfo?.colaboradores.find(c => c.username === col.username);
       const bg    = corBg(dia);
       let label = '–', cor = '#ccc', title = '';
-      if (info?.emFerias) { label = '🏖'; cor='transparent'; }
+      if (info?.emFerias) { label = {ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; cor='transparent'; }
       else if (info?.turno && !info.folga) {
         label = info.turno.nome || minParaHora(info.turno.inicioMin);
         cor = info.especial ? '#d97706' : '#007878';
