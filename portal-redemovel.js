@@ -394,6 +394,12 @@ async function assIniciar() {
   // Fallback: se não houver atribuição, usar 1º local
   if (!ASS_LOCAL_ID && rLoc.ok && rLoc.locais.length) ASS_LOCAL_ID = rLoc.locais[0].id;
 
+  // Se já existe registo de hoje noutro local (ex: entrada manual), esse local prevalece
+  try {
+    const rMeu = await assApi({acao:'meuRegistoHoje'});
+    if (rMeu.ok && rMeu.registo && rMeu.registo.localId) ASS_LOCAL_ID = rMeu.registo.localId;
+  } catch(_) {}
+  
   // Cache de locais e mostrar nome
   if (rLoc.ok) {
     LOCAIS_CACHE = rLoc.locais;
