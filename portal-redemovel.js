@@ -1092,16 +1092,14 @@ async function carregarGantt() {
       segmentos.push('<div style="flex:1;height:100%;background:' + cor + '" title="' + horaSlot + ' — ' + ativos + '/' + totalColab + ' colaborador(es)"></div>');
     }
 
-    const linhasColab = cols.map(col => {
+const linhasColab = cols.map(col => {
       const info = d.colaboradores.find(c => c.username === col.username);
       let conteudo;
-      if (!info || info.folga || !info.turno) {
-        if (info && info.emFerias) {
-          const ausLbl={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Ausência'}[info.tipoAusencia]||'🏖 Férias';
-          conteudo = '<div style="height:24px;display:flex;align-items:center;justify-content:flex-start;padding-left:.5rem"><span style="font-size:.7rem;background:#e0f2ff;color:#0369a1;border-radius:4px;padding:2px 8px">'+ausLbl+'</span></div>';
-        } else {
-          conteudo = '<div style="height:24px;display:flex;align-items:center;padding-left:.5rem;color:var(--text-muted);font-size:.7rem;font-style:italic">Folga</div>';
-        }
+      if (info && info.emFerias) {
+        const ausLbl={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Ausência'}[info.tipoAusencia]||'🏖 Férias';
+        conteudo = '<div style="height:24px;display:flex;align-items:center;justify-content:flex-start;padding-left:.5rem"><span style="font-size:.7rem;background:#e0f2ff;color:#0369a1;border-radius:4px;padding:2px 8px">'+ausLbl+'</span></div>';
+      } else if (!info || info.folga || !info.turno) {
+        conteudo = '<div style="height:24px;display:flex;align-items:center;padding-left:.5rem;color:var(--text-muted);font-size:.7rem;font-style:italic">Folga</div>';
       } else {
         const t = info.turno;
         const pctInicio = ((t.inicioMin/60 - horaMin)/totalHoras)*100;
@@ -1184,8 +1182,9 @@ async function carregarGanttMensal() {
     const celulas=diasOrdenados.map(dia=>{
       const d=diasMes[dia], info=d?.colaboradores.find(c=>c.username===col.username), ds=new Date(dia+'T12:00:00').getDay();
       const fundo=(ds===0||ds===6)?'background:rgba(0,0,0,.03);':'';
+if (info?.emFerias) { const ausIco={ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;display:flex;align-items:center;justify-content:center;padding:.2rem 0"><span style="font-size:.55rem">${ausIco}</span></div>`; }
       if (!info||info.folga||!info.turno) {
-        if (info?.emFerias) { const ausIco={ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;display:flex;align-items:center;justify-content:center;padding:.2rem 0"><span style="font-size:.55rem">${ausIco}</span></div>`; }
+        return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px"></div>`;
       }
       const t=info.turno, cor=info.especial?'#f59e0b':'var(--teal)';
       const label=minParaHora(t.inicioMin).replace(':','h').replace(/^0/,'');
