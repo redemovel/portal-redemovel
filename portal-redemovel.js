@@ -851,6 +851,16 @@ let TURNOS_CACHE = [];
 let HORARIOS_TIPO_CACHE = [];
 let MAPA_CACHE = null;
 
+// Acordeão — abre/fecha secções da aba Horários
+function toggleSeccao(id, header) {
+  const sec=document.getElementById(id);
+  if (!sec) return;
+  const fechado=sec.style.display==='none';
+  sec.style.display=fechado?'':'none';
+  const seta=header.querySelector('.acc-seta');
+  if (seta) seta.style.transform=fechado?'rotate(90deg)':'';
+}
+
 function showGestaoTab(id, btn) {
   document.querySelectorAll('.gestao-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.gestao-tab').forEach(t=>t.classList.remove('active'));
