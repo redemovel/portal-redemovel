@@ -858,9 +858,7 @@ function showGestaoTab(id, btn) {
   if (btn) btn.classList.add('active');
   if (id==='turnos') carregarTurnos();
   if (id==='horarios') {
-    const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); carregarAtribuicoes(); };
-    if (!LOCAIS_CACHE.length) carregarLocaisCache().then(carregarHor);
-    else carregarHor();
+    const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); carregarAtribuicoes(); carregarExcecoes(); };
     const hor=document.getElementById('hor-semana');
     if (hor&&!hor.value) hor.value=segundaFeira(new Date());
     const horMes=document.getElementById('hor-mes');
@@ -1560,6 +1558,76 @@ async function apagarAtribuicao(id, nomeColab, semana) {
   const r = await assApi({acao:'apagarAtribuicaoSemana', id});
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
   carregarAtribuicoes();
+  carregarAmbasVistas();
+}
+
+// ═══════════════════════════════════════
+//  EXCEÇÕES DIÁRIAS (Horários Especiais)
+// ═══════════════════════════════════════
+async function carregarExcecoes() {
+  const lista=document.getElementById('lista-excecoes');
+  if (!lista) return;
+  if (!TURNOS_CACHE.length) await carregarTurnos();
+  const r=await assApi({acao:'listarExcecoesDia',filtros:{}});
+  if (!r.ok) return;
+  if (!r.excecoes.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem exceções registadas.</div>'; return; }
+  const ordenadas=r.excecoes.slice().sort((a,b)=>b.data.localeCompare(a.data));
+  lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Data</th><th>Turno</th><th>Local</th><th>Motivo</th><th></th></tr></thead><tbody>${
+    ordenadas.map(e=>{
+      const col=COLABORADORES_CACHE.find(c=>c.username===e.username);
+      const t=TURNOS_CACHE.find(x=>x.id===e.turnoTipoId);
+      const loc=LOCAIS_CACHE.find(l=>l.id===e.localId);
+      return `<tr>
+        <td style="font-weight:600">${col?.nome||e.username}</td>
+        <td>${assFormatarData(e.data)}</td>
+        <td>${t?`<span style="background:#fff3e0;color:#d97706;border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">${t.nome}: ${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}</span>`:e.turnoTipoId}</td>
+        <td>${loc?.nome||e.localId}</td>
+        <td style="font-size:.78rem;color:var(--text-muted)">${e.motivo||'—'}</td>
+        <td style="text-align:right"><button class="btn-sm danger" onclick="removerExcecao('${e.id}')">✕</button></td>
+      </tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+function abrirModalExcecao() {
+  document.getElementById('exc-err').style.display='none';
+  document.getElementById('exc-ok').style.display='none';
+  popularColaboradoresSelect('exc-colaborador');
+  const selT=document.getElementById('exc-turno');
+  const popularTurnos=()=>{
+    selT.innerHTML='<option value="">Selecionar turno…</option>';
+    TURNOS_CACHE.forEach(t=>{
+      const loc=LOCAIS_CACHE.find(l=>l.id===t.localId);
+      selT.innerHTML+=`<option value="${t.id}">${t.nome} (${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}) · ${loc?.nome||t.localId}</option>`;
+    });
+  };
+  if (!TURNOS_CACHE.length) carregarTurnos().then(popularTurnos); else popularTurnos();
+  document.getElementById('modal-excecao').classList.add('open');
+}
+
+async function guardarExcecao() {
+  const err=document.getElementById('exc-err'), ok=document.getElementById('exc-ok');
+  err.style.display='none'; ok.style.display='none';
+  const excecao={
+    username:document.getElementById('exc-colaborador').value,
+    data:document.getElementById('exc-data').value,
+    turnoTipoId:document.getElementById('exc-turno').value,
+    motivo:document.getElementById('exc-motivo').value.trim()
+  };
+  if (!excecao.username||!excecao.data||!excecao.turnoTipoId) { err.textContent='Preencha colaborador, data e turno.'; err.style.display='block'; return; }
+  const r=await assApi({acao:'criarExcecaoDia',excecao});
+  if (!r.ok) { err.textContent=r.erro; err.style.display='block'; return; }
+  ok.textContent='✅ '+r.mensagem; ok.style.display='block';
+  setTimeout(()=>closeModal('modal-excecao'),1000);
+  carregarExcecoes();
+  carregarAmbasVistas();
+}
+
+async function removerExcecao(id) {
+  if (!confirm('Remover esta exceção? O colaborador volta ao horário normal nesse dia.')) return;
+  const r=await assApi({acao:'apagarExcecaoDia',id});
+  if (!r.ok) { alert(r.erro||'Erro ao remover.'); return; }
+  carregarExcecoes();
   carregarAmbasVistas();
 }
 
