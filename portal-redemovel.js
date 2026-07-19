@@ -869,6 +869,8 @@ function showGestaoTab(id, btn) {
   if (id==='turnos') carregarTurnos();
   if (id==='horarios') {
     const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); carregarAtribuicoes(); carregarExcecoes(); };
+    if (!LOCAIS_CACHE.length) carregarLocaisCache().then(carregarHor);
+    else carregarHor();
     const hor=document.getElementById('hor-semana');
     if (hor&&!hor.value) hor.value=segundaFeira(new Date());
     const horMes=document.getElementById('hor-mes');
