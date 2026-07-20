@@ -451,8 +451,7 @@ function assMinParaHoraH(min) {
   return ((60 - restoMin) <= 5 ? h + 1 : h) + 'h';
 }
 function assDataHoje() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-function assFormatarData(str) {   if(!str) return '—';   let s = (str instanceof Date) ? str.toISOString() : String(str);   s = s.slice(0,10); // fica só 'YYYY-MM-DD', descarta a parte da hora   const [a,m,d]=s.split('-');   if(!a||!m||!d) return String(str);   return `${d}/${m}/${a}`; }
-function assIniciais(nome) { if(!nome) return '?'; return nome.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase(); }
+function assFormatarData(str) { if(!str) return '—'; let s=(str instanceof Date)?str.toISOString():String(str); s=s.slice(0,10); const [a,m,d]=s.split('-'); if(!a||!m||!d) return String(str); return `${d}/${m}/${a}`; }function assIniciais(nome) { if(!nome) return '?'; return nome.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase(); }
 
 async function assCarregarPonto() {
   const r=await assApi({acao:'registosColegas',localId:ASS_LOCAL_ID});
