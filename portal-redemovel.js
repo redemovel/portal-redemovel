@@ -849,6 +849,8 @@ let COLABORADORES_CACHE = [];
 let TURNOS_CACHE = [];
 let HORARIOS_TIPO_CACHE = [];
 let MAPA_CACHE = null;
+let APROVACOES_CACHE = [];
+let DECISAO_ATUAL = null;
 
 // Acordeão — abre/fecha secções da aba Horários
 function toggleSeccao(id, header) {
@@ -1682,6 +1684,7 @@ async function decidirFerias(id, decisao) {
 async function carregarAprovacoes() {
   const estado=document.getElementById('aprov-filtro')?.value||'pendente';
   const r=await assApi({acao:'listarAprovacoes',filtros:{estado:estado||undefined}}); if (!r.ok) return;
+  APROVACOES_CACHE = r.aprovacoes;
   const lista=document.getElementById('lista-aprovacoes');
   if (!r.aprovacoes.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem aprovações para mostrar.</div>'; return; }
   lista.innerHTML=r.aprovacoes.map(a=>{const col=COLABORADORES_CACHE.find(c=>c.username===a.username),loc=LOCAIS_CACHE.find(l=>l.id===a.localId);const tipoLabel={entrada_fora_janela:'⏰ Entrada fora de janela',saida_fora_janela:'⏰ Saída fora de janela',entrada_local_diferente:'📍 Entrada em local diferente'}[a.tipo]||a.tipo;return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
@@ -1708,16 +1711,38 @@ async function carregarAprovacoesBadge() {
 }
 
 function abrirDecisao(id) {
+  DECISAO_ATUAL = APROVACOES_CACHE.find(a => a.id === id) || null;
   document.getElementById('decisao-id').value=id; document.getElementById('decisao-nota').value=''; document.getElementById('decisao-err').style.display='none';
+  atualizarAjusteHora();
   document.getElementById('modal-decisao').classList.add('open');
+}
+function atualizarAjusteHora() {
+  const decisao = document.getElementById('decisao-tipo').value;
+  const bloco = document.getElementById('fg-ajuste-hora');
+  const mostrar = decisao==='aprovado' && DECISAO_ATUAL && (DECISAO_ATUAL.tipo==='entrada_fora_janela' || DECISAO_ATUAL.tipo==='saida_fora_janela');
+  if (mostrar) {
+    const pedido = Number(DECISAO_ATUAL.valorPedidoMin);
+    document.getElementById('decisao-ajuste').innerHTML =
+      `<option value="${pedido}">Hora pedida (${assMinParaHora(pedido)})</option>` +
+      `<option value="${pedido-30}">Hora pedida − 30 min (${assMinParaHora(pedido-30)})</option>`;
+    bloco.style.display='';
+  } else {
+    bloco.style.display='none';
+  }
 }
 
 async function confirmarDecisao() {
   const err=document.getElementById('decisao-err'); err.style.display='none';
   const id=document.getElementById('decisao-id').value, decisao=document.getElementById('decisao-tipo').value, nota=document.getElementById('decisao-nota').value.trim();
   if (!nota) { err.textContent='Nota obrigatória.'; err.style.display='block'; return; }
-  const r=await assApi({acao:'decidirAprovacao',id,decisao,nota});
+  const payload = {acao:'decidirAprovacao', id, decisao, nota};
+  const blocoAjuste = document.getElementById('fg-ajuste-hora');
+  if (blocoAjuste.style.display !== 'none') {
+    payload.valorAjustadoMin = Number(document.getElementById('decisao-ajuste').value);
+  }
+  const r=await assApi(payload);
   if (!r.ok) { err.textContent=r.erro; err.style.display='block'; return; }
+  DECISAO_ATUAL = null;
   closeModal('modal-decisao'); carregarAprovacoes(); carregarAprovacoesBadge();
 }
 
