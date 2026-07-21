@@ -880,13 +880,18 @@ function showGestaoTab(id, btn) {
   if (id==='ferias') { carregarFerias(); popularSelectLocal('fer-local'); popularColaboradoresSelect('fer-colaborador'); }
   if (id==='aprovacoes') carregarAprovacoes();
   if (id==='mapa') popularSelectLocal('mapa-local');
-  if (id==='ocupacao') {
-    const od=document.getElementById('ocup-data');
-    if (od && !od.value) { const d=new Date(); od.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-    carregarOcupacaoDiaria();
-  }
 }
 window.showGestaoTab = showGestaoTab;
+
+// ═══════════════════════════════════════
+//  OCUPAÇÃO DIÁRIA — vista de topo, visível a todos os colaboradores
+// ═══════════════════════════════════════
+function initOcupacaoDiaria() {
+  const od=document.getElementById('ocup-data');
+  if (od && !od.value) { const d=new Date(); od.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  carregarOcupacaoDiaria();
+}
+window.initOcupacaoDiaria = initOcupacaoDiaria;
 
 // ═══════════════════════════════════════
 //  OCUPAÇÃO DIÁRIA — todas as lojas, registos reais
@@ -898,27 +903,49 @@ async function carregarOcupacaoDiaria() {
   const r=await assApi({acao:'ocupacaoDiaria',data});
   if(!r.ok){ cont.innerHTML=`<div style="text-align:center;padding:2rem;color:var(--danger);grid-column:1/-1">${r.erro||'Erro ao carregar.'}</div>`; return; }
   if(!r.locais||!r.locais.length){ cont.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text-muted);grid-column:1/-1">Sem locais activos.</div>'; return; }
+
+  const pausaAbertaDesde = p => {
+    if(p.pausa1InicioMin!=null && p.pausa1FimMin==null) return p.pausa1InicioMin;
+    if(p.pausa2InicioMin!=null && p.pausa2FimMin==null) return p.pausa2InicioMin;
+    if(p.pausa3InicioMin!=null && p.pausa3FimMin==null) return p.pausa3InicioMin;
+    return null;
+  };
+
   cont.innerHTML=r.locais.map(l=>{
-    const presentesHtml = l.presentes.length
-      ? l.presentes.map(p=>{
-          const entrada = p.entradaRealMin!=null ? assMinParaHora(p.entradaRealMin) : '—';
-          const saida = p.saidaRealMin!=null ? assMinParaHora(p.saidaRealMin) : 'em curso';
-          return `<div style="display:flex;justify-content:space-between;padding:.3rem 0;font-size:.82rem;border-bottom:1px solid var(--gray-light)">
-            <span>${p.nome}</span>
-            <span style="color:var(--success);font-weight:600">${entrada} → ${saida}</span>
-          </div>`;
-        }).join('')
-      : '<div style="font-size:.78rem;color:var(--text-muted);padding:.3rem 0">Sem presenças registadas.</div>';
-    const ausentesHtml = l.ausentes.length
-      ? l.ausentes.map(a=>`<div style="display:flex;justify-content:space-between;padding:.3rem 0;font-size:.82rem;border-bottom:1px solid var(--gray-light)">
-          <span>${a.nome}</span>
-          <span style="color:var(--danger);font-weight:600">previsto ${assMinParaHora(a.inicioPrevMin)}</span>
-        </div>`).join('')
+    const semSaida = l.presentes.filter(p=>p.saidaRealMin==null);
+    const emPausa  = semSaida.filter(p=>pausaAbertaDesde(p)!=null);
+    const agora    = semSaida.filter(p=>pausaAbertaDesde(p)==null);
+    const saidos   = l.presentes.filter(p=>p.saidaRealMin!=null);
+
+    const linha = (nome,cor,texto) => `<div style="display:flex;justify-content:space-between;padding:.3rem 0;font-size:.82rem;border-bottom:1px solid var(--gray-light)">
+      <span>${nome}</span><span style="color:${cor};font-weight:600">${texto}</span>
+    </div>`;
+
+    const agoraHtml  = agora.map(p=>linha(p.nome,'var(--success)',`${assMinParaHora(p.entradaRealMin)} → em curso`)).join('');
+    const pausaHtml   = emPausa.map(p=>linha(p.nome,'var(--warning)',`em pausa desde ${assMinParaHora(pausaAbertaDesde(p))}`)).join('');
+    const saidosHtml  = saidos.map(p=>linha(p.nome,'var(--text-muted)',`${assMinParaHora(p.entradaRealMin)} → ${assMinParaHora(p.saidaRealMin)}`)).join('');
+    const ausentesHtml = l.ausentes.map(a=>linha(a.nome,'var(--danger)',`previsto ${assMinParaHora(a.inicioPrevMin)}`)).join('');
+
+    const badgeParts=[];
+    if(agora.length) badgeParts.push(`${agora.length} presente(s) agora`);
+    if(emPausa.length) badgeParts.push(`${emPausa.length} em pausa`);
+    if(saidos.length) badgeParts.push(`${saidos.length} já saiu/saíram`);
+    if(l.ausentes.length) badgeParts.push(`${l.ausentes.length} ausente(s)`);
+    const badge = badgeParts.length ? badgeParts.join(' · ') : 'Sem movimento';
+
+    const secao = (titulo,cor,html) => html
+      ? `<div style="margin-top:.6rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${cor}">${titulo}</div>${html}`
       : '';
+
+    const semNada = !agora.length && !emPausa.length && !saidos.length && !l.ausentes.length;
+
     return `<div class="panel">
-      <div class="panel-header"><div class="panel-title"><div class="dot"></div>${l.localNome}</div><span class="panel-badge">${l.presentes.length} presente(s)${l.ausentes.length?` · ${l.ausentes.length} ausente(s)`:''}</span></div>
-      ${presentesHtml}
-      ${l.ausentes.length ? `<div style="margin-top:.6rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--danger)">Ausentes (escalados, sem registo)</div>${ausentesHtml}` : ''}
+      <div class="panel-header"><div class="panel-title"><div class="dot"></div>${l.localNome}</div><span class="panel-badge">${badge}</span></div>
+      ${semNada ? '<div style="font-size:.78rem;color:var(--text-muted);padding:.3rem 0">Sem presenças registadas.</div>' : ''}
+      ${secao('Presentes agora','var(--success)',agoraHtml)}
+      ${secao('Em pausa','var(--warning)',pausaHtml)}
+      ${secao('Já saíram hoje','var(--text-muted)',saidosHtml)}
+      ${secao('Ausentes (escalados, sem registo)','var(--danger)',ausentesHtml)}
     </div>`;
   }).join('');
 }
