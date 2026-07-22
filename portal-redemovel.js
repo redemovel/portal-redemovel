@@ -281,11 +281,31 @@ function hideGlobalLoading() {
     document.body.classList.remove('is-loading');
   }
 }
+// Envolve o fetch com 1 repetição automática e silenciosa — cobre pedidos que
+// falham na rede, voltam com status de erro, ou vêm com corpo inválido (não-JSON).
+// Não resolve a causa (limite de execuções simultâneas do Apps Script), mas evita
+// que o colaborador veja um erro por causa de uma falha pontual e transitória.
+async function fetchComRetry(url, payload, tentativas) {
+  tentativas = tentativas || 2;
+  let ultimoErro = 'Sem resposta do servidor.';
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const res = await fetch(url, {method:'POST', body: JSON.stringify(payload)});
+      if (!res.ok) { ultimoErro = 'Erro do servidor (HTTP '+res.status+').'; throw 0; }
+      const texto = await res.text();
+      try { return JSON.parse(texto); }
+      catch(_) { ultimoErro = 'Resposta inválida do servidor.'; throw 0; }
+    } catch(_) {
+      if (i < tentativas - 1) await new Promise(r => setTimeout(r, 700 + Math.random()*500));
+    }
+  }
+  return {ok:false, erro: ultimoErro + ' Tenta novamente.'};
+}
+
 async function api(payload) {
   showGlobalLoading();
   try {
-    const res=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify(payload)});
-    return await res.json();
+    return await fetchComRetry(SCRIPT_URL, payload, 2);
   } finally {
     hideGlobalLoading();
   }
@@ -338,8 +358,7 @@ async function assApi(payload) {
   };
   showGlobalLoading(msgs[payload.acao] || 'A processar…');
   try {
-    const res=await fetch(ASS_URL,{method:'POST',body:JSON.stringify({...payload,username:SESSION.username,password:SESSION.password})});
-    return await res.json();
+    return await fetchComRetry(ASS_URL, {...payload,username:SESSION.username,password:SESSION.password}, 2);
   } finally {
     hideGlobalLoading();
   }
