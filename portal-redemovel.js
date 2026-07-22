@@ -32,14 +32,6 @@ async function init() {
               SESSION = { ...SESSION, nome:rv.nome, role:rv.role };
               hideLoading();
               await enterDashboard();
-              // Restaurar view
-              const savedView = sessionStorage.getItem('rmView');
-              if (savedView && savedView !== 'dashboard') {
-                const navBtn = document.querySelector(`.nav-item[onclick*="'${savedView}'"]`);
-                showView(savedView, navBtn);
-                if (savedView === 'assiduidade') assActivar();
-                if (savedView === 'gestao') gestaoActivar();
-              }
               return;
             }
           }
@@ -142,6 +134,15 @@ async function enterDashboard() {
     carregarGestao();
   }
   buildChart(); startClock(); setPageDate();
+
+  // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito
+  const savedView = sessionStorage.getItem('rmView');
+  const viewInicial = savedView || 'assiduidade';
+  const navBtn = document.querySelector(`.nav-item[onclick*="'${viewInicial}'"]`);
+  showView(viewInicial, navBtn);
+  if (viewInicial === 'assiduidade') assActivar();
+  else if (viewInicial === 'gestao') gestaoActivar();
+  else if (viewInicial === 'ocupacao') initOcupacaoDiaria();
 }
 
 function doLogout() {
