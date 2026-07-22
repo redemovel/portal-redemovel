@@ -96,7 +96,10 @@ function refrescarVistaActual() {
   const id = vistaVisivel.id.replace('view-', '');
 
   try {
-    if (id === 'assiduidade') { assCarregarPonto(); assCarregarProximosDias(); }
+    if (id === 'assiduidade') {
+      ASS_ATRIB_CACHE = null; ASS_HORARIOS_CACHE = null; ASS_TURNOS_CACHE = null; // forçar dados frescos
+      assCarregarPonto(); assCarregarProximosDias();
+    }
     else if (id === 'gestao') {
       const painelActivo = document.querySelector('.gestao-panel.active');
       if (!painelActivo) { carregarAprovacoesBadge(); return; }
@@ -147,6 +150,7 @@ async function enterDashboard() {
 
 function doLogout() {
   SESSION=null;
+  ASS_ATRIB_CACHE = null; ASS_HORARIOS_CACHE = null; ASS_TURNOS_CACHE = null;
   try { sessionStorage.removeItem('rmSession'); sessionStorage.removeItem('rmView'); } catch(_) {}
   document.getElementById('dashboard-page').style.display='none';
   document.getElementById('inp-user').value='';
@@ -320,6 +324,9 @@ let ASS_COLEGAS_CACHE = [];
 let ASS_LOCAL_ID = null;
 let ASS_TURNO_ID = null;
 let ASS_CLOCK_OK = false;
+let ASS_ATRIB_CACHE = null;    // todas as atribuições do próprio utilizador (todas as semanas) — evita repetir o pedido em assCarregarProximosDias
+let ASS_HORARIOS_CACHE = null; // todos os horários tipo semanais
+let ASS_TURNOS_CACHE = null;   // todos os turnos tipo
 
 async function assApi(payload) {
   const msgs = {
@@ -365,18 +372,26 @@ async function assIniciar() {
   const campoDia = CAMPOS_DIA[dt.getDay()];
 
   // FASE 1a — chamadas críticas em paralelo (4 chamadas — sem registosColegas porque depende de localId)
+  // listarAtribuicoesSemana sem filtro de semana: traz todas as semanas do utilizador de uma vez,
+  // para reutilizar mais abaixo em assCarregarProximosDias (evita repetir o pedido)
   const [rAtrib, rHorTipo, rTurnos, rLoc] = await Promise.all([
-    assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username, semanaInicio}}),
+    assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username}}),
     assApi({acao:'listarHorariosTipoSemanal'}),
     assApi({acao:'listarTurnosTipo'}),
     assApi({acao:'listarLocais'})
   ]);
 
+  // Guardar em cache para reutilização (assCarregarProximosDias, assCarregarMaisDias)
+  if (rAtrib.ok)   ASS_ATRIB_CACHE = rAtrib.atribuicoes;
+  if (rHorTipo.ok) ASS_HORARIOS_CACHE = rHorTipo.horarios;
+  if (rTurnos.ok)  ASS_TURNOS_CACHE = rTurnos.turnos;
+
   // Resolver turno e local de HOJE a partir das atribuições
   ASS_LOCAL_ID = null;
   ASS_TURNO_ID = null;
   if (rAtrib.ok && rAtrib.atribuicoes.length) {
-    const atribHoje = rAtrib.atribuicoes[0]; // só uma atribuição por semana/utilizador
+    const atribHoje = rAtrib.atribuicoes.find(a => String(a.semanaInicio).slice(0,10) === semanaInicio);
+    if (atribHoje) {
     ASS_LOCAL_ID = atribHoje.localId;
     if (rHorTipo.ok) {
       const horario = rHorTipo.horarios.find(h => h.id === atribHoje.horarioTipoId);
@@ -389,6 +404,7 @@ async function assIniciar() {
     if (ASS_TURNO_ID && rTurnos.ok) {
       const turnoHoje = rTurnos.turnos.find(t => t.id === ASS_TURNO_ID);
       if (turnoHoje && turnoHoje.localId) ASS_LOCAL_ID = turnoHoje.localId;
+    }
     }
   }
 
@@ -722,12 +738,24 @@ async function assCarregarProximosDias() {
     s.setDate(s.getDate() + 7);
   }
 
-  // Buscar atribuições do utilizador, todos os horarios tipo, todos os turnos — em paralelo
-  const [rAtrib, rHorTipo, rTurnos] = await Promise.all([
-    assApi({acao:'listarAtribuicoesSemana', filtros:{username: SESSION.username}}),
-    assApi({acao:'listarHorariosTipoSemanal'}),
-    assApi({acao:'listarTurnosTipo'})
-  ]);
+  // Reutilizar os dados já carregados por assIniciar (evita repetir 3 pedidos ao backend
+  // de cada vez que esta função corre — incluindo em cada clique de "Mais 7 dias").
+  // Fallback: se por algum motivo ainda não houver cache, busca uma vez.
+  let rAtrib, rHorTipo, rTurnos;
+  if (ASS_ATRIB_CACHE && ASS_HORARIOS_CACHE && ASS_TURNOS_CACHE) {
+    rAtrib   = {ok:true, atribuicoes: ASS_ATRIB_CACHE};
+    rHorTipo = {ok:true, horarios: ASS_HORARIOS_CACHE};
+    rTurnos  = {ok:true, turnos: ASS_TURNOS_CACHE};
+  } else {
+    [rAtrib, rHorTipo, rTurnos] = await Promise.all([
+      assApi({acao:'listarAtribuicoesSemana', filtros:{username: SESSION.username}}),
+      assApi({acao:'listarHorariosTipoSemanal'}),
+      assApi({acao:'listarTurnosTipo'})
+    ]);
+    if (rAtrib.ok)   ASS_ATRIB_CACHE = rAtrib.atribuicoes;
+    if (rHorTipo.ok) ASS_HORARIOS_CACHE = rHorTipo.horarios;
+    if (rTurnos.ok)  ASS_TURNOS_CACHE = rTurnos.turnos;
+  }
 
   if (!rAtrib.ok || !rHorTipo.ok || !rTurnos.ok) {
     container.innerHTML = '<div style="color:var(--danger);padding:1rem">Erro ao carregar.</div>';
