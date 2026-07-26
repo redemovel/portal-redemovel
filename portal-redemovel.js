@@ -2153,17 +2153,29 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
     </div>
   `;
 
-  // Abrir janela separada para impressao via Blob (robusto com caracteres especiais)
-  const fullHtml = '<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Escala Mensal</title>'
-    + '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Outfit,Arial,sans-serif;color:#111;background:white;padding:1.5cm;}'
-    + '@media print{body{padding:1cm;}@page{margin:1cm;size:A4 landscape;}}'
-    + '</style></head><body>' + html + '</body></html>';
-  const blob = new Blob([fullHtml], {type: 'text/html;charset=utf-8'});
-  const blobUrl = URL.createObjectURL(blob);
-  const win = window.open(blobUrl, '_blank', 'width=950,height=750');
-  if (!win) { alert('Permite pop-ups para este site nas definicoes do browser.'); URL.revokeObjectURL(blobUrl); return; }
-  win.onload = function() { win.focus(); win.print(); setTimeout(()=>URL.revokeObjectURL(blobUrl), 60000); };
+  // Gerar o PDF diretamente (sem popup nem impressão manual) — usa html2pdf.js
+  // Container fora do ecrã: necessário para o html2canvas conseguir medir/desenhar o conteúdo
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1400px;background:#fff;padding:1.2cm;font-family:Outfit,Arial,sans-serif;color:#111';
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  const nomeFicheiro = `Escala_${nomLocal.replace(/[^a-zA-Z0-9]+/g,'_')}_${nomMes.replace(/\s+/g,'_')}.pdf`;
+
+  try {
+    await html2pdf().set({
+      margin: 8,
+      filename: nomeFicheiro,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      pagebreak: { mode: ['avoid-all','css','legacy'] }
+    }).from(container).save();
+  } catch(e) {
+    alert('Erro ao gerar o PDF: ' + (e && e.message ? e.message : e));
+  } finally {
+    document.body.removeChild(container);
+  }
 }
 
 
