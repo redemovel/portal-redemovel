@@ -379,8 +379,6 @@ async function assIniciar() {
     setInterval(tick, 1000);
   }
 
-  const hoje=assDataHoje();
-
   // Calcular segunda-feira da semana de hoje
   const dt = new Date();
   const dow = dt.getDay();
@@ -390,14 +388,15 @@ async function assIniciar() {
   const CAMPOS_DIA = ['turnoDom','turnoSeg','turnoTer','turnoQua','turnoQui','turnoSex','turnoSab'];
   const campoDia = CAMPOS_DIA[dt.getDay()];
 
-  // FASE 1a — chamadas críticas em paralelo (4 chamadas — sem registosColegas porque depende de localId)
-  // listarAtribuicoesSemana sem filtro de semana: traz todas as semanas do utilizador de uma vez,
-  // para reutilizar mais abaixo em assCarregarProximosDias (evita repetir o pedido)
-  const [rAtrib, rHorTipo, rTurnos, rLoc] = await Promise.all([
+  // FASE 1 — tudo o que é crítico para o botão de ponto, numa única leva paralela (5 chamadas).
+  // meuRegistoHoje não depende de ASS_LOCAL_ID (procura em qualquer local), por isso pode
+  // entrar aqui em vez de esperar pela leva anterior — poupa uma volta inteira ao servidor.
+  const [rAtrib, rHorTipo, rTurnos, rLoc, rMeu] = await Promise.all([
     assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username}}),
     assApi({acao:'listarHorariosTipoSemanal'}),
     assApi({acao:'listarTurnosTipo'}),
-    assApi({acao:'listarLocais'})
+    assApi({acao:'listarLocais'}),
+    assApi({acao:'meuRegistoHoje'})
   ]);
 
   // Guardar em cache para reutilização (assCarregarProximosDias, assCarregarMaisDias)
@@ -431,11 +430,10 @@ async function assIniciar() {
   if (!ASS_LOCAL_ID && rLoc.ok && rLoc.locais.length) ASS_LOCAL_ID = rLoc.locais[0].id;
 
   // Se já existe registo de hoje noutro local (ex: entrada manual), esse local prevalece
-  try {
-    const rMeu = await assApi({acao:'meuRegistoHoje'});
-    if (rMeu.ok && rMeu.registo && rMeu.registo.localId) ASS_LOCAL_ID = rMeu.registo.localId;
-  } catch(_) {}
-  
+  const meuRegistoHoje = (rMeu.ok && rMeu.registo) ? rMeu.registo : null;
+  if (meuRegistoHoje && meuRegistoHoje.localId) ASS_LOCAL_ID = meuRegistoHoje.localId;
+  ASS_REGISTO_HOJE = meuRegistoHoje;
+
   // Cache de locais e mostrar nome
   if (rLoc.ok) {
     LOCAIS_CACHE = rLoc.locais;
@@ -456,20 +454,20 @@ async function assIniciar() {
     document.getElementById('ass-turno').textContent = 'Sem turno atribuído';
   }
 
-  // FASE 1b — agora que ASS_LOCAL_ID está resolvido, podemos chamar registosColegas
-  const rRegistos = await assApi({acao:'registosColegas', localId: ASS_LOCAL_ID});
-  if (rRegistos.ok) {
-    ASS_COLEGAS_CACHE = rRegistos.registos;
-    ASS_REGISTO_HOJE = rRegistos.registos.find(x => x.username === SESSION.username && x.data === hoje) || null;
-  }
+  // Botão de ponto disponível JÁ — não espera pela lista de colegas (era o gargalo antigo)
   assAtualizarUI();
 
-  // Mostrar listas (usam o cache, sem chamadas API extra)
-  assMostrarMeusRegistos();
-  assPopularFiltroColegas();
-  assFiltraColegas();
+  // FASE 2 — em segundo plano, não bloqueia o botão: colegas + os meus últimos registos
+  assApi({acao:'registosColegas', localId: ASS_LOCAL_ID}).then(rRegistos => {
+    if (rRegistos.ok) {
+      ASS_COLEGAS_CACHE = rRegistos.registos;
+      assMostrarMeusRegistos();
+      assPopularFiltroColegas();
+      assFiltraColegas();
+    }
+  });
 
-  // FASE 2 — Próximos turnos (não bloqueia UI). Já temos rAtrib, rHorTipo, rTurnos em cache.
+  // FASE 3 — Próximos turnos (não bloqueia UI). Já temos rAtrib, rHorTipo, rTurnos em cache.
   ASS_DIAS_MOSTRADOS = 7;
   assCarregarProximosDias();
 }
@@ -490,16 +488,20 @@ function assDataHoje() { const d=new Date(); return `${d.getFullYear()}-${String
 function assFormatarData(str) { if(!str) return '—'; let s=(str instanceof Date)?str.toISOString():String(str); s=s.slice(0,10); const [a,m,d]=s.split('-'); if(!a||!m||!d) return String(str); return `${d}/${m}/${a}`; }function assIniciais(nome) { if(!nome) return '?'; return nome.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase(); }
 
 async function assCarregarPonto() {
-  const r=await assApi({acao:'registosColegas',localId:ASS_LOCAL_ID});
-  if (r.ok) {
-    ASS_COLEGAS_CACHE = r.registos;
-    const hoje=assDataHoje();
-    ASS_REGISTO_HOJE=r.registos.find(x=>x.username===SESSION.username&&x.data===hoje)||null;
-  }
+  // Rápido: só o meu próprio registo de hoje, para os botões reagirem já
+  const r=await assApi({acao:'meuRegistoHoje'});
+  if (r.ok) ASS_REGISTO_HOJE = r.registo || null;
   assAtualizarUI();
-  assMostrarMeusRegistos();
-  assPopularFiltroColegas();
-  assFiltraColegas();
+
+  // Em segundo plano — não atrasa a confirmação do ponto
+  assApi({acao:'registosColegas',localId:ASS_LOCAL_ID}).then(rColegas => {
+    if (rColegas.ok) {
+      ASS_COLEGAS_CACHE = rColegas.registos;
+      assMostrarMeusRegistos();
+      assPopularFiltroColegas();
+      assFiltraColegas();
+    }
+  });
 }
 
 // assConfirmarSaida — modal de confirmação antes de registar saída
