@@ -2160,10 +2160,20 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'height:0;overflow:hidden;';
   const container = document.createElement('div');
-  container.style.cssText = 'width:1400px;background:#fff;padding:1.2cm;font-family:Outfit,Arial,sans-serif;color:#111';
+  container.style.cssText = 'width:1600px;background:#fff;padding:1.2cm;font-family:Outfit,Arial,sans-serif;color:#111';
   container.innerHTML = html;
   wrapper.appendChild(container);
   document.body.appendChild(wrapper);
+
+  // Encolher proporcionalmente para caber sempre na largura da página impressa (A4 paisagem).
+  // O html2pdf.js não faz "fit to width" sozinho — conteúdo mais largo do que a página
+  // é simplesmente cortado, em vez de encolhido. Isto corrige isso, seja qual for o
+  // número de dias do mês ou de colaboradores.
+  const larguraDisponivelPx = 1040; // A4 paisagem (297mm) menos margens, a ~96dpi
+  const larguraReal = container.scrollWidth;
+  if (larguraReal > larguraDisponivelPx) {
+    container.style.zoom = larguraDisponivelPx / larguraReal;
+  }
 
   const nomeFicheiro = `Escala_${nomLocal.replace(/[^a-zA-Z0-9]+/g,'_')}_${nomMes.replace(/\s+/g,'_')}.pdf`;
 
