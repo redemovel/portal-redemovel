@@ -2154,11 +2154,16 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   `;
 
   // Gerar o PDF diretamente (sem popup nem impressão manual) — usa html2pdf.js
-  // Container fora do ecrã: necessário para o html2canvas conseguir medir/desenhar o conteúdo
+  // Invólucro com altura zero: esconde visualmente o conteúdo (nada aparece no ecrã)
+  // sem o tirar das coordenadas normais da página — posicionar com left:-9999px
+  // confundia o html2canvas e produzia uma captura em branco.
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'height:0;overflow:hidden;';
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1400px;background:#fff;padding:1.2cm;font-family:Outfit,Arial,sans-serif;color:#111';
+  container.style.cssText = 'width:1400px;background:#fff;padding:1.2cm;font-family:Outfit,Arial,sans-serif;color:#111';
   container.innerHTML = html;
-  document.body.appendChild(container);
+  wrapper.appendChild(container);
+  document.body.appendChild(wrapper);
 
   const nomeFicheiro = `Escala_${nomLocal.replace(/[^a-zA-Z0-9]+/g,'_')}_${nomMes.replace(/\s+/g,'_')}.pdf`;
 
@@ -2174,7 +2179,7 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   } catch(e) {
     alert('Erro ao gerar o PDF: ' + (e && e.message ? e.message : e));
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(wrapper);
   }
 }
 
