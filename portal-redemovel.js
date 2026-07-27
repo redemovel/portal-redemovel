@@ -2026,37 +2026,57 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
     </tr>`;
   }).join('') : `<tr><td colspan="5" style="padding:8px;text-align:center;color:#999;font-size:.75rem;border:1px solid #ccc">Sem turnos definidos para este local neste período.</td></tr>`;
 
-  // ── SECÇÃO 2: Grelha Colaboradores × Dias ──
-  const thDias = diasOrdenados.map(dia => {
-    const d = new Date(dia+'T12:00:00');
-    const bg = corBg(dia);
-    return `<th style="min-width:26px;width:26px;padding:2px 1px;text-align:center;font-size:.56rem;background:${bg};border:1px solid #ccc;line-height:1.3">
-      <div style="font-weight:700">${d.getDate()}</div>
-      <div style="color:#777;font-weight:400">${DIAS_PT[d.getDay()]}</div>
-    </th>`;
-  }).join('');
+  // ── SECÇÃO 2: Grelha Colaboradores × Dias (dividida em blocos, para caber legivelmente) ──
+  const DIAS_POR_BLOCO = 16;
+  const blocosDias = [];
+  for (let i = 0; i < diasOrdenados.length; i += DIAS_POR_BLOCO) {
+    blocosDias.push(diasOrdenados.slice(i, i + DIAS_POR_BLOCO));
+  }
 
-  const trColabs = cols.length ? cols.map(col => {
-    const celdas = diasOrdenados.map(dia => {
-      const dInfo = diasMes[dia];
-      const info  = dInfo?.colaboradores.find(c => c.username === col.username);
-      const bg    = corBg(dia);
-      let label = '–', cor = '#ccc', title = '';
-      if (info?.emFerias) { label = {ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; cor='transparent'; }
-      else if (info?.turno && !info.folga) {
-        label = info.turno.nome || minParaHora(info.turno.inicioMin);
-        cor = info.especial ? '#d97706' : '#007878';
-        title = `${info.turno.nome}: ${minParaHora(info.turno.inicioMin)}–${minParaHora(info.turno.fimMin)}`;
-      }
-      return `<td style="text-align:center;font-size:.54rem;padding:2px 1px;border:1px solid #ddd;background:${bg}" title="${title}">
-        ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${label}</span>`}
-      </td>`;
+  const construirTabelaBloco = (diasBloco) => {
+    const thDiasBloco = diasBloco.map(dia => {
+      const d = new Date(dia+'T12:00:00');
+      const bg = corBg(dia);
+      return `<th style="min-width:44px;width:44px;padding:3px 2px;text-align:center;font-size:.68rem;background:${bg};border:1px solid #ccc;line-height:1.35">
+        <div style="font-weight:700;font-size:.78rem">${d.getDate()}</div>
+        <div style="color:#777;font-weight:400">${DIAS_PT[d.getDay()]}</div>
+      </th>`;
     }).join('');
-    return `<tr>
-      <td style="padding:3px 8px;font-weight:600;font-size:.68rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${col.nome}</td>
-      ${celdas}
-    </tr>`;
-  }).join('') : `<tr><td colspan="${diasOrdenados.length+1}" style="padding:8px;text-align:center;color:#999;font-size:.75rem;border:1px solid #ccc">Sem colaboradores atribuídos neste período.</td></tr>`;
+
+    const trColabsBloco = cols.length ? cols.map(col => {
+      const celdas = diasBloco.map(dia => {
+        const dInfo = diasMes[dia];
+        const info  = dInfo?.colaboradores.find(c => c.username === col.username);
+        const bg    = corBg(dia);
+        let label = '–', cor = '#ccc', title = '';
+        if (info?.emFerias) { label = {ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; cor='transparent'; }
+        else if (info?.turno && !info.folga) {
+          label = info.turno.nome || minParaHora(info.turno.inicioMin);
+          cor = info.especial ? '#d97706' : '#007878';
+          title = `${info.turno.nome}: ${minParaHora(info.turno.inicioMin)}–${minParaHora(info.turno.fimMin)}`;
+        }
+        return `<td style="text-align:center;font-size:.6rem;padding:3px 2px;border:1px solid #ddd;background:${bg}" title="${title}">
+          ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${label}</span>`}
+        </td>`;
+      }).join('');
+      return `<tr>
+        <td style="padding:3px 8px;font-weight:600;font-size:.7rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${col.nome}</td>
+        ${celdas}
+      </tr>`;
+    }).join('') : `<tr><td colspan="${diasBloco.length+1}" style="padding:8px;text-align:center;color:#999;font-size:.75rem;border:1px solid #ccc">Sem colaboradores atribuídos neste período.</td></tr>`;
+
+    return `<table style="border-collapse:collapse;width:100%;margin-bottom:8px">
+      <thead>
+        <tr style="background:#007878;color:white">
+          <th style="padding:5px 8px;font-size:.72rem;text-align:left;border:1px solid #005f5f;white-space:nowrap;min-width:130px">Nome Completo</th>
+          ${thDiasBloco}
+        </tr>
+      </thead>
+      <tbody>${trColabsBloco}</tbody>
+    </table>`;
+  };
+
+  const tabelasGrelha = blocosDias.map(construirTabelaBloco).join('');
 
   // ── SECÇÃO 3: Trocas / Alterações ──
   const linhasTrocas = Array.from({length:10}, (_,i) =>
@@ -2108,16 +2128,8 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
       <div style="font-size:8.5pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">
         B — Atribuição de Turnos por Colaborador
       </div>
-      <div style="overflow-x:auto;margin-bottom:14px">
-        <table style="border-collapse:collapse;width:100%">
-          <thead>
-            <tr style="background:#007878;color:white">
-              <th style="padding:5px 8px;font-size:.72rem;text-align:left;border:1px solid #005f5f;white-space:nowrap;min-width:130px">Nome Completo</th>
-              ${thDias}
-            </tr>
-          </thead>
-          <tbody>${trColabs}</tbody>
-        </table>
+      <div style="margin-bottom:14px">
+        ${tabelasGrelha}
       </div>
       <div style="font-size:7pt;color:#888;margin-bottom:14px">
         🏖 Férias &nbsp;·&nbsp; <span style="color:#007878;font-weight:700">■</span> Turno normal &nbsp;·&nbsp; <span style="color:#d97706;font-weight:700">■</span> Turno especial &nbsp;·&nbsp; – Folga/não atribuído &nbsp;·&nbsp; <span style="background:#fde8e8;padding:0 3px">Domingo</span> &nbsp;·&nbsp; <span style="background:#fef9e7;padding:0 3px">Sábado</span>
