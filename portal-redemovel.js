@@ -1967,7 +1967,22 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   seg.setDate(seg.getDate() - ((seg.getDay()+6)%7));
   while (seg <= fim) { segundas.push(fmtISO(seg)); seg.setDate(seg.getDate()+7); }
 
-  const respostas = await Promise.all(segundas.map(s => assApi({acao:'gantSemanal', localId, semanaInicio:s})));
+  let respostas = await Promise.all(segundas.map(s => assApi({acao:'gantSemanal', localId, semanaInicio:s})));
+
+  // Se alguma semana falhou (ex: pico de pedidos simultâneos), tentar novamente essas
+  // semanas específicas antes de desistir — nunca gerar silenciosamente um mapa incompleto.
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const falhadas = segundas.map((s,i)=>({s,i})).filter(({i}) => !respostas[i].ok);
+    if (!falhadas.length) break;
+    await new Promise(r => setTimeout(r, 900));
+    const novas = await Promise.all(falhadas.map(({s}) => assApi({acao:'gantSemanal', localId, semanaInicio:s})));
+    falhadas.forEach(({i}, idx) => { respostas[i] = novas[idx]; });
+  }
+  const semanasEmFalta = segundas.filter((s,i) => !respostas[i].ok);
+  if (semanasEmFalta.length) {
+    alert('Não foi possível carregar os dados de ' + semanasEmFalta.length + ' semana(s) deste período (falha de ligação temporária). O PDF não foi gerado — tenta novamente.');
+    return;
+  }
 
   // Consolidar dias do período
   const diasMes   = {};
@@ -2109,7 +2124,7 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
         B — Atribuição de Turnos por Colaborador
       </div>
       <div style="overflow-x:auto;margin-bottom:10px">
-        <table style="border-collapse:collapse;width:100%">
+        <table style="border-collapse:collapse;width:100%;table-layout:fixed">
           <thead>
             <tr style="background:#007878;color:white">
               <th style="padding:3px 6px;font-size:.64rem;text-align:left;border:1px solid #005f5f;white-space:nowrap;min-width:110px">Nome Completo</th>
