@@ -2018,70 +2018,50 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
       (t.pausa3Label && t.pausa3InicioMin!=='' && t.pausa3FimMin!=='') ? `${t.pausa3Label}: ${minParaHora(t.pausa3InicioMin)}–${minParaHora(t.pausa3FimMin)} (${hm(durMin(t.pausa3InicioMin,t.pausa3FimMin))})` : null,
     ].filter(Boolean);
     return `<tr>
-      <td style="padding:5px 8px;font-weight:700;font-size:.75rem;border:1px solid #ccc;white-space:nowrap">${t.nome||'—'}</td>
-      <td style="padding:5px 8px;font-size:.75rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.inicioMin||0)}</td>
-      <td style="padding:5px 8px;font-size:.75rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.fimMin||0)}</td>
-      <td style="padding:5px 8px;font-size:.75rem;border:1px solid #ccc;text-align:center">${hm(dur)}</td>
-      <td style="padding:5px 8px;font-size:.7rem;border:1px solid #ccc;color:#555">${pausas.join('<br>')||'—'}</td>
+      <td style="padding:2px 6px;font-weight:700;font-size:.62rem;border:1px solid #ccc;white-space:nowrap">${t.nome||'—'}</td>
+      <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.inicioMin||0)}</td>
+      <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.fimMin||0)}</td>
+      <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center">${hm(dur)}</td>
+      <td style="padding:2px 6px;font-size:.58rem;border:1px solid #ccc;color:#555">${pausas.join('<br>')||'—'}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="5" style="padding:8px;text-align:center;color:#999;font-size:.75rem;border:1px solid #ccc">Sem turnos definidos para este local neste período.</td></tr>`;
+  }).join('') : `<tr><td colspan="5" style="padding:6px;text-align:center;color:#999;font-size:.62rem;border:1px solid #ccc">Sem turnos definidos para este local neste período.</td></tr>`;
 
-  // ── SECÇÃO 2: Grelha Colaboradores × Dias (dividida em blocos, para caber legivelmente) ──
-  const DIAS_POR_BLOCO = 16;
-  const blocosDias = [];
-  for (let i = 0; i < diasOrdenados.length; i += DIAS_POR_BLOCO) {
-    blocosDias.push(diasOrdenados.slice(i, i + DIAS_POR_BLOCO));
-  }
+  // ── SECÇÃO 2: Grelha Colaboradores × Dias (tabela única, condensada) ──
+  const thDias = diasOrdenados.map(dia => {
+    const d = new Date(dia+'T12:00:00');
+    const bg = corBg(dia);
+    return `<th style="min-width:24px;width:24px;padding:2px 1px;text-align:center;font-size:.56rem;background:${bg};border:1px solid #ccc;line-height:1.2;color:#111">
+      <div style="font-weight:700;color:#111">${d.getDate()}</div>
+      <div style="color:#666;font-weight:400;font-size:.48rem">${DIAS_PT[d.getDay()]}</div>
+    </th>`;
+  }).join('');
 
-  const construirTabelaBloco = (diasBloco) => {
-    const thDiasBloco = diasBloco.map(dia => {
-      const d = new Date(dia+'T12:00:00');
-      const bg = corBg(dia);
-      return `<th style="min-width:44px;width:44px;padding:3px 2px;text-align:center;font-size:.68rem;background:${bg};border:1px solid #ccc;line-height:1.35">
-        <div style="font-weight:700;font-size:.78rem">${d.getDate()}</div>
-        <div style="color:#777;font-weight:400">${DIAS_PT[d.getDay()]}</div>
-      </th>`;
+  const trColabs = cols.length ? cols.map(col => {
+    const celdas = diasOrdenados.map(dia => {
+      const dInfo = diasMes[dia];
+      const info  = dInfo?.colaboradores.find(c => c.username === col.username);
+      const bg    = corBg(dia);
+      let label = '–', cor = '#ccc', title = '';
+      if (info?.emFerias) { label = {ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; cor='transparent'; }
+      else if (info?.turno && !info.folga) {
+        label = info.turno.nome || minParaHora(info.turno.inicioMin);
+        cor = info.especial ? '#d97706' : '#007878';
+        title = `${info.turno.nome}: ${minParaHora(info.turno.inicioMin)}–${minParaHora(info.turno.fimMin)}`;
+      }
+      return `<td style="text-align:center;font-size:.5rem;padding:2px 1px;border:1px solid #ddd;background:${bg}" title="${title}">
+        ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${label}</span>`}
+      </td>`;
     }).join('');
-
-    const trColabsBloco = cols.length ? cols.map(col => {
-      const celdas = diasBloco.map(dia => {
-        const dInfo = diasMes[dia];
-        const info  = dInfo?.colaboradores.find(c => c.username === col.username);
-        const bg    = corBg(dia);
-        let label = '–', cor = '#ccc', title = '';
-        if (info?.emFerias) { label = {ferias:'🏖',baixa_medica:'🏥',licenca:'📄',outro:'❓'}[info.tipoAusencia]||'🏖'; cor='transparent'; }
-        else if (info?.turno && !info.folga) {
-          label = info.turno.nome || minParaHora(info.turno.inicioMin);
-          cor = info.especial ? '#d97706' : '#007878';
-          title = `${info.turno.nome}: ${minParaHora(info.turno.inicioMin)}–${minParaHora(info.turno.fimMin)}`;
-        }
-        return `<td style="text-align:center;font-size:.6rem;padding:3px 2px;border:1px solid #ddd;background:${bg}" title="${title}">
-          ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${label}</span>`}
-        </td>`;
-      }).join('');
-      return `<tr>
-        <td style="padding:3px 8px;font-weight:600;font-size:.7rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${col.nome}</td>
-        ${celdas}
-      </tr>`;
-    }).join('') : `<tr><td colspan="${diasBloco.length+1}" style="padding:8px;text-align:center;color:#999;font-size:.75rem;border:1px solid #ccc">Sem colaboradores atribuídos neste período.</td></tr>`;
-
-    return `<table style="border-collapse:collapse;width:100%;margin-bottom:8px">
-      <thead>
-        <tr style="background:#007878;color:white">
-          <th style="padding:5px 8px;font-size:.72rem;text-align:left;border:1px solid #005f5f;white-space:nowrap;min-width:130px">Nome Completo</th>
-          ${thDiasBloco}
-        </tr>
-      </thead>
-      <tbody>${trColabsBloco}</tbody>
-    </table>`;
-  };
-
-  const tabelasGrelha = blocosDias.map(construirTabelaBloco).join('');
+    return `<tr>
+      <td style="padding:2px 6px;font-weight:600;font-size:.64rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${col.nome}</td>
+      ${celdas}
+    </tr>`;
+  }).join('') : `<tr><td colspan="${diasOrdenados.length+1}" style="padding:6px;text-align:center;color:#999;font-size:.7rem;border:1px solid #ccc">Sem colaboradores atribuídos neste período.</td></tr>`;
 
   // ── SECÇÃO 3: Trocas / Alterações ──
-  const linhasTrocas = Array.from({length:10}, (_,i) =>
-    `<tr style="height:24px">
-      <td style="border:1px solid #ccc;padding:2px 6px;font-size:.7rem;color:#bbb;text-align:center">${i+1}</td>
+  const linhasTrocas = Array.from({length:6}, (_,i) =>
+    `<tr style="height:15px">
+      <td style="border:1px solid #ccc;padding:1px 5px;font-size:.58rem;color:#bbb;text-align:center">${i+1}</td>
       <td style="border:1px solid #ccc"></td>
       <td style="border:1px solid #ccc"></td>
       <td style="border:1px solid #ccc"></td>
@@ -2093,71 +2073,79 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   const hoje = new Date().toLocaleDateString('pt-PT');
 
   const html = `
-    <div style="font-family:'Outfit',Arial,sans-serif;color:#111;font-size:10pt;line-height:1.4">
+    <div style="font-family:'Outfit',Arial,sans-serif;color:#111;font-size:8.5pt;line-height:1.25">
       <!-- CABEÇALHO -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2.5px solid #007878;padding-bottom:8px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid #007878;padding-bottom:5px;margin-bottom:8px">
         <div>
-          <div style="font-size:13pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:-.01em">Arpuro &amp; Redemóvel, Lda</div>
-          <div style="font-size:8pt;color:#555;margin-top:2px">NIPC 503 198 749 &nbsp;·&nbsp; Mapa de Trabalho para Afixação Obrigatória</div>
-          <div style="font-size:9pt;font-weight:700;color:#333;margin-top:4px">📍 ${nomLocal}</div>
-          <div style="font-size:8pt;color:#666;margin-top:2px">Período: <strong>${periodoStr}</strong> &nbsp;·&nbsp; Escala de ${nomMes}</div>
+          <div style="font-size:11pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:-.01em">Arpuro &amp; Redemóvel, Lda</div>
+          <div style="font-size:6.5pt;color:#555;margin-top:1px">NIPC 503 198 749 &nbsp;·&nbsp; Mapa de Trabalho para Afixação Obrigatória</div>
+          <div style="font-size:7.5pt;font-weight:700;color:#333;margin-top:2px">📍 ${nomLocal}</div>
+          <div style="font-size:6.5pt;color:#666;margin-top:1px">Período: <strong>${periodoStr}</strong> &nbsp;·&nbsp; Escala de ${nomMes}</div>
         </div>
-        <div style="text-align:right;font-size:7.5pt;color:#999;line-height:1.8;border:1px solid #eee;padding:6px 10px;border-radius:6px">
+        <div style="text-align:right;font-size:6pt;color:#999;line-height:1.5;border:1px solid #eee;padding:3px 7px;border-radius:5px">
           <div style="font-weight:700;color:#555">Emitido em ${hoje}</div>
           <div>Portal Redemóvel</div>
-          <div style="margin-top:4px;font-size:7pt">Art.º 215.º CT — Afixar no local de trabalho</div>
+          <div style="margin-top:2px;font-size:5.5pt">Art.º 215.º CT — Afixar no local de trabalho</div>
         </div>
       </div>
       <!-- SECÇÃO A: FICHA DE TURNOS -->
-      <div style="font-size:8.5pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;margin-top:4px">
+      <div style="font-size:7pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;margin-top:2px">
         A — Definição de Turnos
       </div>
-      <table style="border-collapse:collapse;width:100%;margin-bottom:14px">
+      <table style="border-collapse:collapse;width:100%;margin-bottom:8px">
         <thead>
           <tr style="background:#007878;color:white">
-            <th style="padding:5px 8px;font-size:.72rem;text-align:left;border:1px solid #005f5f">Designação do Turno</th>
-            <th style="padding:5px 8px;font-size:.72rem;text-align:center;border:1px solid #005f5f">Entrada</th>
-            <th style="padding:5px 8px;font-size:.72rem;text-align:center;border:1px solid #005f5f">Saída</th>
-            <th style="padding:5px 8px;font-size:.72rem;text-align:center;border:1px solid #005f5f">Duração</th>
-            <th style="padding:5px 8px;font-size:.72rem;text-align:left;border:1px solid #005f5f">Pausas / Intervalos</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:left;border:1px solid #005f5f">Designação do Turno</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Entrada</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Saída</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Duração</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:left;border:1px solid #005f5f">Pausas / Intervalos</th>
           </tr>
         </thead>
         <tbody>${fichaLinhas}</tbody>
       </table>
       <!-- SECÇÃO B: GRELHA DE ATRIBUIÇÃO -->
-      <div style="font-size:8.5pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">
+      <div style="font-size:7pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">
         B — Atribuição de Turnos por Colaborador
       </div>
-      <div style="margin-bottom:14px">
-        ${tabelasGrelha}
+      <div style="overflow-x:auto;margin-bottom:10px">
+        <table style="border-collapse:collapse;width:100%">
+          <thead>
+            <tr style="background:#007878;color:white">
+              <th style="padding:3px 6px;font-size:.64rem;text-align:left;border:1px solid #005f5f;white-space:nowrap;min-width:110px">Nome Completo</th>
+              ${thDias}
+            </tr>
+          </thead>
+          <tbody>${trColabs}</tbody>
+        </table>
       </div>
-      <div style="font-size:7pt;color:#888;margin-bottom:14px">
+      <div style="font-size:6pt;color:#888;margin-bottom:8px">
         🏖 Férias &nbsp;·&nbsp; <span style="color:#007878;font-weight:700">■</span> Turno normal &nbsp;·&nbsp; <span style="color:#d97706;font-weight:700">■</span> Turno especial &nbsp;·&nbsp; – Folga/não atribuído &nbsp;·&nbsp; <span style="background:#fde8e8;padding:0 3px">Domingo</span> &nbsp;·&nbsp; <span style="background:#fef9e7;padding:0 3px">Sábado</span>
       </div>
       <!-- SECÇÃO C: TROCAS -->
-      <div style="font-size:8.5pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">
+      <div style="font-size:7pt;font-weight:800;color:#007878;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">
         C — Trocas e Alterações de Turno
       </div>
-      <table style="border-collapse:collapse;width:100%;margin-bottom:18px">
+      <table style="border-collapse:collapse;width:100%;margin-bottom:10px">
         <thead>
           <tr style="background:#f0fafa">
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem;width:22px;text-align:center">#</th>
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem">Data</th>
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem">Colaborador (cede turno)</th>
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem">Colaborador (assume turno)</th>
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem">Turno</th>
-            <th style="border:1px solid #ccc;padding:5px 6px;font-size:.7rem">Ass. Responsável</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem;width:18px;text-align:center">#</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem">Data</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem">Colaborador (cede turno)</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem">Colaborador (assume turno)</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem">Turno</th>
+            <th style="border:1px solid #ccc;padding:2px 5px;font-size:.58rem">Ass. Responsável</th>
           </tr>
         </thead>
         <tbody>${linhasTrocas}</tbody>
       </table>
       <!-- RODAPÉ LEGAL -->
-      <div style="border-top:1.5px solid #007878;padding-top:8px;display:flex;justify-content:space-between;align-items:flex-end">
-        <div style="font-size:7.5pt;color:#555">
+      <div style="border-top:1px solid #007878;padding-top:5px;display:flex;justify-content:space-between;align-items:flex-end">
+        <div style="font-size:6pt;color:#555">
           <div style="font-weight:700">Responsável pelo estabelecimento:</div>
-          <div style="margin-top:18px;border-top:1px solid #555;width:200px;padding-top:3px;font-size:7pt;color:#888">Assinatura e data</div>
+          <div style="margin-top:10px;border-top:1px solid #555;width:160px;padding-top:2px;font-size:5.5pt;color:#888">Assinatura e data</div>
         </div>
-        <div style="font-size:6.5pt;color:#bbb;text-align:right">
+        <div style="font-size:5.5pt;color:#bbb;text-align:right">
           <div>Arpuro &amp; Redemóvel, Lda · NIPC 503 198 749</div>
           <div>Gerado automaticamente pelo Portal Redemóvel · ${hoje}</div>
         </div>
