@@ -149,7 +149,7 @@ async function enterDashboard() {
 }
 
 function doLogout() {
-  SESSION=null;
+  SESSION = SESSION ? { ip: SESSION.ip, local: SESSION.local } : null;
   ASS_ATRIB_CACHE = null; ASS_HORARIOS_CACHE = null; ASS_TURNOS_CACHE = null;
   try { sessionStorage.removeItem('rmSession'); sessionStorage.removeItem('rmView'); } catch(_) {}
   document.getElementById('dashboard-page').style.display='none';
