@@ -928,6 +928,11 @@ function showGestaoTab(id, btn) {
     if (horMes&&!horMes.value) { const h=new Date(); horMes.value=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   }
   if (id==='ferias') { carregarFerias(); popularSelectLocal('fer-local'); popularColaboradoresSelect('fer-colaborador'); }
+  if (id==='mapaferias') {
+    const anoInp=document.getElementById('mapaferias-ano');
+    if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
+    carregarMapaFerias();
+  }
   if (id==='aprovacoes') carregarAprovacoes();
   if (id==='mapa') {
     popularSelectLocal('mapa-local');
@@ -1873,6 +1878,51 @@ async function confirmarDecisao() {
 // ═══════════════════════════════════════
 //  MAPA MENSAL
 // ═══════════════════════════════════════
+async function carregarMapaFerias() {
+  const ano = document.getElementById('mapaferias-ano').value;
+  const cont = document.getElementById('mapaferias-conteudo');
+  if (!ano) { cont.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Indique um ano.</div>'; return; }
+  const r = await assApi({acao:'mapaFerias', ano});
+  if (!r.ok) { cont.innerHTML = `<div style="text-align:center;padding:1.5rem;color:var(--danger)">${r.erro||'Erro ao carregar.'}</div>`; return; }
+  if (!r.colaboradores.length) { cont.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem colaboradores activos.</div>'; return; }
+
+  const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const ICONE = {ferias:'🏖', baixa_medica:'🏥', licenca:'📄', outro:'❓'};
+
+  const primeiroDiaMes = (a,m) => `${a}-${String(m+1).padStart(2,'0')}-01`;
+  const ultimoDiaMes = (a,m) => { const d = new Date(Number(a), m+1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+
+  const thMeses = MESES_ABREV.map(m=>`<th style="padding:4px 3px;font-size:.68rem;text-align:center;border:1px solid #ddd;min-width:80px">${m}</th>`).join('');
+
+  const trLinhas = r.colaboradores.map(col => {
+    const tds = MESES_ABREV.map((_,i) => {
+      const pIni = primeiroDiaMes(ano,i), pFim = ultimoDiaMes(ano,i);
+      const relevantes = col.ausencias.filter(a => a.dataFim>=pIni && a.dataInicio<=pFim);
+      if (!relevantes.length) return '<td style="border:1px solid #eee;padding:3px"></td>';
+      const badges = relevantes.map(a => {
+        const pendente = a.estado==='pendente';
+        const dIniFmt = a.dataInicio.slice(8,10)+'/'+a.dataInicio.slice(5,7);
+        const dFimFmt = a.dataFim.slice(8,10)+'/'+a.dataFim.slice(5,7);
+        const estilo = pendente
+          ? 'border:1px dashed var(--teal);color:var(--teal);background:transparent'
+          : 'background:var(--teal-pale);color:var(--teal)';
+        return `<div title="${a.localNome} · ${a.diasUteis} dia(s) útil(eis) · ${a.estado}" style="font-size:.62rem;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;${estilo}">${ICONE[a.tipo]||'❓'} ${dIniFmt}–${dFimFmt}</div>`;
+      }).join('');
+      return `<td style="border:1px solid #eee;padding:3px;vertical-align:top">${badges}</td>`;
+    }).join('');
+    return `<tr><td style="padding:4px 8px;font-weight:600;font-size:.78rem;border:1px solid #ddd;white-space:nowrap;background:#fafafa">${col.nome}</td>${tds}</tr>`;
+  }).join('');
+
+  cont.innerHTML = `<table style="border-collapse:collapse;width:100%">
+    <thead><tr style="background:var(--teal);color:white">
+      <th style="padding:5px 8px;font-size:.75rem;text-align:left;border:1px solid #005f5f;white-space:nowrap">Colaborador</th>
+      ${thMeses}
+    </tr></thead>
+    <tbody>${trLinhas}</tbody>
+  </table>`;
+}
+window.carregarMapaFerias = carregarMapaFerias;
+
 async function carregarMapa() {
   const localId=document.getElementById('mapa-local').value, mesAno=document.getElementById('mapa-mes').value;
   if (!mesAno) return;
