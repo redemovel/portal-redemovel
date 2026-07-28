@@ -1893,6 +1893,9 @@ async function carregarMapaFerias() {
   const ultimoDiaMes = (a,m) => { const d = new Date(Number(a), m+1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 
   const thMeses = MESES_ABREV.map(m=>`<th style="padding:4px 3px;font-size:.68rem;text-align:center;border:1px solid #ddd;min-width:80px">${m}</th>`).join('');
+  const thTotais = `<th style="padding:4px 6px;font-size:.68rem;text-align:center;border:1px solid #ddd;background:#f0fafa">🏖 Dias</th><th style="padding:4px 6px;font-size:.68rem;text-align:center;border:1px solid #ddd;background:#f0fafa">🏥 Dias</th><th style="padding:4px 6px;font-size:.68rem;text-align:center;border:1px solid #ddd;background:#f0fafa">📄 Dias</th><th style="padding:4px 6px;font-size:.68rem;text-align:center;border:1px solid #ddd;background:#f0fafa">❓ Dias</th>`;
+
+  const tdTotais = t => `<td style="padding:4px 6px;font-size:.75rem;text-align:center;border:1px solid #ddd;background:#f7fdfd;font-weight:600">${t.ferias||'–'}</td><td style="padding:4px 6px;font-size:.75rem;text-align:center;border:1px solid #ddd;background:#f7fdfd;font-weight:600">${t.baixa_medica||'–'}</td><td style="padding:4px 6px;font-size:.75rem;text-align:center;border:1px solid #ddd;background:#f7fdfd;font-weight:600">${t.licenca||'–'}</td><td style="padding:4px 6px;font-size:.75rem;text-align:center;border:1px solid #ddd;background:#f7fdfd;font-weight:600">${t.outro||'–'}</td>`;
 
   const trLinhas = r.colaboradores.map(col => {
     const tds = MESES_ABREV.map((_,i) => {
@@ -1910,15 +1913,19 @@ async function carregarMapaFerias() {
       }).join('');
       return `<td style="border:1px solid #eee;padding:3px;vertical-align:top">${badges}</td>`;
     }).join('');
-    return `<tr><td style="padding:4px 8px;font-weight:600;font-size:.78rem;border:1px solid #ddd;white-space:nowrap;background:#fafafa">${col.nome}</td>${tds}</tr>`;
+    return `<tr><td style="padding:4px 8px;font-weight:600;font-size:.78rem;border:1px solid #ddd;white-space:nowrap;background:#fafafa">${col.nome}</td>${tdTotais(col.totais)}${tds}</tr>`;
   }).join('');
+
+  const tg = r.totaisGerais || {ferias:0,baixa_medica:0,licenca:0,outro:0};
+  const trTotalGeral = `<tr style="background:var(--teal-pale)"><td style="padding:4px 8px;font-weight:800;font-size:.78rem;border:1px solid #ddd">TOTAL GERAL</td>${tdTotais(tg)}<td colspan="12" style="border:1px solid #ddd"></td></tr>`;
 
   cont.innerHTML = `<table style="border-collapse:collapse;width:100%">
     <thead><tr style="background:var(--teal);color:white">
       <th style="padding:5px 8px;font-size:.75rem;text-align:left;border:1px solid #005f5f;white-space:nowrap">Colaborador</th>
+      ${thTotais}
       ${thMeses}
     </tr></thead>
-    <tbody>${trLinhas}</tbody>
+    <tbody>${trLinhas}${trTotalGeral}</tbody>
   </table>`;
 }
 window.carregarMapaFerias = carregarMapaFerias;
