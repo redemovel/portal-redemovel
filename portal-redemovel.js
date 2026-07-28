@@ -392,7 +392,7 @@ async function assIniciar() {
   // meuRegistoHoje não depende de ASS_LOCAL_ID (procura em qualquer local), por isso pode
   // entrar aqui em vez de esperar pela leva anterior — poupa uma volta inteira ao servidor.
   const [rAtrib, rHorTipo, rTurnos, rLoc, rMeu] = await Promise.all([
-    assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username}}),
+    assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username, semanaDesde:semanaInicio}}),
     assApi({acao:'listarHorariosTipoSemanal'}),
     assApi({acao:'listarTurnosTipo'}),
     assApi({acao:'listarLocais'}),
@@ -768,8 +768,9 @@ async function assCarregarProximosDias() {
     rHorTipo = {ok:true, horarios: ASS_HORARIOS_CACHE};
     rTurnos  = {ok:true, turnos: ASS_TURNOS_CACHE};
   } else {
+    const segundaInicioStr = segundaInicio.getFullYear()+'-'+String(segundaInicio.getMonth()+1).padStart(2,'0')+'-'+String(segundaInicio.getDate()).padStart(2,'0');
     [rAtrib, rHorTipo, rTurnos] = await Promise.all([
-      assApi({acao:'listarAtribuicoesSemana', filtros:{username: SESSION.username}}),
+      assApi({acao:'listarAtribuicoesSemana', filtros:{username: SESSION.username, semanaDesde:segundaInicioStr}}),
       assApi({acao:'listarHorariosTipoSemanal'}),
       assApi({acao:'listarTurnosTipo'})
     ]);
