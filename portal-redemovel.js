@@ -464,6 +464,10 @@ async function assIniciar() {
       assMostrarMeusRegistos();
       assPopularFiltroColegas();
       assFiltraColegas();
+    } else {
+      const msgErro = `<div style="text-align:center;padding:1rem;color:var(--danger);font-size:.82rem">Erro ao carregar. <a onclick="assIniciar()" style="cursor:pointer;text-decoration:underline">Tentar novamente</a></div>`;
+      document.getElementById('ass-meus-registos').innerHTML = msgErro;
+      document.getElementById('ass-colegas-lista').innerHTML = msgErro;
     }
   });
 
@@ -500,6 +504,10 @@ async function assCarregarPonto() {
       assMostrarMeusRegistos();
       assPopularFiltroColegas();
       assFiltraColegas();
+    } else {
+      const msgErro = `<div style="text-align:center;padding:1rem;color:var(--danger);font-size:.82rem">Erro ao carregar. <a onclick="assCarregarPonto()" style="cursor:pointer;text-decoration:underline">Tentar novamente</a></div>`;
+      document.getElementById('ass-meus-registos').innerHTML = msgErro;
+      document.getElementById('ass-colegas-lista').innerHTML = msgErro;
     }
   });
 }
@@ -780,7 +788,7 @@ async function assCarregarProximosDias() {
   }
 
   if (!rAtrib.ok || !rHorTipo.ok || !rTurnos.ok) {
-    container.innerHTML = '<div style="color:var(--danger);padding:1rem">Erro ao carregar.</div>';
+    container.innerHTML = '<div style="color:var(--danger);padding:1rem">Erro ao carregar. <a onclick="assIniciar()" style="cursor:pointer;text-decoration:underline">Tentar novamente</a></div>';
     return;
   }
 
