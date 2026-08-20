@@ -510,6 +510,36 @@ function assConfirmarSaida() {
   });
 }
 
+// Perguntado só quando a saída acontece mais de 30 min depois da hora prevista.
+// Devolve {pedir:boolean, justificacao:string}.
+function assPerguntarHoraExtra() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+    overlay.innerHTML=`
+      <div style="background:var(--card-bg);border-radius:14px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+        <div style="text-align:center;font-size:2rem;margin-bottom:.5rem">⏰</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:.4rem;color:var(--text-main);text-align:center">Estás a sair mais tarde do que o previsto</div>
+        <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;text-align:center">Queres pedir ao coordenador o reconhecimento deste tempo extra?</div>
+        <textarea id="extra-justif" class="form-input" rows="2" placeholder="Justificação (obrigatória para pedir)" style="width:100%;box-sizing:border-box;margin-bottom:.5rem;resize:vertical"></textarea>
+        <div id="extra-err" style="display:none;color:var(--danger);font-size:.75rem;margin-bottom:.75rem;text-align:center">Justificação obrigatória para pedir hora extra.</div>
+        <div style="display:flex;gap:.75rem;justify-content:center">
+          <button id="extra-nao" style="flex:1;padding:.55rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-main);font-weight:600;font-size:.85rem;cursor:pointer;font-family:'Outfit',sans-serif">Não pedir</button>
+          <button id="extra-sim" style="flex:1;padding:.55rem;border-radius:8px;border:none;background:var(--teal);color:white;font-weight:700;font-size:.85rem;cursor:pointer;font-family:'Outfit',sans-serif">Pedir hora extra</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const fechar = (resultado) => { document.body.removeChild(overlay); resolve(resultado); };
+    document.getElementById('extra-sim').onclick = () => {
+      const justif = document.getElementById('extra-justif').value.trim();
+      if (!justif) { document.getElementById('extra-err').style.display='block'; return; }
+      fechar({pedir:true, justificacao:justif});
+    };
+    document.getElementById('extra-nao').onclick = () => fechar({pedir:false, justificacao:''});
+    overlay.onclick = (e) => { if(e.target===overlay) fechar({pedir:false, justificacao:''}); };
+  });
+}
+
 // assAbrirModalLocalManual — modal para registar entrada num local diferente do habitual
 function assAbrirModalLocalManual() {
   const overlay = document.createElement('div');
@@ -569,10 +599,24 @@ async function assRegistarEntradaLocalManual(localId, justificativa) {
 
 // assAcao — versão única com feedback visual e protecção anti-duplo-clique
 async function assAcao(tipo) {
+  let pedirHoraExtra = false, justificativaExtra = '';
+
   // Confirmação antes de saída
   if (tipo==='saida') {
     const confirmado = await assConfirmarSaida();
     if (!confirmado) return;
+
+    // Só pergunta sobre hora extra se já passaram 30 min da hora prevista de saída
+    const turno = (ASS_TURNO_ID && ASS_TURNOS_CACHE) ? ASS_TURNOS_CACHE.find(t=>t.id===ASS_TURNO_ID) : null;
+    if (turno && turno.fimMin!=null && turno.fimMin!=='') {
+      const agora = new Date();
+      const agoraMin = agora.getHours()*60 + agora.getMinutes();
+      if (agoraMin > Number(turno.fimMin) + 30) {
+        const resposta = await assPerguntarHoraExtra();
+        pedirHoraExtra = resposta.pedir;
+        justificativaExtra = resposta.justificacao;
+      }
+    }
   }
   const botoes=['ass-btn-entrada','ass-btn-pausa','ass-btn-retorno','ass-btn-saida'];
   botoes.forEach(id=>{ const btn=document.getElementById(id); if(btn){btn.disabled=true;btn.style.opacity='0.6';btn.style.cursor='not-allowed';} });
@@ -585,7 +629,7 @@ async function assAcao(tipo) {
   let r;
   try {
     if (tipo==='entrada') { r=await assApi({acao:'registarEntrada',localId:ASS_LOCAL_ID}); }
-    else if (tipo==='saida') { r=await assApi({acao:'registarSaida',localId:ASS_LOCAL_ID}); }
+    else if (tipo==='saida') { r=await assApi({acao:'registarSaida',localId:ASS_LOCAL_ID,pedirHoraExtra,justificativaExtra}); }
     else if (tipo==='pausa') {
       const reg=ASS_REGISTO_HOJE; let num=1;
       if (reg&&reg.pausa1InicioMin!=='') num=2;
@@ -1800,7 +1844,7 @@ async function carregarAprovacoes() {
   APROVACOES_CACHE = r.aprovacoes;
   const lista=document.getElementById('lista-aprovacoes');
   if (!r.aprovacoes.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem aprovações para mostrar.</div>'; return; }
-  lista.innerHTML=r.aprovacoes.map(a=>{const col=COLABORADORES_CACHE.find(c=>c.username===a.username),loc=LOCAIS_CACHE.find(l=>l.id===a.localId);const tipoLabel={entrada_fora_janela:'⏰ Entrada fora de janela',saida_fora_janela:'⏰ Saída fora de janela',entrada_local_diferente:'📍 Entrada em local diferente'}[a.tipo]||a.tipo;return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
+  lista.innerHTML=r.aprovacoes.map(a=>{const col=COLABORADORES_CACHE.find(c=>c.username===a.username),loc=LOCAIS_CACHE.find(l=>l.id===a.localId);const tipoLabel={entrada_fora_janela:'⏰ Entrada fora de janela',saida_fora_janela:'⏰ Saída fora de janela',entrada_local_diferente:'📍 Entrada em local diferente',pedido_hora_extra:'🕐 Pedido de hora extra'}[a.tipo]||a.tipo;return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
 }
 
 async function carregarAprovacoesBadge() {
