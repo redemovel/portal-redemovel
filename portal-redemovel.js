@@ -107,18 +107,21 @@ async function enterDashboard() {
   document.getElementById('perfil-nome').textContent=SESSION.nome;
   document.getElementById('perfil-role').textContent=roleLabel(SESSION.role);
   document.getElementById('perfil-local').textContent='📍 '+(SESSION.local||'—');
-  if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') {
-    document.getElementById('nav-gestao').style.display='';
-    carregarGestao();
-  }
   buildChart(); startClock(); setPageDate();
 
-  // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito
+  // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito.
+  // IPs/Utilizadores (carregarGestao) só são pedidos depois — nav-gestao é só um botão,
+  // não bloqueia nada visível já — evita que compitam com o arranque da Assiduidade
+  // pelo mesmo pico de pedidos simultâneos ao Apps Script.
+  if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') {
+    document.getElementById('nav-gestao').style.display='';
+  }
   const savedView = sessionStorage.getItem('rmView');
   const viewInicial = savedView || 'assiduidade';
   const navBtn = document.querySelector(`.nav-item[onclick*="'${viewInicial}'"]`);
   showView(viewInicial, navBtn);
-  if (viewInicial === 'assiduidade') assActivar();
+  if (viewInicial === 'assiduidade') await assActivar();
+  if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') carregarGestao();
   else if (viewInicial === 'gestao') gestaoActivar();
   else if (viewInicial === 'ocupacao') initOcupacaoDiaria();
 }
@@ -363,16 +366,15 @@ async function assIniciar() {
   const CAMPOS_DIA = ['turnoDom','turnoSeg','turnoTer','turnoQua','turnoQui','turnoSex','turnoSab'];
   const campoDia = CAMPOS_DIA[dt.getDay()];
 
-  // FASE 1 — tudo o que é crítico para o botão de ponto, numa única leva paralela (5 chamadas).
-  // meuRegistoHoje não depende de ASS_LOCAL_ID (procura em qualquer local), por isso pode
-  // entrar aqui em vez de esperar pela leva anterior — poupa uma volta inteira ao servidor.
-  const [rAtrib, rHorTipo, rTurnos, rLoc, rMeu] = await Promise.all([
-    assApi({acao:'listarAtribuicoesSemana', filtros:{username:SESSION.username, semanaDesde:semanaInicio}}),
-    assApi({acao:'listarHorariosTipoSemanal'}),
-    assApi({acao:'listarTurnosTipo'}),
-    assApi({acao:'listarLocais'}),
-    assApi({acao:'meuRegistoHoje'})
-  ]);
+  // FASE 1 — tudo o que é crítico para o botão de ponto, numa ÚNICA chamada agregada ao
+  // backend (em vez de 5 pedidos HTTP separados). Reduz o pico de pedidos simultâneos no
+  // arranque — era a causa principal da lentidão sentida no login e troca de vista.
+  const rArranque = await assApi({acao:'carregarArranqueAssiduidade', semanaInicio});
+  const rAtrib   = {ok: rArranque.ok, atribuicoes: rArranque.atribuicoes || []};
+  const rHorTipo = {ok: rArranque.ok, horarios: rArranque.horarios || []};
+  const rTurnos  = {ok: rArranque.ok, turnos: rArranque.turnos || []};
+  const rLoc     = {ok: rArranque.ok, locais: rArranque.locais || []};
+  const rMeu     = {ok: rArranque.ok, registo: rArranque.registoHoje || null};
 
   // Guardar em cache para reutilização (assCarregarProximosDias, assCarregarMaisDias)
   if (rAtrib.ok)   ASS_ATRIB_CACHE = rAtrib.atribuicoes;
@@ -917,7 +919,7 @@ function assMostrarMeusRegistos() {
   }).join('');
 }
 
-function assActivar() { if (SESSION) assIniciar(); }
+function assActivar() { if (SESSION) return assIniciar(); }
 
 // ═══════════════════════════════════════
 //  GESTÃO — TABS
