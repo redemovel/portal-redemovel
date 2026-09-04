@@ -1921,15 +1921,35 @@ function abrirDecisao(id) {
   atualizarAjusteHora();
   document.getElementById('modal-decisao').classList.add('open');
 }
+// Constrói a lista de opções de 30 em 30 min entre o horário original e o valor
+// pedido, para o dropdown "Hora a considerar" do modal de decisão. Cada tipo tem
+// uma regra ligeiramente diferente sobre quais extremos entram na lista — está
+// tudo confirmado com exemplos reais, não é uma fórmula "inventada":
+//  - entrada tardia / pedido de hora extra: exclui o horário original (nunca se
+//    pode "perdoar tudo"), inclui o valor pedido (penalização/crédito máximo).
+//  - saída antecipada: exclui o valor pedido (esse é só o valor de "Rejeitado"),
+//    inclui o horário original (perdão total é uma opção aqui).
+//  - pedido de entrada antecipada: inclui os dois extremos.
+function assConstruirListaAjuste(tipo, valorOriginalMin, valorPedidoMin) {
+  const min = Math.min(valorOriginalMin, valorPedidoMin);
+  const max = Math.max(valorOriginalMin, valorPedidoMin);
+  const inicio = (tipo === 'pedido_entrada_antecipada') ? min : (min + 30);
+  const opcoes = [];
+  for (let v = inicio; v <= max; v += 30) opcoes.push(v);
+  return opcoes.length ? opcoes : [max]; // salvaguarda: nunca fica uma lista vazia
+}
+
 function atualizarAjusteHora() {
   const decisao = document.getElementById('decisao-tipo').value;
   const bloco = document.getElementById('fg-ajuste-hora');
-  const mostrar = decisao==='aprovado' && DECISAO_ATUAL && (DECISAO_ATUAL.tipo==='entrada_fora_janela' || DECISAO_ATUAL.tipo==='saida_fora_janela');
+  const TIPOS_AJUSTE = ['entrada_fora_janela','saida_fora_janela','pedido_hora_extra','pedido_entrada_antecipada'];
+  const mostrar = decisao==='aprovado' && DECISAO_ATUAL && TIPOS_AJUSTE.includes(DECISAO_ATUAL.tipo);
   if (mostrar) {
+    const original = Number(DECISAO_ATUAL.valorOriginalMin);
     const pedido = Number(DECISAO_ATUAL.valorPedidoMin);
+    const opcoes = assConstruirListaAjuste(DECISAO_ATUAL.tipo, original, pedido);
     document.getElementById('decisao-ajuste').innerHTML =
-      `<option value="${pedido}">Hora pedida (${assMinParaHora(pedido)})</option>` +
-      `<option value="${pedido-30}">Hora pedida − 30 min (${assMinParaHora(pedido-30)})</option>`;
+      opcoes.map(v => `<option value="${v}">${assMinParaHora(v)}</option>`).join('');
     bloco.style.display='';
   } else {
     bloco.style.display='none';
