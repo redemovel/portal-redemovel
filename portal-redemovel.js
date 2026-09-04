@@ -1939,6 +1939,15 @@ function assConstruirListaAjuste(tipo, valorOriginalMin, valorPedidoMin) {
   return opcoes.length ? opcoes : [max]; // salvaguarda: nunca fica uma lista vazia
 }
 
+// Extrai a hora real (HH:MM) embutida no texto do motivo, ex: "Entrada às 09:39
+// (previsto 09:30)" → 579 (minutos). Evita precisar de uma coluna nova na Sheet
+// só para guardar a hora real em bruto — já está lá, no texto.
+function assExtrairMinutosDoMotivo(motivo) {
+  const m = /(\d{2}):(\d{2})/.exec(motivo || '');
+  if (!m) return null;
+  return Number(m[1])*60 + Number(m[2]);
+}
+
 function atualizarAjusteHora() {
   const decisao = document.getElementById('decisao-tipo').value;
   const bloco = document.getElementById('fg-ajuste-hora');
@@ -1947,7 +1956,18 @@ function atualizarAjusteHora() {
   if (mostrar) {
     const original = Number(DECISAO_ATUAL.valorOriginalMin);
     const pedido = Number(DECISAO_ATUAL.valorPedidoMin);
-    const opcoes = assConstruirListaAjuste(DECISAO_ATUAL.tipo, original, pedido);
+    let opcoes = assConstruirListaAjuste(DECISAO_ATUAL.tipo, original, pedido);
+
+    // Exceção de benevolência: entrada tardia até 15 min de atraso — o horário
+    // original passa também a ser uma opção (perdão total), além da lista normal.
+    // Acima de 15 min, só a lista normal (sem o horário original).
+    if (DECISAO_ATUAL.tipo === 'entrada_fora_janela') {
+      const realMin = assExtrairMinutosDoMotivo(DECISAO_ATUAL.motivo);
+      if (realMin !== null && (realMin - original) <= 15 && !opcoes.includes(original)) {
+        opcoes = [original, ...opcoes];
+      }
+    }
+
     document.getElementById('decisao-ajuste').innerHTML =
       opcoes.map(v => `<option value="${v}">${assMinParaHora(v)}</option>`).join('');
     bloco.style.display='';
