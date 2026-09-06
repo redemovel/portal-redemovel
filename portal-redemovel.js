@@ -1015,6 +1015,7 @@ function showGestaoTab(id, btn) {
     const optTodos = document.querySelector('#mapa-local option[value=""]');
     if (optTodos) optTodos.textContent = 'Todos os locais';
   }
+  if (id==='editorregistos') { popularColaboradoresSelect('editor-colaborador'); }
 }
 window.showGestaoTab = showGestaoTab;
 
@@ -1091,6 +1092,95 @@ async function gestaoActivar() {
   await Promise.all([carregarIPs(), carregarUtilizadores(), carregarAprovacoesBadge()]);
   const hor=document.getElementById('hor-semana'); if (hor) hor.value=segundaFeira(new Date());
   const mes=document.getElementById('mapa-mes'); if (mes) { const h=new Date(); mes.value=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
+  const tabEditor = document.getElementById('tab-editorregistos');
+  if (tabEditor) tabEditor.style.display = (SESSION.role === 'master') ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EDITOR DE REGISTOS (só master)
+// ═══════════════════════════════════════════════════════════════════════════
+let EDITOR_REGISTOS_CACHE = [];
+
+async function buscarRegistosEditor() {
+  const err = document.getElementById('editor-err');
+  err.style.display = 'none';
+  const username = document.getElementById('editor-colaborador').value;
+  if (!username) { showAlert(err, 'Escolhe um colaborador.'); return; }
+  const data = document.getElementById('editor-data').value; // opcional
+  const filtros = { username };
+  if (data) filtros.data = data;
+
+  const r = await assApi({ acao: 'listarRegistosEditor', filtros });
+  if (!r.ok) { showAlert(err, r.erro); return; }
+  EDITOR_REGISTOS_CACHE = r.registos;
+  renderEditorRegistos();
+}
+
+function renderEditorRegistos() {
+  const container = document.getElementById('editor-lista');
+  if (!EDITOR_REGISTOS_CACHE.length) {
+    container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem registos para este colaborador (e filtro de data, se indicado).</div>';
+    return;
+  }
+  container.innerHTML = `<table class="tbl"><thead><tr>
+    <th>Data</th><th>Entrada</th><th>Saída</th><th>Pausa 1</th><th>Pausa 2</th><th>Estado</th><th>Total</th><th></th>
+  </tr></thead><tbody>${EDITOR_REGISTOS_CACHE.map(r => {
+    const p1 = (r.pausa1InicioMin!=='' ) ? `${minParaHora(r.pausa1InicioMin)}–${r.pausa1FimMin!==''?minParaHora(r.pausa1FimMin):'…'}` : '—';
+    const p2 = (r.pausa2InicioMin!=='' ) ? `${minParaHora(r.pausa2InicioMin)}–${r.pausa2FimMin!==''?minParaHora(r.pausa2FimMin):'…'}` : '—';
+    return `<tr>
+      <td style="font-weight:600">${assFormatarData(r.data)}</td>
+      <td>${r.entradaRealMin!==''?minParaHora(r.entradaRealMin):'—'}</td>
+      <td>${r.saidaRealMin!==''?minParaHora(r.saidaRealMin):'—'}</td>
+      <td style="font-size:.75rem;color:var(--text-muted)">${p1}</td>
+      <td style="font-size:.75rem;color:var(--text-muted)">${p2}</td>
+      <td style="font-size:.78rem">${r.estado||'—'}</td>
+      <td>${r.totalTrabalhadoMin?minParaHoraH(r.totalTrabalhadoMin):'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-sm teal" onclick="abrirEditarRegisto('${r.id}')">ed Editar</button>
+        <button class="btn-sm danger" onclick="apagarRegistoEditor('${r.id}','${assFormatarData(r.data)}')">x</button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function abrirEditarRegisto(id) {
+  const r = EDITOR_REGISTOS_CACHE.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('editor-registo-id').value = id;
+  document.getElementById('editor-registo-info').textContent = `${assFormatarData(r.data)} — ${r.username || ''}`;
+  document.getElementById('editor-entrada').value = r.entradaRealMin!==''?minParaHoraInput(r.entradaRealMin):'';
+  document.getElementById('editor-saida').value = r.saidaRealMin!==''?minParaHoraInput(r.saidaRealMin):'';
+  document.getElementById('editor-p1-inicio').value = r.pausa1InicioMin!==''?minParaHoraInput(r.pausa1InicioMin):'';
+  document.getElementById('editor-p1-fim').value = r.pausa1FimMin!==''?minParaHoraInput(r.pausa1FimMin):'';
+  document.getElementById('editor-p2-inicio').value = r.pausa2InicioMin!==''?minParaHoraInput(r.pausa2InicioMin):'';
+  document.getElementById('editor-p2-fim').value = r.pausa2FimMin!==''?minParaHoraInput(r.pausa2FimMin):'';
+  document.getElementById('editor-registo-err').style.display = 'none';
+  document.getElementById('modal-editar-registo').classList.add('open');
+}
+
+async function guardarRegistoEditado() {
+  const err = document.getElementById('editor-registo-err');
+  err.style.display = 'none';
+  const id = document.getElementById('editor-registo-id').value;
+  const patch = {
+    entradaRealMin: document.getElementById('editor-entrada').value ? horaParaMin(document.getElementById('editor-entrada').value) : '',
+    saidaRealMin: document.getElementById('editor-saida').value ? horaParaMin(document.getElementById('editor-saida').value) : '',
+    pausa1InicioMin: document.getElementById('editor-p1-inicio').value ? horaParaMin(document.getElementById('editor-p1-inicio').value) : '',
+    pausa1FimMin: document.getElementById('editor-p1-fim').value ? horaParaMin(document.getElementById('editor-p1-fim').value) : '',
+    pausa2InicioMin: document.getElementById('editor-p2-inicio').value ? horaParaMin(document.getElementById('editor-p2-inicio').value) : '',
+    pausa2FimMin: document.getElementById('editor-p2-fim').value ? horaParaMin(document.getElementById('editor-p2-fim').value) : ''
+  };
+  const r = await assApi({ acao: 'editarRegistoManual', id, patch });
+  if (!r.ok) { showAlert(err, r.erro); return; }
+  closeModal('modal-editar-registo');
+  buscarRegistosEditor();
+}
+
+async function apagarRegistoEditor(id, dataLabel) {
+  if (!confirm(`Apagar definitivamente o registo de ${dataLabel}? Esta acção não pode ser desfeita.`)) return;
+  const r = await assApi({ acao: 'apagarRegistoManual', id });
+  if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
+  buscarRegistosEditor();
 }
 
 async function carregarLocaisCache() {
