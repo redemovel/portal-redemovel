@@ -972,6 +972,7 @@ function assActivar() { if (SESSION) return assIniciar(); }
 // ═══════════════════════════════════════
 let LOCAIS_CACHE = [];
 let COLABORADORES_CACHE = [];
+let FERIAS_CACHE = [];
 let TURNOS_CACHE = [];
 let HORARIOS_TIPO_CACHE = [];
 let MAPA_CACHE = null;
@@ -1127,8 +1128,9 @@ function renderEditorRegistos() {
   </tr></thead><tbody>${EDITOR_REGISTOS_CACHE.map(r => {
     const p1 = (r.pausa1InicioMin!=='' ) ? `${minParaHora(r.pausa1InicioMin)}–${r.pausa1FimMin!==''?minParaHora(r.pausa1FimMin):'…'}` : '—';
     const p2 = (r.pausa2InicioMin!=='' ) ? `${minParaHora(r.pausa2InicioMin)}–${r.pausa2FimMin!==''?minParaHora(r.pausa2FimMin):'…'}` : '—';
+    const badgeManual = r.criadoManualmente ? ' <span style="font-size:.68rem;color:#d97706;font-weight:700" title="Criado manualmente por correcção">🖊 manual</span>' : '';
     return `<tr>
-      <td style="font-weight:600">${assFormatarData(r.data)}</td>
+      <td style="font-weight:600">${assFormatarData(r.data)}${badgeManual}</td>
       <td>${r.entradaRealMin!==''?minParaHora(r.entradaRealMin):'—'}</td>
       <td>${r.saidaRealMin!==''?minParaHora(r.saidaRealMin):'—'}</td>
       <td style="font-size:.75rem;color:var(--text-muted)">${p1}</td>
@@ -1138,6 +1140,7 @@ function renderEditorRegistos() {
       <td style="white-space:nowrap">
         <button class="btn-sm teal" onclick="abrirEditarRegisto('${r.id}')">ed Editar</button>
         <button class="btn-sm danger" onclick="apagarRegistoEditor('${r.id}','${assFormatarData(r.data)}')">x</button>
+        <button class="btn-sm" onclick="abrirHistoricoRegisto('${r.id}')" title="Ver histórico de alterações">🕘</button>
       </td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -1154,6 +1157,7 @@ function abrirEditarRegisto(id) {
   document.getElementById('editor-p1-fim').value = r.pausa1FimMin!==''?minParaHoraInput(r.pausa1FimMin):'';
   document.getElementById('editor-p2-inicio').value = r.pausa2InicioMin!==''?minParaHoraInput(r.pausa2InicioMin):'';
   document.getElementById('editor-p2-fim').value = r.pausa2FimMin!==''?minParaHoraInput(r.pausa2FimMin):'';
+  document.getElementById('editor-motivo').value = '';
   document.getElementById('editor-registo-err').style.display = 'none';
   document.getElementById('modal-editar-registo').classList.add('open');
 }
@@ -1162,6 +1166,8 @@ async function guardarRegistoEditado() {
   const err = document.getElementById('editor-registo-err');
   err.style.display = 'none';
   const id = document.getElementById('editor-registo-id').value;
+  const motivo = document.getElementById('editor-motivo').value;
+  if (!motivo || !motivo.trim()) { showAlert(err, 'Motivo obrigatório.'); return; }
   const patch = {
     entradaRealMin: document.getElementById('editor-entrada').value ? horaParaMin(document.getElementById('editor-entrada').value) : '',
     saidaRealMin: document.getElementById('editor-saida').value ? horaParaMin(document.getElementById('editor-saida').value) : '',
@@ -1170,17 +1176,71 @@ async function guardarRegistoEditado() {
     pausa2InicioMin: document.getElementById('editor-p2-inicio').value ? horaParaMin(document.getElementById('editor-p2-inicio').value) : '',
     pausa2FimMin: document.getElementById('editor-p2-fim').value ? horaParaMin(document.getElementById('editor-p2-fim').value) : ''
   };
-  const r = await assApi({ acao: 'editarRegistoManual', id, patch });
+  const r = await assApi({ acao: 'editarRegistoManual', id, patch, motivo });
   if (!r.ok) { showAlert(err, r.erro); return; }
   closeModal('modal-editar-registo');
   buscarRegistosEditor();
 }
 
 async function apagarRegistoEditor(id, dataLabel) {
-  if (!confirm(`Apagar definitivamente o registo de ${dataLabel}? Esta acção não pode ser desfeita.`)) return;
-  const r = await assApi({ acao: 'apagarRegistoManual', id });
+  const motivo = prompt(`Motivo para apagar definitivamente o registo de ${dataLabel} (obrigatório):`);
+  if (!motivo || !motivo.trim()) return;
+  const r = await assApi({ acao: 'apagarRegistoManual', id, motivo });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
   buscarRegistosEditor();
+}
+
+// Criar registo manual — colaborador esqueceu-se de bater o ponto.
+function abrirCriarRegisto() {
+  if (!COLABORADORES_CACHE.length) carregarColaboradoresCache().then(()=>popularColaboradoresSelect('criar-colaborador')); else popularColaboradoresSelect('criar-colaborador');
+  if (!LOCAIS_CACHE.length) carregarLocaisCache().then(()=>popularSelectLocal('criar-local')); else popularSelectLocal('criar-local');
+  ['criar-data','criar-entrada','criar-saida','criar-p1-inicio','criar-p1-fim','criar-p2-inicio','criar-p2-fim','criar-motivo'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('criar-registo-err').style.display = 'none';
+  document.getElementById('modal-criar-registo').classList.add('open');
+}
+
+async function guardarRegistoCriado() {
+  const err = document.getElementById('criar-registo-err');
+  err.style.display = 'none';
+  const motivo = document.getElementById('criar-motivo').value;
+  const dados = {
+    username: document.getElementById('criar-colaborador').value,
+    localId: document.getElementById('criar-local').value,
+    data: document.getElementById('criar-data').value,
+    entradaRealMin: document.getElementById('criar-entrada').value ? horaParaMin(document.getElementById('criar-entrada').value) : '',
+    saidaRealMin: document.getElementById('criar-saida').value ? horaParaMin(document.getElementById('criar-saida').value) : '',
+    pausa1InicioMin: document.getElementById('criar-p1-inicio').value ? horaParaMin(document.getElementById('criar-p1-inicio').value) : '',
+    pausa1FimMin: document.getElementById('criar-p1-fim').value ? horaParaMin(document.getElementById('criar-p1-fim').value) : '',
+    pausa2InicioMin: document.getElementById('criar-p2-inicio').value ? horaParaMin(document.getElementById('criar-p2-inicio').value) : '',
+    pausa2FimMin: document.getElementById('criar-p2-fim').value ? horaParaMin(document.getElementById('criar-p2-fim').value) : '',
+    motivo
+  };
+  if (!dados.username || !dados.localId || !dados.data) { showAlert(err, 'Preencha colaborador, local e data.'); return; }
+  if (dados.entradaRealMin === '') { showAlert(err, 'Indique pelo menos a hora de entrada.'); return; }
+  if (!motivo || !motivo.trim()) { showAlert(err, 'Motivo obrigatório.'); return; }
+  const r = await assApi({ acao: 'criarRegistoManual', dados });
+  if (!r.ok) { showAlert(err, r.erro); return; }
+  closeModal('modal-criar-registo');
+  buscarRegistosEditor();
+}
+
+// Histórico de alterações a um registo (auditoria de correcções manuais).
+async function abrirHistoricoRegisto(id) {
+  const r = await assApi({ acao: 'historicoRegisto', registoId: id });
+  const container = document.getElementById('historico-registo-conteudo');
+  if (!r.ok) { container.innerHTML = `<div style="color:var(--danger)">${r.erro}</div>`; document.getElementById('modal-historico-registo').classList.add('open'); return; }
+  if (!r.historico.length) {
+    container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted)">Sem alterações manuais registadas para este registo.</div>';
+  } else {
+    const tipoLabel = { criacao_manual: '➕ Criado manualmente', edicao_manual: '✎ Editado', eliminacao_manual: '🗑 Apagado' };
+    container.innerHTML = r.historico.map(h => `
+      <div style="border-bottom:1px solid var(--border);padding:.6rem 0">
+        <div style="font-weight:600">${tipoLabel[h.tipo]||h.tipo} — ${h.alteradoEm}</div>
+        <div style="color:var(--text-muted)">por ${h.alteradoPor}</div>
+        <div style="margin-top:.3rem"><b>Motivo:</b> ${h.motivo||'—'}</div>
+      </div>`).join('');
+  }
+  document.getElementById('modal-historico-registo').classList.add('open');
 }
 
 async function carregarLocaisCache() {
@@ -1946,7 +2006,40 @@ async function carregarFerias() {
   const r=await assApi({acao:'listarFerias',filtros:{}}); if (!r.ok) return;
   const lista=document.getElementById('lista-ferias');
   if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem registos de férias.</div>'; return; }
-  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};   lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th><th></th></tr></thead><tbody>${r.ferias.map(f=>{const col=COLABORADORES_CACHE.find(c=>c.username===f.username),loc=LOCAIS_CACHE.find(l=>l.id===f.localId);const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;return `<tr><td style="font-weight:600">${col?.nome||f.username}</td><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td><td>${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button>`:'—'}</td></tr>`;}).join('')}</tbody></table>`;
+  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};   lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th><th></th></tr></thead><tbody>${r.ferias.map(f=>{const col=COLABORADORES_CACHE.find(c=>c.username===f.username),loc=LOCAIS_CACHE.find(l=>l.id===f.localId);const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;return `<tr><td style="font-weight:600">${col?.nome||f.username}</td><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button></td></tr>`;}).join('')}</tbody></table>`;
+  FERIAS_CACHE = r.ferias;
+}
+
+function abrirEditarFerias(id) {
+  const f = (FERIAS_CACHE||[]).find(x => x.id === id);
+  if (!f) return;
+  const col = COLABORADORES_CACHE.find(c => c.username === f.username);
+  document.getElementById('feredit-id').value = id;
+  document.getElementById('feredit-info').textContent = `${col?.nome||f.username}`;
+  if (!LOCAIS_CACHE.length) carregarLocaisCache().then(()=>{ popularSelectLocal('feredit-local'); document.getElementById('feredit-local').value = f.localId; }); else { popularSelectLocal('feredit-local'); document.getElementById('feredit-local').value = f.localId; }
+  document.getElementById('feredit-tipo').value = f.tipo || 'ferias';
+  document.getElementById('feredit-inicio').value = String(f.dataInicio).slice(0,10);
+  document.getElementById('feredit-fim').value = String(f.dataFim).slice(0,10);
+  document.getElementById('feredit-aviso').textContent = f.estado !== 'pendente' ? '⚠ Esta ausência já foi ' + f.estado + '. Ao guardar, volta a ficar pendente para nova aprovação.' : '';
+  document.getElementById('mferedit-err').style.display = 'none';
+  document.getElementById('modal-editar-ferias').classList.add('open');
+}
+
+async function guardarFeriasEditada() {
+  const err = document.getElementById('mferedit-err');
+  err.style.display = 'none';
+  const id = document.getElementById('feredit-id').value;
+  const patch = {
+    localId: document.getElementById('feredit-local').value,
+    tipo: document.getElementById('feredit-tipo').value,
+    dataInicio: document.getElementById('feredit-inicio').value,
+    dataFim: document.getElementById('feredit-fim').value
+  };
+  if (!patch.localId || !patch.dataInicio || !patch.dataFim) { showAlert(err, 'Preencha todos os campos.'); return; }
+  const r = await assApi({ acao: 'editarFerias', id, patch });
+  if (!r.ok) { showAlert(err, r.erro); return; }
+  closeModal('modal-editar-ferias');
+  carregarFerias();
 }
 
 function abrirModalFerias() {
