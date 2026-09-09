@@ -286,7 +286,12 @@ async function atualizarEstadoHoje() {
   const emAberto = REGISTO_HOJE && REGISTO_HOJE.entradaRealMin !== '' && REGISTO_HOJE.saidaRealMin === '';
   const pausaAberta = emAberto && ['1','2','3'].some(n => REGISTO_HOJE[`pausa${n}InicioMin`] !== '' && REGISTO_HOJE[`pausa${n}FimMin`] === '');
 
-  document.getElementById('btn-entrada').disabled = !semRegisto && !(REGISTO_HOJE && REGISTO_HOJE.saidaRealMin !== '');
+  // A Entrada só pode ficar ativa se NÃO houver registo nenhum hoje — um dia
+  // já completo (entrada+saída) fica sempre bloqueado, tal como no portal
+  // desktop (assAtualizarUI). Corrigido 2026-09-09: a versão anterior lia
+  // "!(saidaRealMin !== '')" invertido, o que reactivava a Entrada logo
+  // depois de um dia completo e permitiu um 2º registo indevido no mesmo dia.
+  document.getElementById('btn-entrada').disabled = !semRegisto;
   document.getElementById('btn-saida').disabled = !emAberto || pausaAberta;
   document.getElementById('btn-pausa').disabled = !emAberto || pausaAberta;
   document.getElementById('btn-retorno').disabled = !pausaAberta;
