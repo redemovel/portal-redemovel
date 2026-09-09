@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<script>
+// Robustez extra de layout: medimos a largura real por JS e forçamos um
+// transform:scale() no body, desenhado sempre para 360px de largura lógica,
+// em vez de confiar só na meta viewport. Não é estritamente necessário fora
+// da Apps Script (esta página já não é servida por lá), mas mantém-se por
+// segurança — já testado e sem custo.
+(function(){
+  function ajustar(){
+    var w=window.innerWidth||document.documentElement.clientWidth||360;
+    var h=window.innerHeight||document.documentElement.clientHeight||640;
+    var escala=w/360;
+    var body=document.body;
+    if(body){
+      body.style.transform='scale('+escala+')';
+      body.style.transformOrigin='top left';
+      body.style.width=(100/escala)+'%';
+      body.style.height=(h/escala)+'px';
+      body.style.minHeight=(h/escala)+'px';
+      body.style.maxHeight=(h/escala)+'px';
+      body.style.overflowY='hidden';
+    }
+  }
+  if(document.body){ajustar();}
+  else{window.addEventListener('DOMContentLoaded',ajustar);}
+  window.addEventListener('resize',ajustar);
+  window.addEventListener('orientationchange',function(){setTimeout(ajustar,300);});
+})();
+</script>
+<title>Registo Móvel · Redemóvel</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #007878; --teal-dark: #005f5f; --white: #ffffff; --off-white: #f5f9f9;
+    --gray-light: #e8f0f0; --text: #1a2e2e; --text-muted: #5a7878;
+    --success: #00a878; --warning: #f59e0b; --danger: #E8000D;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body {
+    font-family: 'Outfit', Arial, sans-serif; background: var(--teal); color: var(--text);
+    min-height: 100vh; overflow-x: hidden;
+  }
+  .wrap { width: 100%; max-width: 560px; margin: 0 auto; min-height: 100vh; background: var(--off-white); display: flex; flex-direction: column; }
+  .topo {
+    background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: var(--white);
+    padding: 1.1rem 1.25rem; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topo-titulo { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.01em; }
+  .topo-sub { font-size: 0.72rem; opacity: 0.85; margin-top: 2px; }
+  .btn-sair { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: var(--white); border-radius: 8px; padding: 0.4rem 0.8rem; font-family: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+  .conteudo { flex: 1; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+  .cartao { background: var(--white); border-radius: 14px; padding: 1.25rem; box-shadow: 0 2px 10px rgba(0,40,40,0.06); }
+  .form-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem; }
+  .form-input {
+    width: 100%; padding: 0.9rem 1rem; border: 2px solid var(--gray-light); border-radius: 10px;
+    font-family: inherit; font-size: 1rem; color: var(--text); background: var(--off-white); outline: none; margin-bottom: 0.9rem;
+  }
+  .form-input:focus { border-color: var(--teal); }
+  .btn {
+    width: 100%; padding: 1rem; border: none; border-radius: 12px; font-family: inherit;
+    font-size: 0.98rem; font-weight: 700; cursor: pointer; color: var(--white); transition: opacity .15s;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-entrada { background: var(--success); }
+  .btn-pausa { background: var(--warning); }
+  .btn-retorno { background: var(--teal); }
+  .btn-saida { background: var(--danger); }
+  .btn-secundario { background: var(--gray-light); color: var(--text-muted); }
+  .grelha-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .alerta { padding: 0.85rem 1rem; border-radius: 10px; font-size: 0.85rem; margin-bottom: 0.9rem; display: none; }
+  .alerta-erro { background: #fdecea; color: #b3000a; }
+  .alerta-ok { background: #e6f7f0; color: #006644; }
+  .alerta-aviso { background: #fff4e0; color: #92610a; }
+  .status-linha { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem 0; }
+  .spinner { width: 16px; height: 16px; border: 2.5px solid var(--gray-light); border-top-color: var(--teal); border-radius: 50%; animation: girar 0.8s linear infinite; flex-shrink: 0; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  .relogio { text-align: center; font-size: 2.2rem; font-weight: 800; color: var(--teal); letter-spacing: -0.02em; }
+  .relogio-data { text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: -0.3rem; margin-bottom: 0.5rem; text-transform: capitalize; }
+
+  /* ═══ Câmara (selfie ao vivo, com máscara oval) ═══ */
+  .camara-overlay {
+    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1000;
+    background: #0b1f1f; display: flex; flex-direction: column;
+  }
+  .camara-topo { padding: 1.1rem 1.25rem 0.6rem; color: var(--white); text-align: center; }
+  .camara-titulo { font-weight: 800; font-size: 1.05rem; }
+  .camara-sub { font-size: 0.78rem; opacity: 0.8; margin-top: 0.3rem; line-height: 1.4; }
+  .camara-video-wrap { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .camara-video-wrap video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .camara-moldura {
+    position: absolute; width: 62%; aspect-ratio: 3/4; border: 3px dashed rgba(255,255,255,0.6);
+    border-radius: 50% / 45%; pointer-events: none;
+  }
+  .camara-preview { width: 100%; height: 100%; object-fit: contain; }
+  .camara-acoes { padding: 1rem 1.25rem 1.4rem; display: flex; gap: 0.6rem; }
+  .camara-acoes .btn { margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topo">
+    <div>
+      <div class="topo-titulo">📍 Registo Móvel</div>
+      <div class="topo-sub">Redemóvel · comerciais e AVAC</div>
+    </div>
+    <button class="btn-sair" id="btn-sair" onclick="sair()" hidden>Sair</button>
+  </div>
+
+  <div class="conteudo">
+
+    <!-- ═══ LOGIN ═══ -->
+    <div class="cartao" id="tela-login">
+      <div class="alerta alerta-erro" id="login-err"></div>
+      <label class="form-label">Utilizador</label>
+      <input type="text" class="form-input" id="inp-user" autocomplete="username" autocapitalize="none">
+      <label class="form-label">Password</label>
+      <input type="password" class="form-input" id="inp-pass" autocomplete="current-password">
+      <button class="btn btn-entrada" id="btn-entrar" onclick="entrar()">Entrar</button>
+    </div>
+
+    <!-- ═══ PRINCIPAL (após login) ═══ -->
+    <div id="tela-principal" hidden>
+      <div class="cartao">
+        <div class="relogio" id="relogio">--:--</div>
+        <div class="relogio-data" id="relogio-data">—</div>
+        <div style="text-align:center;font-weight:700;color:var(--text)" id="nome-utilizador">—</div>
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.9rem" id="estado-hoje">A verificar estado de hoje…</div>
+
+        <div class="alerta alerta-erro" id="acao-err"></div>
+        <div class="alerta alerta-ok" id="acao-ok"></div>
+        <div class="alerta alerta-aviso" id="acao-aviso"></div>
+
+        <div id="status-processo"></div>
+
+        <div class="grelha-acoes">
+          <button class="btn btn-entrada" id="btn-entrada" onclick="registarAcao('entrada')" disabled>▶ Entrada</button>
+          <button class="btn btn-saida" id="btn-saida" onclick="registarAcao('saida')" disabled>⏹ Saída</button>
+          <button class="btn btn-pausa" id="btn-pausa" onclick="registarAcao('pausa')" disabled>☕ Pausa</button>
+          <button class="btn btn-retorno" id="btn-retorno" onclick="registarAcao('retorno')" disabled>▶ Retorno</button>
+        </div>
+      </div>
+
+      <div class="cartao" style="font-size:0.78rem;color:var(--text-muted);line-height:1.5">
+        Cada registo pede a tua localização e uma foto. Se estiveres fora das zonas habituais, o registo é feito
+        na mesma mas fica pendente de aprovação do coordenador.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ Câmara ═══
+     Tenta primeiro a câmara ao vivo (getUserMedia, frontal, com máscara
+     oval) — esta página já não é servida pela Apps Script, por isso deixa
+     de estar sujeita ao bloqueio de câmara que a Google impõe às web apps
+     da Apps Script (confirmado em teste real). Se, por alguma razão
+     (permissão negada, sem câmara, browser antigo), a câmara ao vivo
+     falhar, recorre automaticamente à câmara nativa do telemóvel — com o
+     mesmo ecrã de confirmação (repetir/usar) em ambos os casos. -->
+<div class="camara-overlay" id="tela-camara" hidden>
+  <div class="camara-topo">
+    <div class="camara-titulo">📷 Confirma o registo com uma selfie</div>
+    <div class="camara-sub" id="camara-sub-texto">Enquadra o rosto na moldura e toca em "Tirar foto".</div>
+  </div>
+  <div class="camara-video-wrap">
+    <video id="video-camara" autoplay playsinline muted hidden></video>
+    <div class="camara-moldura" id="camara-moldura" hidden></div>
+    <img class="camara-preview" id="preview-camara" alt="Pré-visualização da foto" hidden>
+  </div>
+  <div class="camara-acoes">
+    <button class="btn btn-secundario" id="btn-cancelar-camara" onclick="cancelarCamara()">Cancelar</button>
+    <button class="btn btn-entrada" id="btn-tirar-foto" onclick="tirarFoto()" hidden>📸 Tirar foto</button>
+    <button class="btn btn-secundario" id="btn-repetir-foto" onclick="repetirFoto()" hidden>↺ Repetir</button>
+    <button class="btn btn-entrada" id="btn-usar-foto" onclick="usarFoto()" hidden>✓ Usar esta foto</button>
+  </div>
+</div>
+
+<!-- input de câmara escondido — recurso nativo (fallback), acionado via JS.
+     Propositadamente NÃO usa o atributo "hidden": a regra global
+     [hidden]{display:none!important} faria com que alguns browsers Android
+     recusem abrir a câmara num input com display:none via .click(). Em vez
+     disso fica visualmente escondido mas continua "presente" no layout. -->
+<input type="file" accept="image/*" capture="user" id="inp-foto"
+  style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">
+
+<script>
+// Fixo — o endereço da Apps Script que continua a servir de backend
+// (Firestore, balizas, fotos no Drive). Esta página deixa de ser servida
+// pela Apps Script, mas continua a falar com ela via fetch, exatamente
+// como já fazia antes.
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
+let SESSAO = null;
+let REGISTO_HOJE = null;
+
+// ═══ Utilitários ═══
+function mostrarAlerta(id, msg) {
+  const el = document.getElementById(id);
+  ['login-err','acao-err','acao-ok','acao-aviso'].forEach(i => { if (i !== id) document.getElementById(i).style.display = 'none'; });
+  el.textContent = msg; el.style.display = 'block';
+}
+function limparAlertas() {
+  ['login-err','acao-err','acao-ok','acao-aviso'].forEach(i => document.getElementById(i).style.display = 'none');
+}
+function statusProcesso(msg) {
+  const el = document.getElementById('status-processo');
+  el.innerHTML = msg ? `<div class="status-linha"><div class="spinner"></div>${msg}</div>` : '';
+}
+
+// Envolve o fetch com 1 repetição automática — a mesma lógica (e a mesma
+// razão: limite de execuções simultâneas do Apps Script) que o portal
+// desktop já usa em fetchComRetry (portal-redemovel.js). Chamada
+// cross-origin (este site → Apps Script) — já era assim antes (a página
+// era servida num domínio googleusercontent.com diferente do script.google.com
+// do endpoint) e já funcionava, por isso não muda nada aqui.
+async function chamarApi(payload) {
+  const corpo = { ...payload, username: SESSAO ? SESSAO.username : payload.username, password: SESSAO ? SESSAO.password : payload.password };
+  for (let i = 0; i < 2; i++) {
+    try {
+      const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(corpo) });
+      if (!res.ok) throw 0;
+      const texto = await res.text();
+      return JSON.parse(texto);
+    } catch (_) {
+      if (i === 0) await new Promise(r => setTimeout(r, 800));
+    }
+  }
+  return { ok: false, erro: 'Sem resposta do servidor. Verifica a ligação e tenta novamente.' };
+}
+
+// ═══ Relógio ═══
+function iniciarRelogio() {
+  const tick = () => {
+    const agora = new Date();
+    document.getElementById('relogio').textContent = agora.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('relogio-data').textContent = agora.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+  tick(); setInterval(tick, 15000);
+}
+
+// ═══ Login ═══
+async function entrar() {
+  limparAlertas();
+  const username = document.getElementById('inp-user').value.trim().toLowerCase();
+  const password = document.getElementById('inp-pass').value;
+  if (!username || !password) { mostrarAlerta('login-err', 'Preenche utilizador e password.'); return; }
+  const btn = document.getElementById('btn-entrar');
+  btn.disabled = true; btn.textContent = 'A entrar…';
+  const r = await chamarApi({ acao: 'autenticarMovel', username, password });
+  btn.disabled = false; btn.textContent = 'Entrar';
+  if (!r.ok) { mostrarAlerta('login-err', r.erro || 'Credenciais inválidas.'); return; }
+  SESSAO = { username, password, nome: r.nome, role: r.role };
+  sessionStorage.setItem('rmSessaoMovel', JSON.stringify(SESSAO));
+  await entrarNoPainel();
+}
+
+function sair() {
+  SESSAO = null;
+  sessionStorage.removeItem('rmSessaoMovel');
+  document.getElementById('tela-principal').hidden = true;
+  document.getElementById('tela-login').hidden = false;
+  document.getElementById('btn-sair').hidden = true;
+  document.getElementById('inp-pass').value = '';
+}
+
+async function entrarNoPainel() {
+  document.getElementById('tela-login').hidden = true;
+  document.getElementById('tela-principal').hidden = false;
+  document.getElementById('btn-sair').hidden = false;
+  document.getElementById('nome-utilizador').textContent = SESSAO.nome;
+  await atualizarEstadoHoje();
+}
+
+async function atualizarEstadoHoje() {
+  const r = await chamarApi({ acao: 'meuRegistoHoje' });
+  REGISTO_HOJE = (r.ok && r.registo) ? r.registo : null;
+  const semRegisto = !REGISTO_HOJE;
+  const emAberto = REGISTO_HOJE && REGISTO_HOJE.entradaRealMin !== '' && REGISTO_HOJE.saidaRealMin === '';
+  const pausaAberta = emAberto && ['1','2','3'].some(n => REGISTO_HOJE[`pausa${n}InicioMin`] !== '' && REGISTO_HOJE[`pausa${n}FimMin`] === '');
+
+  document.getElementById('btn-entrada').disabled = !semRegisto && !(REGISTO_HOJE && REGISTO_HOJE.saidaRealMin !== '');
+  document.getElementById('btn-saida').disabled = !emAberto || pausaAberta;
+  document.getElementById('btn-pausa').disabled = !emAberto || pausaAberta;
+  document.getElementById('btn-retorno').disabled = !pausaAberta;
+
+  const estadoEl = document.getElementById('estado-hoje');
+  if (pausaAberta) estadoEl.textContent = '☕ Em pausa';
+  else if (emAberto) estadoEl.textContent = `Entrada às ${minParaHora(REGISTO_HOJE.entradaRealMin)} — a trabalhar`;
+  else if (REGISTO_HOJE && REGISTO_HOJE.saidaRealMin !== '') estadoEl.textContent = `Dia completo — saída às ${minParaHora(REGISTO_HOJE.saidaRealMin)}`;
+  else estadoEl.textContent = 'Sem registo hoje ainda.';
+}
+function minParaHora(min) { min = Number(min); const h = Math.floor(min/60), m = min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+// ═══ Localização ═══
+function obterLocalizacao() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Este telemóvel/browser não suporta localização.')); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => {
+        const msgs = {
+          1: 'Localização recusada. Autoriza o acesso à localização nas definições do browser e tenta novamente.',
+          2: 'Não foi possível obter a localização — verifica se o GPS/localização do telemóvel está activo.',
+          3: 'A obter localização demorou demasiado tempo. Tenta novamente num local com melhor sinal.'
+        };
+        reject(new Error(msgs[err.code] || 'Não foi possível obter a localização.'));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+// ═══ Foto (câmara) ═══
+// Fluxo: tenta a câmara ao vivo (getUserMedia, frontal, moldura oval);
+// qualquer falha (permissão negada, sem câmara, browser sem suporte) cai
+// para a câmara nativa do telemóvel. Em ambos os casos termina no mesmo
+// ecrã de confirmação (repetir/usar) antes de continuar o registo.
+let CAMARA_STREAM = null;
+let CAMARA_FOTO_ATUAL = '';
+let CAMARA_MODO = 'video'; // 'video' (stream ao vivo) ou 'nativa' (input capture)
+
+function obterFoto() {
+  return new Promise((resolve, reject) => {
+    window._camaraResolve = resolve;
+    window._camaraReject = reject;
+    iniciarCamara();
+  });
+}
+
+function iniciarCamara() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    CAMARA_MODO = 'nativa';
+    capturarFotoNativa();
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+    .then(stream => {
+      CAMARA_MODO = 'video';
+      CAMARA_STREAM = stream;
+      mostrarVideoCamara(stream);
+    })
+    .catch(() => {
+      CAMARA_MODO = 'nativa';
+      capturarFotoNativa();
+    });
+}
+
+function mostrarVideoCamara(stream) {
+  const video = document.getElementById('video-camara');
+  video.srcObject = stream;
+  video.hidden = false;
+  document.getElementById('camara-moldura').hidden = false;
+  document.getElementById('preview-camara').hidden = true;
+  document.getElementById('btn-tirar-foto').hidden = false;
+  document.getElementById('btn-repetir-foto').hidden = true;
+  document.getElementById('btn-usar-foto').hidden = true;
+  document.getElementById('camara-sub-texto').textContent = 'Enquadra o rosto na moldura e toca em "Tirar foto".';
+  document.getElementById('tela-camara').hidden = false;
+}
+
+function tirarFoto() {
+  const video = document.getElementById('video-camara');
+  if (!video.videoWidth) return; // ainda a carregar o stream
+  const LARGURA_MAX = 800;
+  const escala = Math.min(1, LARGURA_MAX / video.videoWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(video.videoWidth * escala);
+  canvas.height = Math.round(video.videoHeight * escala);
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  mostrarPreview(canvas.toDataURL('image/jpeg', 0.72));
+}
+
+function capturarFotoNativa() {
+  document.getElementById('tela-camara').hidden = true; // deixa a app de câmara do telemóvel assumir o ecrã
+  const input = document.getElementById('inp-foto');
+  input.value = '';
+  input.onchange = () => {
+    const ficheiro = input.files && input.files[0];
+    if (!ficheiro) { window._camaraReject(new Error('Nenhuma foto capturada.')); return; }
+    comprimirFoto(ficheiro).then(mostrarPreview).catch(window._camaraReject);
+  };
+  input.click();
+}
+
+function comprimirFoto(ficheiro) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onerror = () => reject(new Error('Não foi possível ler a foto.'));
+    leitor.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não foi possível processar a foto.'));
+      img.onload = () => {
+        const LARGURA_MAX = 800;
+        const escala = Math.min(1, LARGURA_MAX / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = leitor.result;
+    };
+    leitor.readAsDataURL(ficheiro);
+  });
+}
+
+function mostrarPreview(dataUrl) {
+  CAMARA_FOTO_ATUAL = dataUrl;
+  document.getElementById('video-camara').hidden = true;
+  document.getElementById('camara-moldura').hidden = true;
+  const preview = document.getElementById('preview-camara');
+  preview.src = dataUrl;
+  preview.hidden = false;
+  document.getElementById('btn-tirar-foto').hidden = true;
+  document.getElementById('btn-repetir-foto').hidden = false;
+  document.getElementById('btn-usar-foto').hidden = false;
+  document.getElementById('camara-sub-texto').textContent = 'Confirma que a foto ficou bem, ou repete.';
+  document.getElementById('tela-camara').hidden = false;
+}
+
+function repetirFoto() {
+  if (CAMARA_MODO === 'video' && CAMARA_STREAM) {
+    mostrarVideoCamara(CAMARA_STREAM); // stream ainda ativo — só voltar ao ecrã de captura
+  } else {
+    capturarFotoNativa();
+  }
+}
+
+function pararCamara() {
+  if (CAMARA_STREAM) { CAMARA_STREAM.getTracks().forEach(t => t.stop()); CAMARA_STREAM = null; }
+  document.getElementById('tela-camara').hidden = true;
+}
+
+function usarFoto() {
+  const resolve = window._camaraResolve;
+  pararCamara();
+  resolve(CAMARA_FOTO_ATUAL);
+}
+
+function cancelarCamara() {
+  const reject = window._camaraReject;
+  pararCamara();
+  reject(new Error('Captura de foto cancelada.'));
+}
+
+// ═══ Acções ═══
+async function registarAcao(tipo) {
+  limparAlertas();
+  const botoes = ['btn-entrada','btn-saida','btn-pausa','btn-retorno'];
+  botoes.forEach(id => document.getElementById(id).disabled = true);
+
+  try {
+    // A câmara tem de abrir ENQUANTO o gesto de toque do utilizador ainda
+    // está "fresco" — se pedirmos primeiro a localização (que envolve um
+    // diálogo do Android, por vezes lento a responder, sobretudo com a
+    // opção de localização exacta), o browser deixa de considerar o
+    // pedido de câmara seguinte como iniciado pelo utilizador e pode
+    // bloqueá-lo em silêncio. Por isso a câmara abre-se sempre primeiro.
+    let foto = '';
+    if (tipo === 'entrada' || tipo === 'saida') {
+      statusProcesso('A abrir câmara…');
+      foto = await obterFoto();
+    }
+
+    statusProcesso('A obter localização…');
+    const loc = await obterLocalizacao();
+    statusProcesso('A enviar registo…');
+
+    const dados = { localId: '', lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy, foto };
+    let r;
+    if (tipo === 'entrada') r = await chamarApi({ acao: 'registarEntradaMovel', dados });
+    else if (tipo === 'saida') r = await chamarApi({ acao: 'registarSaidaMovel', dados });
+    else if (tipo === 'pausa' || tipo === 'retorno') {
+      const reg = REGISTO_HOJE; let num = 1;
+      if (tipo === 'pausa') {
+        if (reg && reg.pausa1InicioMin !== '') num = 2;
+        if (reg && reg.pausa2InicioMin !== '') num = 3;
+        r = await chamarApi({ acao: 'registarPausaMovel', dados: { ...dados, numeroPausa: num, tipo: 'inicio' } });
+      } else {
+        if (reg && reg.pausa1InicioMin !== '' && reg.pausa1FimMin === '') num = 1;
+        else if (reg && reg.pausa2InicioMin !== '' && reg.pausa2FimMin === '') num = 2;
+        else if (reg && reg.pausa3InicioMin !== '' && reg.pausa3FimMin === '') num = 3;
+        r = await chamarApi({ acao: 'registarPausaMovel', dados: { ...dados, numeroPausa: num, tipo: 'fim' } });
+      }
+    }
+
+    statusProcesso('');
+    if (!r.ok) { mostrarAlerta('acao-err', r.erro || 'Erro ao registar.'); return; }
+
+    if (r.dentroBaliza === false) {
+      mostrarAlerta('acao-aviso', `Registado — mas fora das zonas habituais (${r.balizaNome ? 'mais próxima: ' + r.balizaNome + ', ' : ''}${r.distanciaMetros != null ? r.distanciaMetros + 'm' : 'distância desconhecida'}). Enviado para aprovação do coordenador.`);
+    } else {
+      mostrarAlerta('acao-ok', r.aviso || 'Registado com sucesso.');
+    }
+  } catch (err) {
+    statusProcesso('');
+    mostrarAlerta('acao-err', err.message || 'Erro inesperado.');
+  } finally {
+    await atualizarEstadoHoje();
+  }
+}
+
+// ═══ Arranque ═══
+(function iniciar() {
+  iniciarRelogio();
+  try {
+    const guardada = sessionStorage.getItem('rmSessaoMovel');
+    if (guardada) {
+      SESSAO = JSON.parse(guardada);
+      entrarNoPainel();
+    }
+  } catch (_) {}
+  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+})();
+</script>
+</body>
+</html>
