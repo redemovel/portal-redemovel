@@ -995,6 +995,7 @@ function showGestaoTab(id, btn) {
   document.getElementById('gpanel-'+id).classList.add('active');
   if (btn) btn.classList.add('active');
   if (id==='turnos') carregarTurnos();
+  if (id==='balizas') carregarBalizas();
   if (id==='horarios') {
     const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); carregarAtribuicoes(); carregarExcecoes(); };
     if (!LOCAIS_CACHE.length) carregarLocaisCache().then(carregarHor);
@@ -1318,6 +1319,59 @@ async function guardarTurno() {
 async function apagarTurno(id) {
   if (!confirm('Desativar este turno tipo?')) return;
   await assApi({acao:'apagarTurnoTipo',id}); carregarTurnos();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BALIZAS DE LOCALIZAÇÃO (registo por telemóvel — comerciais/AVAC) — 2026-09-09
+// ═══════════════════════════════════════════════════════════════════════════
+let BALIZAS_CACHE = [];
+
+async function carregarBalizas() {
+  const r = await assApi({acao:'listarBalizas'}); if (!r.ok) return;
+  BALIZAS_CACHE = r.balizas;
+  const lista = document.getElementById('lista-balizas');
+  if (!r.balizas.length) { lista.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem balizas criadas — o registo por telemóvel fica sempre pendente de aprovação até criares pelo menos uma.</div>'; return; }
+  lista.innerHTML = `<table class="tbl"><thead><tr><th>Nome</th><th>Latitude</th><th>Longitude</th><th>Raio</th><th></th></tr></thead><tbody>${r.balizas.map(b=>`<tr><td style="font-weight:700">${b.nome}</td><td style="font-family:monospace">${b.lat}</td><td style="font-family:monospace">${b.lng}</td><td>${b.raioMetros} m</td><td><button class="btn-sm teal" onclick="editarBaliza('${b.id}')">✎</button> <button class="btn-sm danger" onclick="apagarBaliza('${b.id}')">✕</button></td></tr>`).join('')}</tbody></table>`;
+}
+
+function abrirModalBaliza() {
+  document.getElementById('modal-baliza-titulo').textContent = 'Nova Baliza';
+  document.getElementById('baliza-id').value = '';
+  ['baliza-nome','baliza-lat','baliza-lng'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('baliza-raio').value = 150;
+  document.getElementById('baliza-err').style.display = 'none';
+  document.getElementById('modal-baliza').classList.add('open');
+}
+
+function editarBaliza(id) {
+  const b = BALIZAS_CACHE.find(x=>x.id===id); if (!b) return;
+  document.getElementById('modal-baliza-titulo').textContent = 'Editar Baliza';
+  document.getElementById('baliza-id').value = id;
+  document.getElementById('baliza-nome').value = b.nome;
+  document.getElementById('baliza-lat').value = b.lat;
+  document.getElementById('baliza-lng').value = b.lng;
+  document.getElementById('baliza-raio').value = b.raioMetros;
+  document.getElementById('baliza-err').style.display = 'none';
+  document.getElementById('modal-baliza').classList.add('open');
+}
+
+async function guardarBaliza() {
+  const err = document.getElementById('baliza-err'); err.style.display = 'none';
+  const id = document.getElementById('baliza-id').value;
+  const lat = parseFloat(document.getElementById('baliza-lat').value);
+  const lng = parseFloat(document.getElementById('baliza-lng').value);
+  const raioMetros = parseInt(document.getElementById('baliza-raio').value, 10) || 150;
+  const nome = document.getElementById('baliza-nome').value.trim();
+  if (!nome || !isFinite(lat) || !isFinite(lng)) { err.textContent = 'Preenche nome, latitude e longitude.'; err.style.display = 'block'; return; }
+  const baliza = {nome, lat, lng, raioMetros};
+  const r = id ? await assApi({acao:'editarBaliza',id,baliza}) : await assApi({acao:'criarBaliza',baliza});
+  if (!r.ok) { err.textContent = r.erro; err.style.display = 'block'; return; }
+  closeModal('modal-baliza'); carregarBalizas();
+}
+
+async function apagarBaliza(id) {
+  if (!confirm('Desativar esta baliza?')) return;
+  await assApi({acao:'apagarBaliza',id}); carregarBalizas();
 }
 
 // ═══════════════════════════════════════
