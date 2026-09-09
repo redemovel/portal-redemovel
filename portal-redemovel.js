@@ -1241,6 +1241,27 @@ async function abrirHistoricoRegisto(id) {
         <div style="margin-top:.3rem"><b>Motivo:</b> ${h.motivo||'—'}</div>
       </div>`).join('');
   }
+  // Eventos do registo móvel (foto+GPS) deste registo, se algum evento tiver
+  // sido feito por telemóvel (entrada/saída/pausa) — pedido de Ricardo,
+  // 2026-09-09, para poder ver no mapa onde cada evento foi feito.
+  const eventosMovel = r.eventosMovel || [];
+  const tipoEventoLabel = { entrada: '▶ Entrada', saida: '⏹ Saída', pausa1_inicio: '☕ Pausa 1 (início)', pausa1_fim: '▶ Pausa 1 (retorno)', pausa2_inicio: '☕ Pausa 2 (início)', pausa2_fim: '▶ Pausa 2 (retorno)', pausa3_inicio: '☕ Pausa 3 (início)', pausa3_fim: '▶ Pausa 3 (retorno)' };
+  const blocoMovel = document.getElementById('historico-registo-movel');
+  if (blocoMovel) {
+    if (!eventosMovel.length) {
+      blocoMovel.innerHTML = '';
+    } else {
+      blocoMovel.innerHTML = `<div style="font-weight:600;margin:.8rem 0 .4rem">📱 Registo móvel (foto + localização)</div>` + eventosMovel.map(e => `
+        <div style="border-bottom:1px solid var(--border);padding:.6rem 0">
+          <div style="font-weight:600">${tipoEventoLabel[e.tipoEvento]||e.tipoEvento} — ${e.criadoEm}</div>
+          <div style="color:${e.dentroBaliza==='TRUE'?'var(--success)':'#d97706'}">${e.dentroBaliza==='TRUE'?`✓ Dentro da baliza${e.balizaNome?' ('+e.balizaNome+')':''}`:`⚠ Fora das zonas habituais${e.balizaNome?' — mais próxima: '+e.balizaNome:''}${e.distanciaMetros!==''?' ('+e.distanciaMetros+'m)':''}`}</div>
+          <div style="margin-top:.3rem;display:flex;gap:.75rem;font-size:.85rem">
+            ${(e.lat!==''&&e.lng!=='')?`<a href="https://www.google.com/maps?q=${e.lat},${e.lng}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>`:''}
+            ${e.fotoUrl?`<a href="${e.fotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
+          </div>
+        </div>`).join('');
+    }
+  }
   document.getElementById('modal-historico-registo').classList.add('open');
 }
 
@@ -2129,7 +2150,16 @@ async function carregarAprovacoes() {
   APROVACOES_CACHE = r.aprovacoes;
   const lista=document.getElementById('lista-aprovacoes');
   if (!r.aprovacoes.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem aprovações para mostrar.</div>'; return; }
-  lista.innerHTML=r.aprovacoes.map(a=>{const col=COLABORADORES_CACHE.find(c=>c.username===a.username),loc=LOCAIS_CACHE.find(l=>l.id===a.localId);const tipoLabel={entrada_fora_janela:'⏰ Entrada fora de janela',saida_fora_janela:'⏰ Saída fora de janela',entrada_local_diferente:'📍 Entrada em local diferente',pedido_hora_extra:'🕐 Pedido de hora extra',pedido_entrada_antecipada:'🕐 Pedido de entrada antecipada'}[a.tipo]||a.tipo;return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
+  lista.innerHTML=r.aprovacoes.map(a=>{const col=COLABORADORES_CACHE.find(c=>c.username===a.username),loc=LOCAIS_CACHE.find(l=>l.id===a.localId);const tipoLabel={entrada_fora_janela:'⏰ Entrada fora de janela',saida_fora_janela:'⏰ Saída fora de janela',entrada_local_diferente:'📍 Entrada em local diferente',pedido_hora_extra:'🕐 Pedido de hora extra',pedido_entrada_antecipada:'🕐 Pedido de entrada antecipada'}[a.tipo]||a.tipo;
+    // Registo móvel (foto+GPS) fora de baliza: mostra link para o mapa e para a
+    // foto tirada no momento, se existirem (ver fsListarAprovacoes) — para o
+    // coordenador poder confirmar visualmente antes de decidir.
+    const linksMovel = (a.movelLat != null && a.movelLng != null)
+      ? `<div style="margin-top:.4rem;display:flex;gap:.75rem;font-size:.78rem">
+           <a href="https://www.google.com/maps?q=${a.movelLat},${a.movelLng}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>
+           ${a.movelFotoUrl?`<a href="${a.movelFotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
+         </div>` : '';
+    return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
 }
 
 async function carregarAprovacoesBadge() {
