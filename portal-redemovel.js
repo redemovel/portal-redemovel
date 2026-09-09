@@ -2382,11 +2382,15 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
 
   // ── SECÇÃO 1: Ficha de Turnos ──
   const fichaLinhas = turnosDetalhados.length ? turnosDetalhados.map(t => {
-    const dur = durMin(t.inicioMin||0, t.fimMin||0);
+    const durBruta = durMin(t.inicioMin||0, t.fimMin||0);
+    const durPausa1 = (t.pausa1InicioMin!=='' && t.pausa1FimMin!=='') ? durMin(t.pausa1InicioMin,t.pausa1FimMin) : 0;
+    const durPausa2 = (t.pausa2InicioMin!=='' && t.pausa2FimMin!=='') ? durMin(t.pausa2InicioMin,t.pausa2FimMin) : 0;
+    const durPausa3 = (t.pausa3InicioMin!=='' && t.pausa3FimMin!=='') ? durMin(t.pausa3InicioMin,t.pausa3FimMin) : 0;
+    const dur = Math.max(0, durBruta - durPausa1 - durPausa2 - durPausa3);
     const pausas = [
-      (t.pausa1Label && t.pausa1InicioMin!=='' && t.pausa1FimMin!=='') ? `${t.pausa1Label}: ${minParaHora(t.pausa1InicioMin)}–${minParaHora(t.pausa1FimMin)} (${hm(durMin(t.pausa1InicioMin,t.pausa1FimMin))})` : null,
-      (t.pausa2Label && t.pausa2InicioMin!=='' && t.pausa2FimMin!=='') ? `${t.pausa2Label}: ${minParaHora(t.pausa2InicioMin)}–${minParaHora(t.pausa2FimMin)} (${hm(durMin(t.pausa2InicioMin,t.pausa2FimMin))})` : null,
-      (t.pausa3Label && t.pausa3InicioMin!=='' && t.pausa3FimMin!=='') ? `${t.pausa3Label}: ${minParaHora(t.pausa3InicioMin)}–${minParaHora(t.pausa3FimMin)} (${hm(durMin(t.pausa3InicioMin,t.pausa3FimMin))})` : null,
+      (t.pausa1Label && t.pausa1InicioMin!=='' && t.pausa1FimMin!=='') ? `${t.pausa1Label}: ${minParaHora(t.pausa1InicioMin)}–${minParaHora(t.pausa1FimMin)} (${hm(durPausa1)})` : null,
+      (t.pausa2Label && t.pausa2InicioMin!=='' && t.pausa2FimMin!=='') ? `${t.pausa2Label}: ${minParaHora(t.pausa2InicioMin)}–${minParaHora(t.pausa2FimMin)} (${hm(durPausa2)})` : null,
+      (t.pausa3Label && t.pausa3InicioMin!=='' && t.pausa3FimMin!=='') ? `${t.pausa3Label}: ${minParaHora(t.pausa3InicioMin)}–${minParaHora(t.pausa3FimMin)} (${hm(durPausa3)})` : null,
     ].filter(Boolean);
     return `<tr>
       <td style="padding:2px 6px;font-weight:700;font-size:.62rem;border:1px solid #ccc;white-space:nowrap">${t.nome||'—'}</td>
@@ -2469,7 +2473,7 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
             <th style="padding:2px 6px;font-size:.6rem;text-align:left;border:1px solid #005f5f">Designação do Turno</th>
             <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Entrada</th>
             <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Saída</th>
-            <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Duração</th>
+            <th style="padding:2px 6px;font-size:.6rem;text-align:center;border:1px solid #005f5f">Duração&nbsp;líquida</th>
             <th style="padding:2px 6px;font-size:.6rem;text-align:left;border:1px solid #005f5f">Pausas / Intervalos</th>
           </tr>
         </thead>
