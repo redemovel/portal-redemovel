@@ -137,6 +137,7 @@ async function mostrarVistaInicial() {
   if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') carregarGestao();
   else if (viewInicial === 'gestao') gestaoActivar();
   else if (viewInicial === 'ocupacao') initOcupacaoDiaria();
+  else if (viewInicial === 'ferias') feriasColabActivar();
 }
 
 function doLogout() {
@@ -1294,7 +1295,7 @@ function popularSelectLocal(id) {
 }
 
 function popularTodosSelects() {
-  ['hor-local','hor-local-mes','at-local','fer-local','turno-local-sel','mapa-local'].forEach(popularSelectLocal);
+  ['hor-local','hor-local-mes','at-local','fer-local','pf-local','turno-local-sel','mapa-local'].forEach(popularSelectLocal);
 }
 
 function popularColaboradoresSelect(id) {
@@ -2186,6 +2187,74 @@ async function decidirFerias(id, decisao) {
 }
 
 // ═══════════════════════════════════════
+//  FÉRIAS — AUTO-SERVIÇO (2026-09-10)
+//  Vista "🏖 Férias", visível a qualquer colaborador autenticado (não só
+//  master/coordenador): pedir férias para si próprio e consultar o mapa da
+//  sua função. Usa os mesmos gestao-tab/gestao-panel do painel de Gestão só
+//  para o estilo — a troca de separador é feita por uma função própria,
+//  scoped a #view-ferias, para não interferir com os separadores de Gestão
+//  (showGestaoTab mexe nesses elementos a nível do documento inteiro).
+// ═══════════════════════════════════════
+async function feriasColabActivar() {
+  if (!LOCAIS_CACHE.length) await carregarLocaisCache();
+  const primeiraTab = document.querySelector('#view-ferias .gestao-tab');
+  showFeriasColabTab('minhasferias', primeiraTab);
+}
+
+function showFeriasColabTab(id, btn) {
+  const view = document.getElementById('view-ferias');
+  view.querySelectorAll('.gestao-panel').forEach(p=>p.classList.remove('active'));
+  view.querySelectorAll('.gestao-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('gpanel-'+id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id==='minhasferias') carregarMinhasFerias();
+  if (id==='mapaferiascolab') {
+    const anoInp=document.getElementById('mapaferiascolab-ano');
+    if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
+    carregarMapaFerias('mapaferiascolab-ano','mapaferiascolab-conteudo');
+  }
+}
+
+async function carregarMinhasFerias() {
+  if (!LOCAIS_CACHE.length) await carregarLocaisCache();
+  const r=await assApi({acao:'listarFerias',filtros:{}}); if (!r.ok) return;
+  const lista=document.getElementById('lista-minhas-ferias');
+  if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Ainda não tem pedidos de ausência.</div>'; return; }
+  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};
+  const porData=(a,b)=>String(b.dataInicio).localeCompare(String(a.dataInicio));
+  lista.innerHTML=`<table class="tbl"><thead><tr><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th></tr></thead><tbody>${[...r.ferias].sort(porData).map(f=>{
+    const loc=LOCAIS_CACHE.find(l=>l.id===f.localId);
+    const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
+    const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;
+    return `<tr><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId||'—'}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function abrirModalPedirFerias() {
+  document.getElementById('mpedirferias-err').style.display='none';
+  document.getElementById('pf-tipo').value='ferias';
+  document.getElementById('pf-inicio').value='';
+  document.getElementById('pf-fim').value='';
+  if (!LOCAIS_CACHE.length) carregarLocaisCache().then(()=>popularSelectLocal('pf-local')); else popularSelectLocal('pf-local');
+  document.getElementById('modal-pedir-ferias').classList.add('open');
+}
+
+async function guardarPedidoFerias() {
+  const err=document.getElementById('mpedirferias-err'); err.style.display='none';
+  const ferias={
+    tipo: document.getElementById('pf-tipo').value,
+    localId: document.getElementById('pf-local').value,
+    dataInicio: document.getElementById('pf-inicio').value,
+    dataFim: document.getElementById('pf-fim').value
+  };
+  if (!ferias.dataInicio||!ferias.dataFim) { err.textContent='Preencha as datas de início e fim.'; err.style.display='block'; return; }
+  const r=await assApi({acao:'registarFerias',ferias});
+  if (!r.ok) { err.textContent=r.erro; err.style.display='block'; return; }
+  closeModal('modal-pedir-ferias');
+  carregarMinhasFerias();
+}
+
+// ═══════════════════════════════════════
 //  APROVAÇÕES
 // ═══════════════════════════════════════
 async function carregarAprovacoes() {
@@ -2305,9 +2374,15 @@ async function confirmarDecisao() {
 // ═══════════════════════════════════════
 //  MAPA MENSAL
 // ═══════════════════════════════════════
-async function carregarMapaFerias() {
-  const ano = document.getElementById('mapaferias-ano').value;
-  const cont = document.getElementById('mapaferias-conteudo');
+// anoElId/contElId: por omissão usa o painel de Gestão (master/coordenador);
+// a vista de auto-serviço "Férias" (2026-09-10) chama isto com os IDs do seu
+// próprio painel ('mapaferiascolab-ano'/'mapaferiascolab-conteudo') para
+// reaproveitar a mesma renderização sem colidir com o painel de Gestão.
+async function carregarMapaFerias(anoElId, contElId) {
+  anoElId = anoElId || 'mapaferias-ano';
+  contElId = contElId || 'mapaferias-conteudo';
+  const ano = document.getElementById(anoElId).value;
+  const cont = document.getElementById(contElId);
   if (!ano) { cont.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Indique um ano.</div>'; return; }
   const r = await assApi({acao:'mapaFerias', ano});
   if (!r.ok) { cont.innerHTML = `<div style="text-align:center;padding:1.5rem;color:var(--danger)">${r.erro||'Erro ao carregar.'}</div>`; return; }
