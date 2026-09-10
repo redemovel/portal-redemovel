@@ -109,15 +109,28 @@ async function enterDashboard() {
   document.getElementById('perfil-local').textContent='📍 '+(SESSION.local||'—');
   buildChart(); startClock(); setPageDate();
 
-  // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito.
-  // IPs/Utilizadores (carregarGestao) só são pedidos depois — nav-gestao é só um botão,
-  // não bloqueia nada visível já — evita que compitam com o arranque da Assiduidade
-  // pelo mesmo pico de pedidos simultâneos ao Apps Script.
   if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') {
     document.getElementById('nav-gestao').style.display='';
   }
+
+  // Regras e RGPD (2026-09-10): confirmação de leitura obrigatória antes de
+  // aceder ao resto do portal. Se ainda não confirmou a versão actual do
+  // texto, verificarRegrasGate() já mostra a vista "Regras" e bloqueia a
+  // navegação (ver .topbar-nav.regras-gate no CSS) — só avançamos para
+  // mostrarVistaInicial() depois de confirmado (aqui, ou a partir de
+  // confirmarLeituraRegras() quando o próprio colaborador confirma).
+  const okRegras = await verificarRegrasGate();
+  if (!okRegras) return;
+  await mostrarVistaInicial();
+}
+
+// Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito.
+// IPs/Utilizadores (carregarGestao) só são pedidos depois — nav-gestao é só um botão,
+// não bloqueia nada visível já — evita que compitam com o arranque da Assiduidade
+// pelo mesmo pico de pedidos simultâneos ao Apps Script.
+async function mostrarVistaInicial() {
   const savedView = sessionStorage.getItem('rmView');
-  const viewInicial = savedView || 'assiduidade';
+  const viewInicial = (savedView && savedView !== 'regras') ? savedView : 'assiduidade';
   const navBtn = document.querySelector(`.nav-item[onclick*="'${viewInicial}'"]`);
   showView(viewInicial, navBtn);
   if (viewInicial === 'assiduidade') await assActivar();
@@ -2651,3 +2664,102 @@ function minParaHoraH(min) { const m=Number(min),h=Math.floor(m/60),r=m%60; retu
 function minParaHoraInput(min) { return minParaHora(min); }
 function horaParaMin(str) { if(!str) return ''; const [h,m]=str.split(':').map(Number); return h*60+m; }
 function segundaFeira(d) { const dt=new Date(d),dow=dt.getDay(),diff=dow===0?-6:1-dow; dt.setDate(dt.getDate()+diff); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+
+// ═══════════════════════════════════════
+//  REGRAS E RGPD — leitura obrigatória (2026-09-09)
+// ═══════════════════════════════════════
+// REGRAS_VERSAO: bump manual sempre que o texto em #view-regras (HTML) mudar
+// de forma substantiva — invalida as confirmações anteriores (ficam presas à
+// versão antiga) e faz reaparecer o aviso "por confirmar" para todos.
+// IMPORTANTE: manter sincronizado com a constante homónima em registo-movel.html.
+const REGRAS_VERSAO = 1;
+
+// Devolve true/false consoante o colaborador já confirmou (ou não) a versão
+// actual do texto — usado quer para actualizar a própria vista "Regras"
+// (banner, info, botão de rodapé, badge no separador), quer por
+// verificarRegrasGate() para decidir se bloqueia a navegação.
+async function regrasActivar() {
+  const r = await assApi({acao:'minhaConfirmacaoRegras', versao:REGRAS_VERSAO});
+  const banner = document.getElementById('regras-banner-pendente');
+  const info = document.getElementById('regras-confirmado-info');
+  const badge = document.getElementById('badge-regras');
+  const rodapePendente = document.getElementById('regras-confirmar-pendente-rodape');
+  const rodapeFeito = document.getElementById('regras-confirmar-feito-rodape');
+  const confirmado = !!(r.ok && r.confirmado);
+  if (confirmado) {
+    if (banner) banner.style.display = 'none';
+    if (info) { info.style.display = 'block'; info.textContent = `✅ Confirmaste a leitura destas regras em ${r.confirmadoEm}.`; }
+    if (badge) badge.style.display = 'none';
+    if (rodapePendente) rodapePendente.style.display = 'none';
+    if (rodapeFeito) rodapeFeito.style.display = 'block';
+  } else {
+    if (banner) banner.style.display = 'block';
+    if (info) info.style.display = 'none';
+    if (badge) badge.style.display = 'inline';
+    if (rodapePendente) rodapePendente.style.display = '';
+    if (rodapeFeito) rodapeFeito.style.display = 'none';
+  }
+  if (SESSION && (SESSION.role==='master'||SESSION.role==='coordenador_lojas')) {
+    const painel = document.getElementById('panel-regras-confirmacoes');
+    if (painel) painel.style.display = '';
+    carregarConfirmacoesRegras();
+  }
+  return confirmado;
+}
+
+// Bloqueia a navegação a tudo excepto "Regras" enquanto o colaborador não
+// confirmar a leitura da versão actual — chamado no arranque (enterDashboard).
+// Devolve true se já está confirmado (nada bloqueado, pode prosseguir para
+// mostrarVistaInicial()).
+async function verificarRegrasGate() {
+  const navList = document.getElementById('topbar-nav-list');
+  const confirmado = await regrasActivar();
+  if (!confirmado) {
+    if (navList) navList.classList.add('regras-gate');
+    const navBtn = document.querySelector('.nav-item.regras-nav-item');
+    showView('regras', navBtn);
+    return false;
+  }
+  if (navList) navList.classList.remove('regras-gate');
+  return true;
+}
+
+async function confirmarLeituraRegras() {
+  const btn = document.getElementById('btn-confirmar-regras');
+  const erro = document.getElementById('regras-confirmar-erro');
+  if (erro) erro.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'A confirmar…'; }
+  let r;
+  try {
+    r = await assApi({acao:'confirmarLeituraRegras', versao:REGRAS_VERSAO});
+  } catch (err) {
+    r = { ok:false, erro: 'Falha de ligação ao servidor. Tenta novamente.' };
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Li e tomei conhecimento'; }
+  if (!r.ok) {
+    const msg = r.erro || 'Erro ao confirmar.';
+    if (erro) { erro.textContent = '⚠ ' + msg; erro.style.display = 'block'; }
+    else alert(msg);
+    return;
+  }
+  await regrasActivar();
+  const navList = document.getElementById('topbar-nav-list');
+  if (navList) navList.classList.remove('regras-gate');
+  await mostrarVistaInicial();
+}
+
+async function carregarConfirmacoesRegras() {
+  if (!COLABORADORES_CACHE.length) await carregarColaboradoresCache();
+  const r = await assApi({acao:'listarConfirmacoesRegras', versao:REGRAS_VERSAO});
+  const container = document.getElementById('lista-confirmacoes-regras');
+  if (!container) return;
+  if (!r.ok) { container.innerHTML = `<div style="color:var(--danger)">${r.erro}</div>`; return; }
+  const confirmadosSet = new Set(r.confirmacoes.map(c=>c.username));
+  const linhas = COLABORADORES_CACHE.map(c => {
+    const confirmado = confirmadosSet.has(c.username);
+    const info = r.confirmacoes.find(x=>x.username===c.username);
+    return `<tr><td style="font-weight:600">${c.nome}</td><td>${confirmado?`<span style="color:var(--success);font-weight:600">✓ Confirmado — ${info.confirmadoEm}</span>`:'<span style="color:var(--danger);font-weight:600">✗ Por confirmar</span>'}</td></tr>`;
+  }).join('');
+  const total = COLABORADORES_CACHE.length, feitos = confirmadosSet.size;
+  container.innerHTML = `<div style="margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted)">${feitos} de ${total} colaborador(es) confirmaram a leitura da versão actual.</div><table class="tbl"><thead><tr><th>Colaborador</th><th>Estado</th></tr></thead><tbody>${linhas}</tbody></table>`;
+}
