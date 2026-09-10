@@ -1598,9 +1598,14 @@ async function carregarGanttMensal() {
   const localId=document.getElementById('hor-local').value;
   const semana=document.getElementById('hor-semana').value;
   if (!localId||!semana) return;
-  const mesAno=semana.slice(0,7); // 'AAAA-MM' extraído da data da semana seleccionada
-  const [ano,mes]=mesAno.split('-').map(Number);
-  const anoInicio=ano, mesInicio=mes-1;
+  // Período do "mês" corre de dia 20 a dia 19 do mês seguinte. A semana
+  // seleccionada pode cair na primeira parte desse período (dias 1–19, que
+  // pertencem ao período iniciado no mês ANTERIOR) — por isso o mês do
+  // período não é simplesmente o mês da data escolhida; tem de recuar um
+  // mês quando o dia da semana escolhida é anterior a 20.
+  const semanaDt=new Date(semana+'T12:00:00');
+  const anoInicio=semanaDt.getFullYear();
+  const mesInicio=semanaDt.getDate()<20 ? semanaDt.getMonth()-1 : semanaDt.getMonth();
   const inicio=new Date(anoInicio,mesInicio,20,12,0,0);
   const fim=new Date(anoInicio,mesInicio+1,19,12,0,0);
   const inicioStr=inicio.getFullYear()+'-'+String(inicio.getMonth()+1).padStart(2,'0')+'-'+String(inicio.getDate()).padStart(2,'0');
