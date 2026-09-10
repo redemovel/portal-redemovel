@@ -309,7 +309,14 @@ async function entrarNoPainel() {
   document.getElementById('btn-sair').hidden = false;
   document.getElementById('nome-utilizador').textContent = SESSAO.nome;
   await atualizarEstadoHoje();
-  verificarRegrasMovel();
+  const confirmado = await verificarRegrasMovel();
+  // Se ainda não confirmou a leitura das regras, o painel abre-se sozinho e
+  // o ecrã desloca-se até ele — os botões de registo ficam bloqueados (ver
+  // aplicarBloqueioRegrasMovel) até confirmar.
+  if (!confirmado) {
+    const cartao = document.getElementById('cartao-regras');
+    if (cartao) cartao.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 async function atualizarEstadoHoje() {
@@ -352,31 +359,59 @@ function toggleRegrasMovel() {
   seta.textContent = aberto ? '▾' : '▴';
 }
 
+// Devolve true/false consoante já confirmou (ou não) a versão actual do
+// texto. Enquanto não confirmar, abre o painel automaticamente e bloqueia os
+// botões de registo (ver aplicarBloqueioRegrasMovel) — não dá para picar
+// ponto sem primeiro tomar conhecimento das regras.
 async function verificarRegrasMovel() {
   const r = await chamarApi({ acao: 'minhaConfirmacaoRegras', versao: REGRAS_VERSAO_MV });
   const estado = document.getElementById('regras-estado-mv');
   const badge = document.getElementById('regras-badge-mv');
   const btn = document.getElementById('btn-confirmar-regras-mv');
-  if (r.ok && r.confirmado) {
+  const texto = document.getElementById('regras-texto-mv');
+  const seta = document.getElementById('regras-seta-mv');
+  const confirmado = !!(r.ok && r.confirmado);
+  if (confirmado) {
     estado.textContent = `✅ Confirmaste a leitura em ${r.confirmadoEm}.`;
     estado.className = 'regras-estado-mv ok';
     badge.hidden = true;
     btn.hidden = true;
   } else {
-    estado.textContent = '⚠ Ainda não confirmaste que leste esta informação.';
+    estado.textContent = '⚠ Ainda não confirmaste que leste esta informação. Confirma abaixo para poderes registar.';
     estado.className = 'regras-estado-mv pendente';
     badge.hidden = false;
     btn.hidden = false;
+    texto.hidden = false;
+    seta.textContent = '▴';
   }
+  aplicarBloqueioRegrasMovel(!confirmado);
+  return confirmado;
+}
+
+// Enquanto não houver confirmação, os botões de Entrada/Saída/Pausa/Retorno
+// ficam sempre desativados, independentemente do estado real do dia — depois
+// de confirmar, é atualizarEstadoHoje() que volta a controlar o estado
+// normal (chamado logo a seguir em confirmarLeituraRegrasMv()).
+function aplicarBloqueioRegrasMovel(bloquear) {
+  if (!bloquear) return;
+  ['btn-entrada','btn-saida','btn-pausa','btn-retorno'].forEach(id => {
+    document.getElementById(id).disabled = true;
+  });
 }
 
 async function confirmarLeituraRegrasMv() {
   const btn = document.getElementById('btn-confirmar-regras-mv');
   btn.disabled = true; btn.textContent = 'A confirmar…';
-  const r = await chamarApi({ acao: 'confirmarLeituraRegras', versao: REGRAS_VERSAO_MV });
+  let r;
+  try {
+    r = await chamarApi({ acao: 'confirmarLeituraRegras', versao: REGRAS_VERSAO_MV });
+  } catch (err) {
+    r = { ok: false, erro: 'Falha de ligação ao servidor. Tenta novamente.' };
+  }
   btn.disabled = false; btn.textContent = 'Li e tomei conhecimento';
   if (!r.ok) { alert(r.erro || 'Erro ao confirmar.'); return; }
   await verificarRegrasMovel();
+  await atualizarEstadoHoje();
 }
 
 // ═══ Localização ═══
