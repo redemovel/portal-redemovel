@@ -1010,7 +1010,7 @@ function showGestaoTab(id, btn) {
   if (id==='turnos') carregarTurnos();
   if (id==='balizas') carregarBalizas();
   if (id==='horarios') {
-    const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); carregarAtribuicoes(); carregarExcecoes(); };
+    const carregarHor=()=>{ popularSelectLocal('hor-local'); popularSelectLocal('at-local'); carregarHorariosTipo(); popularFiltrosAtribuicoes(); popularFiltrosExcecoes(); };
     if (!LOCAIS_CACHE.length) carregarLocaisCache().then(carregarHor);
     else carregarHor();
     const hor=document.getElementById('hor-semana');
@@ -1935,7 +1935,7 @@ async function atSubmeterComDecisoes() {
 // ═══════════════════════════════════════
 //  ATRIBUIÇÕES — listar / editar / apagar
 // ═══════════════════════════════════════
-async function carregarAtribuicoes() {
+function popularFiltrosAtribuicoes() {
   const selColab = document.getElementById('atrib-filtro-colab');
   const selLocal = document.getElementById('atrib-filtro-local');
   if (selColab && !selColab.dataset.populated) {
@@ -1948,6 +1948,12 @@ async function carregarAtribuicoes() {
     LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${l.nome}</option>`);
     selLocal.dataset.populated = '1';
   }
+}
+
+async function carregarAtribuicoes() {
+  popularFiltrosAtribuicoes();
+  const selColab = document.getElementById('atrib-filtro-colab');
+  const selLocal = document.getElementById('atrib-filtro-local');
   const filtros = {};
   const fU = selColab?.value;       if (fU) filtros.username = fU;
   const fL = selLocal?.value;       if (fL) filtros.localId = fL;
@@ -2020,11 +2026,31 @@ async function apagarAtribuicao(id, nomeColab, semana) {
 // ═══════════════════════════════════════
 //  EXCEÇÕES DIÁRIAS (Horários Especiais)
 // ═══════════════════════════════════════
+function popularFiltrosExcecoes() {
+  const selColab = document.getElementById('exc-filtro-colab');
+  const selLocal = document.getElementById('exc-filtro-local');
+  if (selColab && !selColab.dataset.populated) {
+    selColab.innerHTML = '<option value="">Todos</option>';
+    COLABORADORES_CACHE.forEach(c => selColab.innerHTML += `<option value="${c.username}">${c.nome}</option>`);
+    selColab.dataset.populated = '1';
+  }
+  if (selLocal && !selLocal.dataset.populated) {
+    selLocal.innerHTML = '<option value="">Todos</option>';
+    LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${l.nome}</option>`);
+    selLocal.dataset.populated = '1';
+  }
+}
+
 async function carregarExcecoes() {
+  popularFiltrosExcecoes();
   const lista=document.getElementById('lista-excecoes');
   if (!lista) return;
   if (!TURNOS_CACHE.length) await carregarTurnos();
-  const r=await assApi({acao:'listarExcecoesDia',filtros:{}});
+  const filtros = {};
+  const fU = document.getElementById('exc-filtro-colab')?.value; if (fU) filtros.username = fU;
+  const fL = document.getElementById('exc-filtro-local')?.value; if (fL) filtros.localId = fL;
+  const fD = document.getElementById('exc-filtro-data')?.value;  if (fD) filtros.data = fD;
+  const r=await assApi({acao:'listarExcecoesDia',filtros});
   if (!r.ok) return;
   if (!r.excecoes.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem exceções registadas.</div>'; return; }
   const ordenadas=r.excecoes.slice().sort((a,b)=>b.data.localeCompare(a.data));
