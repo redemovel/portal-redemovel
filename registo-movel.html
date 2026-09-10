@@ -84,6 +84,17 @@
   .relogio { text-align: center; font-size: 2.2rem; font-weight: 800; color: var(--teal); letter-spacing: -0.02em; }
   .relogio-data { text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: -0.3rem; margin-bottom: 0.5rem; text-transform: capitalize; }
 
+  /* ═══ Regras e RGPD (compacto) ═══ */
+  .regras-mv-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: pointer; font-weight: 700; font-size: 0.85rem; color: var(--text); }
+  .regras-badge-mv { background: var(--danger); color: var(--white); border-radius: 8px; padding: 1px 6px; font-size: 0.65rem; }
+  .regras-seta-mv { font-size: 0.75rem; color: var(--text-muted); }
+  .regras-texto-mv { font-size: 0.78rem; color: var(--text-muted); line-height: 1.55; margin-top: 0.75rem; }
+  .regras-texto-mv p { margin: 0 0 0.6rem 0; }
+  .regras-texto-mv strong { color: var(--text); }
+  .regras-estado-mv { font-size: 0.78rem; margin-top: 0.6rem; }
+  .regras-estado-mv.ok { color: var(--success); font-weight: 600; }
+  .regras-estado-mv.pendente { color: var(--warning); font-weight: 600; }
+
   /* ═══ Câmara (selfie ao vivo, com máscara oval) ═══ */
   .camara-overlay {
     position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1000;
@@ -152,6 +163,27 @@
       <div class="cartao" style="font-size:0.78rem;color:var(--text-muted);line-height:1.5">
         Cada registo pede a tua localização e uma foto. Se estiveres fora das zonas habituais, o registo é feito
         na mesma mas fica pendente de aprovação do coordenador.
+      </div>
+
+      <div class="cartao" id="cartao-regras">
+        <div class="regras-mv-header" onclick="toggleRegrasMovel()">
+          <span>📄 Regras e proteção de dados (RGPD)</span>
+          <span id="regras-badge-mv" class="regras-badge-mv" hidden>!</span>
+          <span id="regras-seta-mv" class="regras-seta-mv">▾</span>
+        </div>
+        <div id="regras-texto-mv" class="regras-texto-mv" hidden>
+          <p><strong>O que é recolhido.</strong> Em cada registo de entrada e saída, o sistema pede uma fotografia e a localização GPS do telemóvel no momento exato da marcação. Nas pausas, é pedida apenas a localização (sem foto).</p>
+          <p><strong>Finalidade.</strong> Serve para confirmar, em cada marcação, que o registo corresponde a uma prestação de trabalho real e que foste tu próprio a fazê-la — permite à coordenação validar entradas fora das zonas de trabalho habituais antes de aprovar o respetivo pagamento, e serve também para efeitos de auditoria da assiduidade em geral.</p>
+          <p><strong>Não há vigilância contínua.</strong> Não existe geolocalização permanente nem monitorização em tempo real. A localização e a foto só são captadas quando tu próprio acionas o registo (entrada, saída ou pausa) — nunca fora desses momentos.</p>
+          <p><strong>Fundamento legal.</strong> Artigos 20.º e 22.º do Código do Trabalho (vigilância à distância para controlo de assiduidade) e princípios do RGPD de minimização de dados e limitação da finalidade.</p>
+          <p><strong>Quem tem acesso.</strong> A coordenação e o master — quer para decidir sobre registos pendentes de aprovação (fora de uma zona reconhecida), quer para efeitos de auditoria da assiduidade, nomeadamente para confirmar que foste tu a fazer o registo.</p>
+          <p><strong>Onde ficam guardados.</strong> As fotos ficam numa pasta reservada da empresa (Google Drive); não há partilhas externas nem exploração comercial destes dados.</p>
+          <p><strong>Prazo de conservação.</strong> A foto e as coordenadas GPS de cada marcação são conservadas durante 365 dias, findo os quais são apagadas automaticamente pelo sistema. O essencial do registo (data, hora, dentro/fora de zona) mantém-se para histórico, mas sem a foto nem a localização exata.</p>
+          <p><strong>Os teus direitos.</strong> Podes pedir esclarecimentos, aceder à informação que te diz respeito ou solicitar retificação junto da Susana Coutinho ou do Ricardo Bastos.</p>
+          <p>Texto completo das regras de assiduidade (tolerâncias, aprovações, etc.) disponível no portal da equipa, separador "Regras" (computador).</p>
+        </div>
+        <div id="regras-estado-mv" class="regras-estado-mv"></div>
+        <button class="btn btn-secundario" id="btn-confirmar-regras-mv" onclick="confirmarLeituraRegrasMv()" hidden style="margin-top:0.6rem">Li e tomei conhecimento</button>
       </div>
     </div>
 
@@ -277,6 +309,7 @@ async function entrarNoPainel() {
   document.getElementById('btn-sair').hidden = false;
   document.getElementById('nome-utilizador').textContent = SESSAO.nome;
   await atualizarEstadoHoje();
+  verificarRegrasMovel();
 }
 
 async function atualizarEstadoHoje() {
@@ -303,6 +336,48 @@ async function atualizarEstadoHoje() {
   else estadoEl.textContent = 'Sem registo hoje ainda.';
 }
 function minParaHora(min) { min = Number(min); const h = Math.floor(min/60), m = min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+// ═══ Regras e RGPD ═══
+// REGRAS_VERSAO_MV: bump manual sempre que o texto de #regras-texto-mv mudar
+// de forma substantiva — invalida as confirmações anteriores.
+// IMPORTANTE: manter sincronizado com a constante REGRAS_VERSAO em
+// portal-redemovel.html (portal-redemovel.js).
+const REGRAS_VERSAO_MV = 1;
+
+function toggleRegrasMovel() {
+  const texto = document.getElementById('regras-texto-mv');
+  const seta = document.getElementById('regras-seta-mv');
+  const aberto = !texto.hidden;
+  texto.hidden = aberto;
+  seta.textContent = aberto ? '▾' : '▴';
+}
+
+async function verificarRegrasMovel() {
+  const r = await chamarApi({ acao: 'minhaConfirmacaoRegras', versao: REGRAS_VERSAO_MV });
+  const estado = document.getElementById('regras-estado-mv');
+  const badge = document.getElementById('regras-badge-mv');
+  const btn = document.getElementById('btn-confirmar-regras-mv');
+  if (r.ok && r.confirmado) {
+    estado.textContent = `✅ Confirmaste a leitura em ${r.confirmadoEm}.`;
+    estado.className = 'regras-estado-mv ok';
+    badge.hidden = true;
+    btn.hidden = true;
+  } else {
+    estado.textContent = '⚠ Ainda não confirmaste que leste esta informação.';
+    estado.className = 'regras-estado-mv pendente';
+    badge.hidden = false;
+    btn.hidden = false;
+  }
+}
+
+async function confirmarLeituraRegrasMv() {
+  const btn = document.getElementById('btn-confirmar-regras-mv');
+  btn.disabled = true; btn.textContent = 'A confirmar…';
+  const r = await chamarApi({ acao: 'confirmarLeituraRegras', versao: REGRAS_VERSAO_MV });
+  btn.disabled = false; btn.textContent = 'Li e tomei conhecimento';
+  if (!r.ok) { alert(r.erro || 'Erro ao confirmar.'); return; }
+  await verificarRegrasMovel();
+}
 
 // ═══ Localização ═══
 function obterLocalizacao() {
