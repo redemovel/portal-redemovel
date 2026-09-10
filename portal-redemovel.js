@@ -2192,7 +2192,23 @@ function tabelaOrdenarPor(id, col, renderFn) {
 }
 function tabelaFiltrar(id, col, valor, renderFn) {
   tabelaEstado_(id).filtros[col] = valor;
+  // renderFn() reconstrói toda a tabela (innerHTML) — incluindo o próprio
+  // campo onde se está a escrever, que fica um elemento DOM novo e perde o
+  // foco. Sem isto, cada letra digitada tira o foco do campo e é preciso
+  // clicar outra vez antes da letra seguinte ("só permite uma letra de cada
+  // vez", reportado pelo Ricardo, 2026-09-10). Guarda a posição do cursor
+  // antes de reconstruir e volta a focar + repor o cursor no elemento novo
+  // com o mesmo id/coluna a seguir.
+  const activo = document.activeElement;
+  const cursor = (activo && typeof activo.selectionStart === 'number') ? activo.selectionStart : null;
   renderFn();
+  const novo = document.querySelector(`[data-tfiltro-id="${id}"][data-tfiltro-col="${col}"]`);
+  if (novo) {
+    novo.focus();
+    if (cursor !== null && typeof novo.setSelectionRange === 'function') {
+      try { novo.setSelectionRange(cursor, cursor); } catch (_) {}
+    }
+  }
 }
 function tabelaLimparFiltros(id, renderFn) {
   tabelaEstado_(id).filtros = {};
@@ -2212,12 +2228,12 @@ function tabelaTh_(id, label, col, renderFnNome) {
 }
 function tabelaFiltroTexto_(id, col, renderFnNome, placeholder) {
   const v = (tabelaEstado_(id).filtros[col] || '').toString().replace(/"/g, '&quot;');
-  return `<input type="text" placeholder="${placeholder || 'filtrar…'}" value="${v}" oninput="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">`;
+  return `<input type="text" data-tfiltro-id="${id}" data-tfiltro-col="${col}" placeholder="${placeholder || 'filtrar…'}" value="${v}" oninput="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">`;
 }
 function tabelaFiltroSelect_(id, col, renderFnNome, opcoes) {
   const actual = (tabelaEstado_(id).filtros[col] || '').toString();
   const opts = ['<option value="">Todos</option>', ...opcoes.map(([v,l]) => `<option value="${v}"${v===actual?' selected':''}>${l}</option>`)].join('');
-  return `<select onchange="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">${opts}</select>`;
+  return `<select data-tfiltro-id="${id}" data-tfiltro-col="${col}" onchange="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">${opts}</select>`;
 }
 
 // ═══════════════════════════════════════
