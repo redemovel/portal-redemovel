@@ -162,17 +162,21 @@ function showView(id, btn) {
 // ═══════════════════════════════════════
 async function carregarGestao() { await carregarIPs(); await carregarUtilizadores(); }
 
-async function carregarIPs() {
-  const res=await api({acao:'listarIPs',ip:SESSION.ip,username:SESSION.username,password:SESSION.password});
-  if (!res.ok) return;
+function renderIPs(ips) {
   document.getElementById('ip-atual-gestao').textContent=SESSION.ip;
   const lista=document.getElementById('lista-ips'); lista.innerHTML='';
-  res.ips.forEach(item=>{
+  ips.forEach(item=>{
     const div=document.createElement('div'); div.className='ip-item';
     const isAtual=item.ip===SESSION.ip;
     div.innerHTML=`<div class="ip-info"><div class="ip-local">${item.local}</div><div class="ip-addr">${item.ip}</div></div>${item.fixo?'<span class="ip-badge fixo">Fixo</span>':''}${isAtual?'<span class="ip-badge atual">Este PC</span>':''}${!item.fixo&&item.ativo?`<button class="btn-sm danger" onclick="desativarIP('${item.ip}','${item.local}')">Desativar</button>`:''}${!item.ativo?'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>':''}`;
     lista.appendChild(div);
   });
+}
+
+async function carregarIPs() {
+  const res=await api({acao:'listarIPs',ip:SESSION.ip,username:SESSION.username,password:SESSION.password});
+  if (!res.ok) return;
+  renderIPs(res.ips);
 }
 
 async function adicionarIP() {
@@ -196,15 +200,19 @@ async function desativarIP(ipAlvo, local) {
 // ═══════════════════════════════════════
 //  GESTÃO — UTILIZADORES
 // ═══════════════════════════════════════
-async function carregarUtilizadores() {
-  const res=await api({acao:'listarUtilizadores',ip:SESSION.ip,username:SESSION.username,password:SESSION.password});
-  if (!res.ok) return;
+function renderUtilizadores(utilizadores) {
   const lista=document.getElementById('lista-users'); lista.innerHTML='';
-  res.utilizadores.forEach(u=>{
+  utilizadores.forEach(u=>{
     const div=document.createElement('div'); div.className='user-item';
     div.innerHTML=`<div class="user-info"><div class="user-name-g">${u.nome}</div><div class="user-meta">@${u.username}</div></div><span class="role-badge ${u.role}">${roleLabel(u.role)}</span>${u.ativo?`<button class="btn-sm teal" onclick="abrirResetPass('${u.username}')">🔑 Reset</button>${u.username!==SESSION.username?`<button class="btn-sm danger" onclick="desativarUser('${u.username}')">Desativar</button>`:'`'}`:'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
     lista.appendChild(div);
   });
+}
+
+async function carregarUtilizadores() {
+  const res=await api({acao:'listarUtilizadores',ip:SESSION.ip,username:SESSION.username,password:SESSION.password});
+  if (!res.ok) return;
+  renderUtilizadores(res.utilizadores);
 }
 
 async function criarUtilizador() {
@@ -1112,7 +1120,16 @@ window.carregarOcupacaoDiaria = carregarOcupacaoDiaria;
 
 async function gestaoActivar() {
   await Promise.all([carregarLocaisCache(),carregarColaboradoresCache()]);
-  await Promise.all([carregarIPs(), carregarUtilizadores(), carregarAprovacoesBadge()]);
+  // Um único pedido em vez de 3 em paralelo (IPs + Utilizadores + badge de
+  // aprovações) — cada pedido conta contra a mesma quota partilhada de
+  // execuções simultâneas do Apps Script (ver 12º seguimento, 2026-09-10),
+  // por isso abrir "Gestão" deixa de "gastar" 3 lugares de uma vez.
+  const dadosIniciais = await api({acao:'gestaoDadosIniciais',ip:SESSION.ip,username:SESSION.username,password:SESSION.password});
+  if (dadosIniciais.ok) {
+    renderIPs(dadosIniciais.ips);
+    renderUtilizadores(dadosIniciais.utilizadores);
+    renderAprovacoesBadge(dadosIniciais.aprovacoesPendentes);
+  }
   const hor=document.getElementById('hor-semana'); if (hor) hor.value=segundaFeira(new Date());
   const mes=document.getElementById('mapa-mes'); if (mes) { const h=new Date(); mes.value=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   const tabEditor = document.getElementById('tab-editorregistos');
@@ -1623,19 +1640,13 @@ async function carregarGanttMensal() {
   document.getElementById('gantt-mes-label').textContent=meses[dtFim.getMonth()]+' '+dtFim.getFullYear();
   const container=document.getElementById('gantt-mes-container');
   container.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text-muted)">A carregar…</div>';
-  // Segundas-feiras que cobrem o período 20-19
-  const segundas=[], seg=new Date(inicio);
-  seg.setDate(seg.getDate()-((seg.getDay()+6)%7));
-  while (seg<=fim) { segundas.push(seg.getFullYear()+'-'+String(seg.getMonth()+1).padStart(2,'0')+'-'+String(seg.getDate()).padStart(2,'0')); seg.setDate(seg.getDate()+7); }
-  const respostas=await Promise.all(segundas.map(s=>assApi({acao:'gantSemanal',localId,semanaInicio:s})));
-  // Consolidar apenas dias do período
+  // Um único pedido para o período inteiro (em vez de um por semana em
+  // paralelo) — evita gastar várias das execuções simultâneas partilhadas
+  // do Apps Script de uma só vez (ver 12º seguimento, 2026-09-10).
+  const respostaPeriodo=await assApi({acao:'gantPeriodo',localId,inicioStr,fimStr});
+  if (!respostaPeriodo.ok) { container.innerHTML='<div style="text-align:center;padding:2rem;color:var(--danger)">Erro ao carregar. Tenta novamente.</div>'; return; }
   const diasMes={};
-  for (const r of respostas) {
-    if (!r.ok) continue;
-    for (const d of r.semana) {
-      if (d.dia>=inicioStr&&d.dia<=fimStr) diasMes[d.dia]=d;
-    }
-  }
+  for (const d of respostaPeriodo.dias) diasMes[d.dia]=d;
   const cols=[...new Map(Object.values(diasMes).flatMap(d=>d.colaboradores.map(c=>[c.username,c])))].map(([,c])=>c);
   if (!cols.length) { container.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text-muted)">Sem colaboradores atribuídos neste mês.</div>'; return; }
   const diasOrdenados=Object.keys(diasMes).sort(), DIAS_PT=['D','S','T','Q','Q','S','S'];
@@ -2307,6 +2318,13 @@ async function carregarAprovacoes() {
     return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
 }
 
+function renderAprovacoesBadge(count) {
+  const b = document.getElementById('badge-aprov');
+  if (!b) return;
+  if (count) { b.textContent = count; b.style.display = 'inline'; }
+  else { b.textContent = ''; b.style.display = 'none'; }
+}
+
 async function carregarAprovacoesBadge() {
   // chamada silenciosa — não mostra loading
   try {
@@ -2315,15 +2333,7 @@ async function carregarAprovacoesBadge() {
       username: SESSION.username, password: SESSION.password
     })});
     const r = await res.json();
-    const b = document.getElementById('badge-aprov');
-    if (!b) return;
-    if (r.ok && r.aprovacoes.length) {
-      b.textContent = r.aprovacoes.length;
-      b.style.display = 'inline';
-    } else {
-      b.textContent = '';
-      b.style.display = 'none';
-    }
+    if (r.ok) renderAprovacoesBadge(r.aprovacoes.length);
   } catch(_) {}
 }
 
@@ -2552,37 +2562,22 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
   const inicioStr = fmtISO(inicio);
   const fimStr    = fmtISO(fim);
 
-  // Buscar semanas que cobrem o período
-  const segundas = [];
-  const seg = new Date(inicio);
-  seg.setDate(seg.getDate() - ((seg.getDay()+6)%7));
-  while (seg <= fim) { segundas.push(fmtISO(seg)); seg.setDate(seg.getDate()+7); }
-
-  let respostas = await Promise.all(segundas.map(s => assApi({acao:'gantSemanal', localId, semanaInicio:s})));
-
-  // Se alguma semana falhou (ex: pico de pedidos simultâneos), tentar novamente essas
-  // semanas específicas antes de desistir — nunca gerar silenciosamente um mapa incompleto.
-  for (let tentativa = 0; tentativa < 2; tentativa++) {
-    const falhadas = segundas.map((s,i)=>({s,i})).filter(({i}) => !respostas[i].ok);
-    if (!falhadas.length) break;
+  // Um único pedido para o período inteiro (em vez de um por semana em
+  // paralelo) — evita gastar várias das execuções simultâneas partilhadas
+  // do Apps Script de uma só vez (ver 12º seguimento, 2026-09-10).
+  let respostaPeriodo = await assApi({acao:'gantPeriodo', localId, inicioStr, fimStr});
+  for (let tentativa = 0; tentativa < 2 && !respostaPeriodo.ok; tentativa++) {
     await new Promise(r => setTimeout(r, 900));
-    const novas = await Promise.all(falhadas.map(({s}) => assApi({acao:'gantSemanal', localId, semanaInicio:s})));
-    falhadas.forEach(({i}, idx) => { respostas[i] = novas[idx]; });
+    respostaPeriodo = await assApi({acao:'gantPeriodo', localId, inicioStr, fimStr});
   }
-  const semanasEmFalta = segundas.filter((s,i) => !respostas[i].ok);
-  if (semanasEmFalta.length) {
-    alert('Não foi possível carregar os dados de ' + semanasEmFalta.length + ' semana(s) deste período (falha de ligação temporária). O PDF não foi gerado — tenta novamente.');
+  if (!respostaPeriodo.ok) {
+    alert('Não foi possível carregar os dados deste período (falha de ligação temporária). O PDF não foi gerado — tenta novamente.');
     return;
   }
 
   // Consolidar dias do período
-  const diasMes   = {};
-  for (const r of respostas) {
-    if (!r.ok) continue;
-    for (const d of r.semana) {
-      if (d.dia >= inicioStr && d.dia <= fimStr) diasMes[d.dia] = d;
-    }
-  }
+  const diasMes = {};
+  for (const d of respostaPeriodo.dias) diasMes[d.dia] = d;
 
   const diasOrdenados = Object.keys(diasMes).sort();
 
