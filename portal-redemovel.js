@@ -125,16 +125,25 @@ async function enterDashboard() {
 }
 
 // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito.
-// IPs/Utilizadores (carregarGestao) só são pedidos depois — nav-gestao é só um botão,
-// não bloqueia nada visível já — evita que compitam com o arranque da Assiduidade
-// pelo mesmo pico de pedidos simultâneos ao Apps Script.
+// IPs/Utilizadores/aprovações (gestaoActivar) só são pedidos quando a vista
+// "Gestão" é mesmo a que vai ser mostrada — nunca adiantados "por via das
+// dúvidas" para master/coordenador, porque isso disparava 2 pedidos extra
+// em TODOS os logins (mesmo quando o destino era Assiduidade), logo no
+// momento de maior concorrência pela quota partilhada de execuções
+// simultâneas do Apps Script (ex.: várias lojas a abrir o portal à mesma
+// hora) — ver 12º seguimento, 2026-09-10. Nota: havia aqui um bug antigo
+// de precedência (um "if" solto a seguir a outro "if", sem "else"), que
+// fazia este pré-carregamento disparar sempre que a role era
+// master/coordenador e, nesses casos, "engolia" o "else if" seguinte —
+// pelo que reabrir a app numa vista Gestão/Ocupação/Férias guardada (F5)
+// nunca chegava a activar essa vista para essas roles. Corrigido ao mesmo
+// tempo.
 async function mostrarVistaInicial() {
   const savedView = sessionStorage.getItem('rmView');
   const viewInicial = (savedView && savedView !== 'regras') ? savedView : 'assiduidade';
   const navBtn = document.querySelector(`.nav-item[onclick*="'${viewInicial}'"]`);
   showView(viewInicial, navBtn);
   if (viewInicial === 'assiduidade') await assActivar();
-  if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') carregarGestao();
   else if (viewInicial === 'gestao') gestaoActivar();
   else if (viewInicial === 'ocupacao') initOcupacaoDiaria();
   else if (viewInicial === 'ferias') feriasColabActivar();
@@ -160,7 +169,6 @@ function showView(id, btn) {
 // ═══════════════════════════════════════
 //  GESTÃO — IPs
 // ═══════════════════════════════════════
-async function carregarGestao() { await carregarIPs(); await carregarUtilizadores(); }
 
 function renderIPs(ips) {
   document.getElementById('ip-atual-gestao').textContent=SESSION.ip;
