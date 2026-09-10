@@ -2217,7 +2217,12 @@ function showFeriasColabTab(id, btn) {
 
 async function carregarMinhasFerias() {
   if (!LOCAIS_CACHE.length) await carregarLocaisCache();
-  const r=await assApi({acao:'listarFerias',filtros:{}}); if (!r.ok) return;
+  // Envia sempre o próprio username no filtro: para um colaborador comum o
+  // backend força isto de qualquer forma, mas para master/coordenador é
+  // preciso pedir explicitamente — sem isto, fsListarFerias devolve-lhes
+  // TODOS os pedidos do sistema (é o que já fazem em Gestão → Férias), não
+  // só os seus próprios, que é o que esta aba de auto-serviço deve mostrar.
+  const r=await assApi({acao:'listarFerias',filtros:{username:SESSION.username}}); if (!r.ok) return;
   const lista=document.getElementById('lista-minhas-ferias');
   if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Ainda não tem pedidos de ausência.</div>'; return; }
   const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};
