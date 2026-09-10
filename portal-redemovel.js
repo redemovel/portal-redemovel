@@ -1003,6 +1003,7 @@ function assActivar() { if (SESSION) return assIniciar(); }
 let LOCAIS_CACHE = [];
 let COLABORADORES_CACHE = [];
 let FERIAS_CACHE = [];
+let MINHAS_FERIAS_CACHE = [];
 let TURNOS_CACHE = [];
 let HORARIOS_TIPO_CACHE = [];
 let MAPA_CACHE = null;
@@ -2146,16 +2147,132 @@ async function removerExcecao(id) {
 }
 
 // ═══════════════════════════════════════
+//  TABELAS ORDENÁVEIS E FILTRÁVEIS (utilitário genérico)
+// ═══════════════════════════════════════
+// Pedido do Ricardo (2026-09-10): as tabelas de férias deveriam poder ser
+// ordenadas e filtradas por qualquer coluna. Em vez de resolver isto só
+// para essa tabela, ficou como utilitário genérico (indexado por um "id"
+// próprio por tabela) para poder ser reaproveitado noutras listas no
+// futuro. Cada linha de dados é um objecto simples {coluna: valor, ...}
+// usado para ordenar; quando o texto a filtrar deve ser diferente do valor
+// de ordenação (ex.: datas — ordenar por ISO, filtrar pelo formato
+// dd/mm/aaaa que é o que aparece no ecrã), usa-se a chave "coluna__t".
+const TABELA_ESTADO = {};
+function tabelaEstado_(id) {
+  if (!TABELA_ESTADO[id]) TABELA_ESTADO[id] = { sortCol: null, sortDir: 1, filtros: {} };
+  return TABELA_ESTADO[id];
+}
+function tabelaAplicar_(id, linhas) {
+  const est = tabelaEstado_(id);
+  let idx = linhas.map((_, i) => i);
+  Object.keys(est.filtros).forEach(col => {
+    const termo = (est.filtros[col] || '').toString().trim().toLowerCase();
+    if (!termo) return;
+    idx = idx.filter(i => {
+      const v = linhas[i][col + '__t'] !== undefined ? linhas[i][col + '__t'] : linhas[i][col];
+      return String(v ?? '').toLowerCase().includes(termo);
+    });
+  });
+  if (est.sortCol) {
+    idx.sort((a, b) => {
+      const va = linhas[a][est.sortCol], vb = linhas[b][est.sortCol];
+      if (va == null && vb == null) return 0;
+      if (va == null) return -1 * est.sortDir;
+      if (vb == null) return 1 * est.sortDir;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * est.sortDir;
+      return String(va).localeCompare(String(vb), 'pt') * est.sortDir;
+    });
+  }
+  return idx;
+}
+function tabelaOrdenarPor(id, col, renderFn) {
+  const est = tabelaEstado_(id);
+  if (est.sortCol === col) est.sortDir *= -1; else { est.sortCol = col; est.sortDir = 1; }
+  renderFn();
+}
+function tabelaFiltrar(id, col, valor, renderFn) {
+  tabelaEstado_(id).filtros[col] = valor;
+  renderFn();
+}
+function tabelaLimparFiltros(id, renderFn) {
+  tabelaEstado_(id).filtros = {};
+  renderFn();
+}
+function tabelaTemFiltros_(id) {
+  const f = tabelaEstado_(id).filtros;
+  return Object.keys(f).some(k => (f[k] || '').toString().trim() !== '');
+}
+function tabelaSeta_(id, col) {
+  const est = tabelaEstado_(id);
+  if (est.sortCol !== col) return '';
+  return est.sortDir === 1 ? ' ▲' : ' ▼';
+}
+function tabelaTh_(id, label, col, renderFnNome) {
+  return `<th class="sortavel" onclick="tabelaOrdenarPor('${id}','${col}',${renderFnNome})">${label}${tabelaSeta_(id, col)}</th>`;
+}
+function tabelaFiltroTexto_(id, col, renderFnNome, placeholder) {
+  const v = (tabelaEstado_(id).filtros[col] || '').toString().replace(/"/g, '&quot;');
+  return `<input type="text" placeholder="${placeholder || 'filtrar…'}" value="${v}" oninput="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">`;
+}
+function tabelaFiltroSelect_(id, col, renderFnNome, opcoes) {
+  const actual = (tabelaEstado_(id).filtros[col] || '').toString();
+  const opts = ['<option value="">Todos</option>', ...opcoes.map(([v,l]) => `<option value="${v}"${v===actual?' selected':''}>${l}</option>`)].join('');
+  return `<select onchange="tabelaFiltrar('${id}','${col}',this.value,${renderFnNome})">${opts}</select>`;
+}
+
+// ═══════════════════════════════════════
 //  FÉRIAS
 // ═══════════════════════════════════════
+const TIPO_AUSENCIA_LABEL = {ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};
+
+function renderFeriasTabela() {
+  const lista=document.getElementById('lista-ferias');
+  const dados = FERIAS_CACHE || [];
+  if (!dados.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem registos de férias.</div>'; return; }
+  const linhas = dados.map(f => {
+    const col=COLABORADORES_CACHE.find(c=>c.username===f.username), loc=LOCAIS_CACHE.find(l=>l.id===f.localId);
+    return {
+      colaborador: col?.nome||f.username,
+      tipo: TIPO_AUSENCIA_LABEL[f.tipo]||TIPO_AUSENCIA_LABEL.ferias, tipo__t: f.tipo,
+      local: loc?.nome||f.localId, local__t: f.localId,
+      inicio: String(f.dataInicio).slice(0,10), inicio__t: assFormatarData(f.dataInicio),
+      fim: String(f.dataFim).slice(0,10), fim__t: assFormatarData(f.dataFim),
+      dias: Number(f.diasUteis)||0,
+      estado: f.estado,
+      _f: f
+    };
+  });
+  const idx = tabelaAplicar_('ferias', linhas);
+  const th = (label, col) => tabelaTh_('ferias', label, col, 'renderFeriasTabela');
+  const locaisOpts = LOCAIS_CACHE.map(l => [l.id, l.nome]);
+  const tiposOpts = Object.keys(TIPO_AUSENCIA_LABEL).map(k => [k, TIPO_AUSENCIA_LABEL[k]]);
+  const estadosOpts = [['pendente','pendente'],['aprovado','aprovado'],['rejeitado','rejeitado']];
+  const linhaFiltros = `<tr class="tbl-filtros">
+      <td>${tabelaFiltroTexto_('ferias','colaborador','renderFeriasTabela')}</td>
+      <td>${tabelaFiltroSelect_('ferias','tipo','renderFeriasTabela',tiposOpts)}</td>
+      <td>${tabelaFiltroSelect_('ferias','local','renderFeriasTabela',locaisOpts)}</td>
+      <td>${tabelaFiltroTexto_('ferias','inicio','renderFeriasTabela','dd/mm/aaaa')}</td>
+      <td>${tabelaFiltroTexto_('ferias','fim','renderFeriasTabela','dd/mm/aaaa')}</td>
+      <td>${tabelaFiltroTexto_('ferias','dias','renderFeriasTabela')}</td>
+      <td>${tabelaFiltroSelect_('ferias','estado','renderFeriasTabela',estadosOpts)}</td>
+      <td>${tabelaTemFiltros_('ferias')?'<span class="tbl-limpar-filtros" onclick="tabelaLimparFiltros(\'ferias\',renderFeriasTabela)">✕ limpar</span>':''}</td>
+    </tr>`;
+  const corpo = idx.length
+    ? idx.map(i=>{
+        const f = linhas[i]._f, o=linhas[i];
+        const cor=o.estado==='aprovado'?'color:#00a878':o.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
+        return `<tr><td style="font-weight:600">${o.colaborador}</td><td style="font-size:.8rem">${o.tipo}</td><td>${o.local}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button>${SESSION.role==='master'?` <button class="btn-sm danger" onclick="apagarFeriasConfirm('${f.id}')" title="Apagar">🗑</button>`:''}</td></tr>`;
+      }).join('')
+    : `<tr><td colspan="8" style="text-align:center;padding:1.2rem;color:var(--text-muted)">Nenhum registo com estes filtros.</td></tr>`;
+  lista.innerHTML = `<table class="tbl"><thead><tr>${th('Colaborador','colaborador')}${th('Tipo','tipo')}${th('Local','local')}${th('Início','inicio')}${th('Fim','fim')}${th('Dias úteis','dias')}${th('Estado','estado')}<th></th></tr>${linhaFiltros}</thead><tbody>${corpo}</tbody></table>`;
+}
+
 async function carregarFerias() {
   const ano = document.getElementById('fer-filtro-ano')?.value;
   const filtros = {}; if (ano) filtros.ano = ano;
   const r=await assApi({acao:'listarFerias',filtros}); if (!r.ok) return;
-  const lista=document.getElementById('lista-ferias');
-  if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem registos de férias.</div>'; return; }
-  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};   lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th><th></th></tr></thead><tbody>${r.ferias.map(f=>{const col=COLABORADORES_CACHE.find(c=>c.username===f.username),loc=LOCAIS_CACHE.find(l=>l.id===f.localId);const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;return `<tr><td style="font-weight:600">${col?.nome||f.username}</td><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button>${SESSION.role==='master'?` <button class="btn-sm danger" onclick="apagarFeriasConfirm('${f.id}')" title="Apagar">🗑</button>`:''}</td></tr>`;}).join('')}</tbody></table>`;
   FERIAS_CACHE = r.ferias;
+  renderFeriasTabela();
 }
 
 // 2026-09-10: apagar uma ausência — só master (ver fsApagarFerias). Pede
@@ -2259,6 +2376,45 @@ function showFeriasColabTab(id, btn) {
   }
 }
 
+function renderMinhasFeriasTabela() {
+  const lista=document.getElementById('lista-minhas-ferias');
+  const dados = MINHAS_FERIAS_CACHE || [];
+  if (!dados.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Ainda não tem pedidos de ausência.</div>'; return; }
+  const linhas = dados.map(f => {
+    const loc=LOCAIS_CACHE.find(l=>l.id===f.localId);
+    return {
+      tipo: TIPO_AUSENCIA_LABEL[f.tipo]||TIPO_AUSENCIA_LABEL.ferias, tipo__t: f.tipo,
+      local: loc?.nome||f.localId||'—', local__t: f.localId||'',
+      inicio: String(f.dataInicio).slice(0,10), inicio__t: assFormatarData(f.dataInicio),
+      fim: String(f.dataFim).slice(0,10), fim__t: assFormatarData(f.dataFim),
+      dias: Number(f.diasUteis)||0,
+      estado: f.estado,
+      _f: f
+    };
+  });
+  const idx = tabelaAplicar_('minhasferias', linhas);
+  const th = (label, col) => tabelaTh_('minhasferias', label, col, 'renderMinhasFeriasTabela');
+  const locaisOpts = LOCAIS_CACHE.map(l => [l.id, l.nome]);
+  const tiposOpts = Object.keys(TIPO_AUSENCIA_LABEL).map(k => [k, TIPO_AUSENCIA_LABEL[k]]);
+  const estadosOpts = [['pendente','pendente'],['aprovado','aprovado'],['rejeitado','rejeitado']];
+  const linhaFiltros = `<tr class="tbl-filtros">
+      <td>${tabelaFiltroSelect_('minhasferias','tipo','renderMinhasFeriasTabela',tiposOpts)}</td>
+      <td>${tabelaFiltroSelect_('minhasferias','local','renderMinhasFeriasTabela',locaisOpts)}</td>
+      <td>${tabelaFiltroTexto_('minhasferias','inicio','renderMinhasFeriasTabela','dd/mm/aaaa')}</td>
+      <td>${tabelaFiltroTexto_('minhasferias','fim','renderMinhasFeriasTabela','dd/mm/aaaa')}</td>
+      <td>${tabelaFiltroTexto_('minhasferias','dias','renderMinhasFeriasTabela')}</td>
+      <td>${tabelaFiltroSelect_('minhasferias','estado','renderMinhasFeriasTabela',estadosOpts)}${tabelaTemFiltros_('minhasferias')?'<span class="tbl-limpar-filtros" onclick="tabelaLimparFiltros(\'minhasferias\',renderMinhasFeriasTabela)">✕ limpar</span>':''}</td>
+    </tr>`;
+  const corpo = idx.length
+    ? idx.map(i=>{
+        const o=linhas[i];
+        const cor=o.estado==='aprovado'?'color:#00a878':o.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
+        return `<tr><td style="font-size:.8rem">${o.tipo}</td><td>${o.local}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td></tr>`;
+      }).join('')
+    : `<tr><td colspan="6" style="text-align:center;padding:1.2rem;color:var(--text-muted)">Nenhum registo com estes filtros.</td></tr>`;
+  lista.innerHTML = `<table class="tbl"><thead><tr>${th('Tipo','tipo')}${th('Local','local')}${th('Início','inicio')}${th('Fim','fim')}${th('Dias úteis','dias')}${th('Estado','estado')}</tr>${linhaFiltros}</thead><tbody>${corpo}</tbody></table>`;
+}
+
 async function carregarMinhasFerias() {
   if (!LOCAIS_CACHE.length) await carregarLocaisCache();
   // Envia sempre o próprio username no filtro: para um colaborador comum o
@@ -2269,16 +2425,11 @@ async function carregarMinhasFerias() {
   const ano = document.getElementById('minhasferias-ano')?.value;
   const filtros = {username:SESSION.username}; if (ano) filtros.ano = ano;
   const r=await assApi({acao:'listarFerias',filtros}); if (!r.ok) return;
-  const lista=document.getElementById('lista-minhas-ferias');
-  if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Ainda não tem pedidos de ausência.</div>'; return; }
-  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};
-  const porData=(a,b)=>String(b.dataInicio).localeCompare(String(a.dataInicio));
-  lista.innerHTML=`<table class="tbl"><thead><tr><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th></tr></thead><tbody>${[...r.ferias].sort(porData).map(f=>{
-    const loc=LOCAIS_CACHE.find(l=>l.id===f.localId);
-    const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
-    const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;
-    return `<tr><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId||'—'}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td></tr>`;
-  }).join('')}</tbody></table>`;
+  MINHAS_FERIAS_CACHE = [...r.ferias].sort((a,b)=>String(b.dataInicio).localeCompare(String(a.dataInicio)));
+  // Ordenação por data (mais recente primeiro) só como ponto de partida — se
+  // o colaborador clicar num cabeçalho, tabelaAplicar_ passa a mandar.
+  if (!tabelaEstado_('minhasferias').sortCol) { tabelaEstado_('minhasferias').sortCol = 'inicio'; tabelaEstado_('minhasferias').sortDir = -1; }
+  renderMinhasFeriasTabela();
 }
 
 function abrirModalPedirFerias() {
