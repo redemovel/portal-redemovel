@@ -1019,11 +1019,18 @@ function showGestaoTab(id, btn) {
     const horMes=document.getElementById('hor-mes');
     if (horMes&&!horMes.value) { const h=new Date(); horMes.value=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   }
-  if (id==='ferias') { carregarFerias(); popularSelectLocal('fer-local'); popularColaboradoresSelect('fer-colaborador'); }
+  // 2026-09-10: deixaram de carregar automaticamente ao abrir a aba (pedido
+  // do Ricardo, mesmo padrão já aplicado a Atribuições/Exceções) — só
+  // preenchem os dropdowns/o ano por omissão; os dados só vêm depois de
+  // clicar em "Procurar"/"Actualizar".
+  if (id==='ferias') {
+    popularSelectLocal('fer-local'); popularColaboradoresSelect('fer-colaborador');
+    const anoInp=document.getElementById('fer-filtro-ano');
+    if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
+  }
   if (id==='mapaferias') {
     const anoInp=document.getElementById('mapaferias-ano');
     if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
-    carregarMapaFerias();
   }
   if (id==='aprovacoes') carregarAprovacoes();
   if (id==='mapa') {
@@ -2123,11 +2130,25 @@ async function removerExcecao(id) {
 //  FÉRIAS
 // ═══════════════════════════════════════
 async function carregarFerias() {
-  const r=await assApi({acao:'listarFerias',filtros:{}}); if (!r.ok) return;
+  const ano = document.getElementById('fer-filtro-ano')?.value;
+  const filtros = {}; if (ano) filtros.ano = ano;
+  const r=await assApi({acao:'listarFerias',filtros}); if (!r.ok) return;
   const lista=document.getElementById('lista-ferias');
   if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem registos de férias.</div>'; return; }
-  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};   lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th><th></th></tr></thead><tbody>${r.ferias.map(f=>{const col=COLABORADORES_CACHE.find(c=>c.username===f.username),loc=LOCAIS_CACHE.find(l=>l.id===f.localId);const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;return `<tr><td style="font-weight:600">${col?.nome||f.username}</td><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button></td></tr>`;}).join('')}</tbody></table>`;
+  const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};   lista.innerHTML=`<table class="tbl"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Local</th><th>Início</th><th>Fim</th><th>Dias úteis</th><th>Estado</th><th></th></tr></thead><tbody>${r.ferias.map(f=>{const col=COLABORADORES_CACHE.find(c=>c.username===f.username),loc=LOCAIS_CACHE.find(l=>l.id===f.localId);const cor=f.estado==='aprovado'?'color:#00a878':f.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';const tAus=tipoAusLabel[f.tipo]||tipoAusLabel.ferias;return `<tr><td style="font-weight:600">${col?.nome||f.username}</td><td style="font-size:.8rem">${tAus}</td><td>${loc?.nome||f.localId}</td><td>${assFormatarData(f.dataInicio)}</td><td>${assFormatarData(f.dataFim)}</td><td style="text-align:center;font-weight:700">${f.diasUteis}</td><td style="${cor};font-weight:600;font-size:.8rem">${f.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button>${SESSION.role==='master'?` <button class="btn-sm danger" onclick="apagarFeriasConfirm('${f.id}')" title="Apagar">🗑</button>`:''}</td></tr>`;}).join('')}</tbody></table>`;
   FERIAS_CACHE = r.ferias;
+}
+
+// 2026-09-10: apagar uma ausência — só master (ver fsApagarFerias). Pede
+// sempre um motivo (obrigatório no backend) e confirmação extra, por ser
+// destrutivo e irreversível.
+async function apagarFeriasConfirm(id) {
+  const motivo = prompt('Motivo para apagar esta ausência (obrigatório):');
+  if (!motivo || !motivo.trim()) return;
+  if (!confirm('Apagar definitivamente esta ausência? Esta acção não pode ser desfeita.')) return;
+  const r = await assApi({acao:'apagarFerias', id, motivo:motivo.trim()});
+  if (!r.ok) { alert(r.erro||'Erro ao apagar.'); return; }
+  carregarFerias();
 }
 
 function abrirEditarFerias(id) {
@@ -2207,11 +2228,15 @@ function showFeriasColabTab(id, btn) {
   view.querySelectorAll('.gestao-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('gpanel-'+id).classList.add('active');
   if (btn) btn.classList.add('active');
-  if (id==='minhasferias') carregarMinhasFerias();
+  // 2026-09-10: idem — deixou de carregar sozinho ao abrir a sub-aba, só
+  // preenche o ano por omissão; espera pelo clique em "Procurar"/"Actualizar".
+  if (id==='minhasferias') {
+    const anoInp=document.getElementById('minhasferias-ano');
+    if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
+  }
   if (id==='mapaferiascolab') {
     const anoInp=document.getElementById('mapaferiascolab-ano');
     if (anoInp && !anoInp.value) anoInp.value = new Date().getFullYear();
-    carregarMapaFerias('mapaferiascolab-ano','mapaferiascolab-conteudo');
   }
 }
 
@@ -2222,7 +2247,9 @@ async function carregarMinhasFerias() {
   // preciso pedir explicitamente — sem isto, fsListarFerias devolve-lhes
   // TODOS os pedidos do sistema (é o que já fazem em Gestão → Férias), não
   // só os seus próprios, que é o que esta aba de auto-serviço deve mostrar.
-  const r=await assApi({acao:'listarFerias',filtros:{username:SESSION.username}}); if (!r.ok) return;
+  const ano = document.getElementById('minhasferias-ano')?.value;
+  const filtros = {username:SESSION.username}; if (ano) filtros.ano = ano;
+  const r=await assApi({acao:'listarFerias',filtros}); if (!r.ok) return;
   const lista=document.getElementById('lista-minhas-ferias');
   if (!r.ferias.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Ainda não tem pedidos de ausência.</div>'; return; }
   const tipoAusLabel={ferias:'🏖 Férias',baixa_medica:'🏥 Baixa médica',licenca:'📄 Licença',outro:'❓ Outro'};
