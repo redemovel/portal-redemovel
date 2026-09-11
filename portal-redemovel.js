@@ -2668,7 +2668,7 @@ window.carregarMapaFerias = carregarMapaFerias;
 
 async function carregarMapa() {
   const localId=document.getElementById('mapa-local').value, mesAno=document.getElementById('mapa-mes').value;
-  if (!mesAno) return;
+  if (!mesAno) { alert('Seleciona um mês no Mapa Mensal.'); return; }
   const r=await assApi({acao:'mapaMenusal',mesAno,localId}); if (!r.ok) return;
   MAPA_CACHE=r;
   const container=document.getElementById('mapa-conteudo');
