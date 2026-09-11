@@ -112,6 +112,18 @@
   .camara-preview { width: 100%; height: 100%; object-fit: contain; }
   .camara-acoes { padding: 1rem 1.25rem 1.4rem; display: flex; gap: 0.6rem; }
   .camara-acoes .btn { margin: 0; }
+
+  /* ═══ Justificação (registo fora de zona) ═══ */
+  .justif-overlay {
+    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1000;
+    background: rgba(11,31,31,0.6); display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+  }
+  .justif-cartao { background: var(--white); border-radius: 14px; padding: 1.25rem; width: 100%; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+  .justif-titulo { font-weight: 800; font-size: 1.05rem; color: var(--text); margin-bottom: 0.3rem; }
+  .justif-sub { font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.9rem; }
+  .justif-erro { color: #b3000a; font-size: 0.8rem; margin: -0.4rem 0 0.9rem; }
+  .justif-acoes { display: flex; gap: 0.6rem; }
+  .justif-acoes .btn { margin: 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -223,6 +235,26 @@
      disso fica visualmente escondido mas continua "presente" no layout. -->
 <input type="file" accept="image/*" capture="user" id="inp-foto"
   style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">
+
+<!-- ═══ Justificação (fora de zona) ═══
+     Mostrado só quando a entrada é feita fora de todas as balizas — pede o
+     motivo ao colaborador antes de o registo (com foto+localização já
+     obtidas) ser efectivamente gravado. -->
+<div class="justif-overlay" id="tela-justificativa" hidden>
+  <div class="justif-cartao">
+    <div class="justif-titulo">📍 Fora da zona habitual</div>
+    <div class="justif-sub" id="justif-sub-texto"></div>
+    <label class="form-label" for="inp-justificativa">Motivo do registo fora da zona</label>
+    <textarea class="form-input" id="inp-justificativa" rows="3"
+      style="resize:vertical;min-height:80px"
+      placeholder="Ex.: reunião no cliente X, visita a fornecedor…"></textarea>
+    <div class="justif-erro" id="justif-erro" style="display:none"></div>
+    <div class="justif-acoes">
+      <button class="btn btn-secundario" onclick="cancelarJustificativa()">Cancelar</button>
+      <button class="btn btn-entrada" onclick="confirmarJustificativa()">✓ Confirmar registo</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // Fixo — o endereço da Apps Script que continua a servir de backend
@@ -567,6 +599,38 @@ function cancelarCamara() {
   reject(new Error('Captura de foto cancelada.'));
 }
 
+// ═══ Justificação (registo fora de zona) ═══
+// 2026-09-11, pedido do Ricardo: quando a entrada é feita fora de todas as
+// balizas, pede-se ao colaborador o motivo (em vez de só se gravar uma nota
+// automática com a distância) — ajuda o coordenador a perceber o contexto na
+// aprovação. Devolve o texto escrito, ou null se o colaborador cancelar.
+function pedirJustificativa(balizaNome, distanciaMetros) {
+  return new Promise(resolve => {
+    const sub = document.getElementById('justif-sub-texto');
+    const input = document.getElementById('inp-justificativa');
+    const erro = document.getElementById('justif-erro');
+    const distTxt = distanciaMetros != null ? `, a ${distanciaMetros}m` : '';
+    sub.textContent = `Estás fora das zonas habituais${balizaNome ? ' (mais próxima: ' + balizaNome + distTxt + ')' : ''}. Escreve o motivo para que o coordenador possa avaliar o registo.`;
+    input.value = '';
+    erro.style.display = 'none';
+    document.getElementById('tela-justificativa').hidden = false;
+    input.focus();
+    window._justifResolve = resolve;
+  });
+}
+function confirmarJustificativa() {
+  const input = document.getElementById('inp-justificativa');
+  const erro = document.getElementById('justif-erro');
+  const texto = input.value.trim();
+  if (!texto) { erro.textContent = 'Escreve um motivo antes de confirmar.'; erro.style.display = 'block'; return; }
+  document.getElementById('tela-justificativa').hidden = true;
+  window._justifResolve(texto);
+}
+function cancelarJustificativa() {
+  document.getElementById('tela-justificativa').hidden = true;
+  window._justifResolve(null);
+}
+
 // ═══ Acções ═══
 async function registarAcao(tipo) {
   limparAlertas();
@@ -592,7 +656,20 @@ async function registarAcao(tipo) {
 
     const dados = { localId: '', lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy, foto };
     let r;
-    if (tipo === 'entrada') r = await chamarApi({ acao: 'registarEntradaMovel', dados });
+    if (tipo === 'entrada') {
+      r = await chamarApi({ acao: 'registarEntradaMovel', dados });
+      // Fora de todas as zonas habituais: o servidor ainda não escreveu nada
+      // (nem gastou a foto) — pede-se aqui o motivo ao próprio colaborador,
+      // sem repetir a câmara nem a localização, e volta a chamar-se a mesma
+      // acção já com a justificação preenchida.
+      if (!r.ok && r.requerJustificativa) {
+        statusProcesso('');
+        const justificativa = await pedirJustificativa(r.balizaNome, r.distanciaMetros);
+        if (justificativa === null) { statusProcesso(''); return; } // colaborador cancelou
+        statusProcesso('A enviar registo…');
+        r = await chamarApi({ acao: 'registarEntradaMovel', dados: { ...dados, justificativa } });
+      }
+    }
     else if (tipo === 'saida') r = await chamarApi({ acao: 'registarSaidaMovel', dados });
     else if (tipo === 'pausa' || tipo === 'retorno') {
       const reg = REGISTO_HOJE; let num = 1;
