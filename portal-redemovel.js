@@ -2490,7 +2490,15 @@ async function carregarAprovacoes() {
            <a href="https://www.google.com/maps?q=${a.movelLat},${a.movelLng}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>
            ${a.movelFotoUrl?`<a href="${a.movelFotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
          </div>` : '';
-    return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
+    // 2026-09-11, pedido do Ricardo: hora real do registo + hora prevista do
+    // turno bem visíveis no cartão (em vez de só embutidas no texto do
+    // motivo) — ajuda a decidir sem ter de ir ler a frase toda. Nem todas as
+    // aprovações têm turno previsto (ex.: comerciais/AVAC sem horário fixo).
+    const temHoras = a.horaRealMin !== undefined && a.horaRealMin !== null && a.horaRealMin !== '';
+    const horasLinha = temHoras
+      ? `<div style="margin-top:.3rem;font-size:.78rem;color:var(--text-muted)">🕐 Registo real: <strong style="color:var(--text)">${assMinParaHora(a.horaRealMin)}</strong> · Turno previsto: <strong style="color:var(--text)">${(a.horaPrevistaMin !== undefined && a.horaPrevistaMin !== null && a.horaPrevistaMin !== '') ? assMinParaHora(a.horaPrevistaMin) : 'sem turno atribuído'}</strong></div>`
+      : '';
+    return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${horasLinha}${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
 }
 
 function renderAprovacoesBadge(count) {
