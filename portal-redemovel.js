@@ -2657,17 +2657,36 @@ async function carregarMapa() {
   const container=document.getElementById('mapa-conteudo');
   if (!r.colaboradores.length) { container.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text-muted)">Sem registos neste período.</div>'; return; }
   container.innerHTML=`<div style="margin-bottom:1rem;font-size:.82rem;color:var(--text-muted)">Período: ${assFormatarData(r.periodoInicio)} a ${assFormatarData(r.periodoFim)}</div>
-  <table class="tbl"><thead><tr><th>Colaborador</th><th>Normal</th><th>Nocturno</th><th>Sábado</th><th>Domingo</th><th>Feriado</th><th>1ª H. Extra</th><th>H. Extra Seg.</th><th>Total</th><th>Distribuição</th></tr></thead><tbody>
-  ${r.colaboradores.map(col=>{const t=col.totais,total=t.total||1;return `<tr><td style="font-weight:700">${col.nome}</td><td>${minParaHoraH(t.normal)}</td><td style="color:#1e40af">${minParaHoraH(t.noturno)}</td><td style="color:#d97706">${minParaHoraH(t.sabado)}</td><td style="color:var(--danger)">${minParaHoraH(t.domingo)}</td><td style="color:#7c3aed">${minParaHoraH(t.feriado)}</td><td style="color:#dc2626">${minParaHoraH(t.extraPrimeira)}</td><td style="color:#f97316">${minParaHoraH(t.extraSubsequente)}</td><td style="font-weight:800">${minParaHoraH(t.total)}</td><td style="min-width:120px"><div class="hora-bar">${barra('normal',t.normal,total)}${barra('noturno',t.noturno,total)}${barra('sabado',t.sabado,total)}${barra('domingo',t.domingo,total)}${barra('feriado',t.feriado,total)}${barra('extraPrimeira',t.extraPrimeira,total)}${barra('extraSubsequente',t.extraSubsequente,total)}</div></td></tr>`;}).join('')}</tbody></table>`;
+  <table class="tbl"><thead><tr><th>Colaborador</th><th>Normal</th><th>Nocturno</th><th>Sábado</th><th>Domingo</th><th>Feriado</th><th>1ª H. Extra</th><th>H. Extra Seg.</th><th>Total</th><th>Distribuição</th><th>🏖 Férias</th><th>🏥 Baixa</th><th>📄 Licença</th><th>❓ Outro</th></tr></thead><tbody>
+  ${r.colaboradores.map(col=>{const t=col.totais,total=t.total||1,a=col.ausencias||{};return `<tr><td style="font-weight:700">${col.nome}</td><td>${minParaHoraH(t.normal)}</td><td style="color:#1e40af">${minParaHoraH(t.noturno)}</td><td style="color:#d97706">${minParaHoraH(t.sabado)}</td><td style="color:var(--danger)">${minParaHoraH(t.domingo)}</td><td style="color:#7c3aed">${minParaHoraH(t.feriado)}</td><td style="color:#dc2626">${minParaHoraH(t.extraPrimeira)}</td><td style="color:#f97316">${minParaHoraH(t.extraSubsequente)}</td><td style="font-weight:800">${minParaHoraH(t.total)}</td><td style="min-width:120px"><div class="hora-bar">${barra('normal',t.normal,total)}${barra('noturno',t.noturno,total)}${barra('sabado',t.sabado,total)}${barra('domingo',t.domingo,total)}${barra('feriado',t.feriado,total)}${barra('extraPrimeira',t.extraPrimeira,total)}${barra('extraSubsequente',t.extraSubsequente,total)}</div></td><td style="text-align:center">${a.ferias||0}</td><td style="text-align:center">${a.baixa_medica||0}</td><td style="text-align:center">${a.licenca||0}</td><td style="text-align:center">${a.outro||0}</td></tr>`;}).join('')}</tbody></table>`;
 }
 
 function barra(tipo,val,total) { if(!val) return ''; const pct=Math.round((val/total)*100); return `<div class="hora-seg ${tipo}" style="width:${pct}%" title="${tipo}: ${minParaHoraH(val)}"></div>`; }
 
-function exportarCSV() {
-  if (!MAPA_CACHE) return;
-  const linhas=['Colaborador;Normal;Noturno;Sábado;Domingo;Feriado;1ª H. Extra;H. Extra Seguintes;Total (horas)',...MAPA_CACHE.colaboradores.map(c=>{const t=c.totais,h=v=>(v/60).toFixed(2);return `${c.nome};${h(t.normal)};${h(t.noturno)};${h(t.sabado)};${h(t.domingo)};${h(t.feriado)};${h(t.extraPrimeira)};${h(t.extraSubsequente)};${h(t.total)}`;})];
-  const blob=new Blob([linhas.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`mapa_horas_${document.getElementById('mapa-mes').value}.csv`; a.click();
+// 2026-09-10, pedido do Ricardo: exportar para Excel (.xlsx) já formatado —
+// cabeçalho a cor/negrito, larguras de coluna, dias de férias/baixa/licença
+// juntos com as horas no mesmo ficheiro — em vez do .csv simples anterior.
+// O ficheiro é montado no backend (fsExportarMapaMenusalExcel, usa uma folha
+// de cálculo temporária para ter formatação real) e devolvido em base64;
+// aqui só é preciso transformar isso num ficheiro e descarregar.
+async function exportarExcel() {
+  const localId=document.getElementById('mapa-local').value, mesAno=document.getElementById('mapa-mes').value;
+  if (!mesAno) { alert('Seleciona um mês no Mapa Mensal.'); return; }
+  const btn = document.getElementById('btn-exportar-excel');
+  const textoOriginal = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'A gerar…'; }
+  try {
+    const r = await assApi({acao:'exportarMapaMenusalExcel', mesAno, localId});
+    if (!r.ok) { alert(r.erro || 'Erro ao gerar o Excel.'); return; }
+    const bin = atob(r.ficheiro);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=r.nomeFicheiro||`mapa_horas_${mesAno}.xlsx`; a.click();
+    URL.revokeObjectURL(a.href);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+  }
 }
 
 // ═══════════════════════════════════════
