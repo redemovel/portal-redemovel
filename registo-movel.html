@@ -285,16 +285,22 @@ function statusProcesso(msg) {
 // cross-origin (este site → Apps Script) — já era assim antes (a página
 // era servida num domínio googleusercontent.com diferente do script.google.com
 // do endpoint) e já funcionava, por isso não muda nada aqui.
+// 2026-09-11: subido de 2 para 3 tentativas, com espaçamento crescente — mesma
+// razão e correcção aplicada a fetchComRetry em portal-redemovel.js (limite de
+// execuções simultâneas da Apps Script, confirmado inofensivo no registo de
+// Execuções — o servidor conclui sempre bem, o pedido a mais é que nem chega a
+// arrancar quando várias lojas/pessoas usam o portal ao mesmo tempo).
 async function chamarApi(payload) {
   const corpo = { ...payload, username: SESSAO ? SESSAO.username : payload.username, password: SESSAO ? SESSAO.password : payload.password };
-  for (let i = 0; i < 2; i++) {
+  const TENTATIVAS = 3;
+  for (let i = 0; i < TENTATIVAS; i++) {
     try {
       const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(corpo) });
       if (!res.ok) throw 0;
       const texto = await res.text();
       return JSON.parse(texto);
     } catch (_) {
-      if (i === 0) await new Promise(r => setTimeout(r, 800));
+      if (i < TENTATIVAS - 1) await new Promise(r => setTimeout(r, 900 + i*500));
     }
   }
   return { ok: false, erro: 'Sem resposta do servidor. Verifica a ligação e tenta novamente.' };
