@@ -289,12 +289,21 @@ function hideGlobalLoading() {
     document.body.classList.remove('is-loading');
   }
 }
-// Envolve o fetch com 1 repetição automática e silenciosa — cobre pedidos que
+// Envolve o fetch com repetições automáticas e silenciosas — cobre pedidos que
 // falham na rede, voltam com status de erro, ou vêm com corpo inválido (não-JSON).
-// Não resolve a causa (limite de execuções simultâneas do Apps Script), mas evita
-// que o colaborador veja um erro por causa de uma falha pontual e transitória.
+// Não resolve a causa (limite de execuções simultâneas do Apps Script — mais
+// apertado em contas Google pessoais do que em contas Workspace), mas evita que
+// o colaborador veja um erro por causa de uma falha pontual e transitória.
+// 2026-09-11, investigação de erros CORS/ERR_FAILED reportados pelo Ricardo:
+// confirmado no registo de Execuções da Apps Script que o servidor está sempre
+// a concluir sem erro nenhum — o pedido falhado nem chega a aparecer lá, porque
+// é rejeitado na própria rede quando várias lojas/pessoas pedem ao mesmo tempo
+// (visto no registo: várias chamadas doPost no mesmo segundo exacto). Subido de
+// 2 para 3 tentativas, com um espaçamento maior e crescente entre elas (em vez
+// de um valor fixo), para dar mais hipótese de apanhar uma janela livre quando
+// o portal está a ser usado por várias lojas em simultâneo.
 async function fetchComRetry(url, payload, tentativas) {
-  tentativas = tentativas || 2;
+  tentativas = tentativas || 3;
   let ultimoErro = 'Sem resposta do servidor.';
   for (let i = 0; i < tentativas; i++) {
     try {
@@ -304,7 +313,7 @@ async function fetchComRetry(url, payload, tentativas) {
       try { return JSON.parse(texto); }
       catch(_) { ultimoErro = 'Resposta inválida do servidor.'; throw 0; }
     } catch(_) {
-      if (i < tentativas - 1) await new Promise(r => setTimeout(r, 700 + Math.random()*500));
+      if (i < tentativas - 1) await new Promise(r => setTimeout(r, 900 + i*500 + Math.random()*500));
     }
   }
   return {ok:false, erro: ultimoErro + ' Tenta novamente.'};
@@ -313,7 +322,7 @@ async function fetchComRetry(url, payload, tentativas) {
 async function api(payload) {
   showGlobalLoading();
   try {
-    return await fetchComRetry(SCRIPT_URL, payload, 2);
+    return await fetchComRetry(SCRIPT_URL, payload, 3);
   } finally {
     hideGlobalLoading();
   }
@@ -366,7 +375,7 @@ async function assApi(payload) {
   };
   showGlobalLoading(msgs[payload.acao] || 'A processar…');
   try {
-    return await fetchComRetry(ASS_URL, {...payload,username:SESSION.username,password:SESSION.password}, 2);
+    return await fetchComRetry(ASS_URL, {...payload,username:SESSION.username,password:SESSION.password}, 3);
   } finally {
     hideGlobalLoading();
   }
