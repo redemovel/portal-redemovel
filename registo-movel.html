@@ -20,10 +20,14 @@
       body.style.transform='scale('+escala+')';
       body.style.transformOrigin='top left';
       body.style.width=(100/escala)+'%';
-      body.style.height=(h/escala)+'px';
+      // 2026-09-11: apenas a altura MÍNIMA fica presa a uma tela (garante o
+      // preenchimento do ecrã em páginas curtas) — 'height'/'maxHeight' fixos
+      // e 'overflowY:hidden' foram removidos porque bloqueavam o scroll
+      // sempre que o conteúdo crescia além de uma tela (ex.: painel "Regras
+      // e RGPD" expandido), impedindo o colaborador de ver o resto do texto
+      // e o botão "Li e tomei conhecimento". Sem altura máxima fixa, o body
+      // cresce normalmente e o scroll da página trata do resto.
       body.style.minHeight=(h/escala)+'px';
-      body.style.maxHeight=(h/escala)+'px';
-      body.style.overflowY='hidden';
     }
   }
   if(document.body){ajustar();}
