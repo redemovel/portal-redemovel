@@ -338,33 +338,31 @@ function hideGlobalLoading() {
 // 2 para 3 tentativas, com um espaçamento maior e crescente entre elas (em vez
 // de um valor fixo), para dar mais hipótese de apanhar uma janela livre quando
 // o portal está a ser usado por várias lojas em simultâneo.
-// 2026-09-12 (2ª ronda de auditoria): duas correcções a este pedido:
-//  1. Timeout por tentativa (AbortController) — sem isto, se o servidor não
-//     responder mesmo, cada tentativa podia ficar pendurada indefinidamente
-//     e, com 3 tentativas, isso eram minutos de espera sem feedback nenhum.
-//  2. Backoff exponencial em vez de quase-linear (900-1400ms, 1400-1900ms) —
-//     para um serviço que rejeita por saturação de execuções simultâneas
-//     (o cenário documentado acima), dar mais espaço entre tentativas
-//     sucessivas aumenta a hipótese real de apanhar uma janela livre.
-// 2026-09-12 (correcção no mesmo dia, com dados reais do Ricardo): o valor
-// inicial de 15s estava demasiado apertado — em produção, sob a mesma
-// saturação de execuções simultâneas já documentada, respostas legítimas
-// (que iam suceder) estavam a demorar 8-14s, e o AbortController abortava-as
-// mesmo antes de chegarem, forçando uma nova tentativa do zero. Abortar do
-// lado do browser NÃO cancela a execução do lado da Apps Script (essa
-// continua a correr e a ocupar a mesma quota partilhada) — por isso abortar
-// cedo de mais não alivia a saturação, agrava-a (soma mais um pedido a competir
-// pela mesma quota). Subido para 40s: continua a servir de rede de segurança
-// para uma ligação genuinamente presa, sem interromper respostas apenas lentas.
-async function fetchComRetry(url, payload, tentativas, timeoutMs) {
+// 2026-09-12 (2ª ronda de auditoria, REVERTIDO no mesmo dia): tinha sido
+// acrescentado aqui um timeout por tentativa (AbortController), a sugestão da
+// auditoria para o caso de uma tentativa ficar pendurada para sempre sem
+// resposta nenhuma. Com dados reais de produção do Ricardo (2 incidentes no
+// mesmo dia, o 2º depois de já ter subido o valor de 15s para 40s a tentar
+// corrigir o 1º), ficou claro que essa premissa não correspondia à realidade
+// desta Apps Script: não há tentativas presas para sempre, há respostas
+// legítimas e lentas — 8s, 14s, até 30s sob a mesma saturação de execuções
+// simultâneas já documentada — que o timeout interrompia mesmo antes de
+// chegarem. E abortar do lado do browser NÃO cancela a execução do lado da
+// Apps Script — essa continua a correr e a ocupar a mesma quota partilhada —
+// pelo que cada aborto seguido de nova tentativa só somava mais um pedido a
+// competir pela mesma quota, piorando precisamente o problema que já
+// vínhamos a combater há semanas. Revertido para esperar sem limite de tempo,
+// como sempre foi antes desta ronda de auditoria — o backoff exponencial
+// entre tentativas (abaixo) mantém-se, é inofensivo e ajuda a espaçar
+// tentativas sucessivas. Para a lentidão em si, a única correcção que ajuda
+// de facto é do lado da quota (ver 26º seguimento — conta Google Workspace
+// vs pessoal), não um timeout no cliente.
+async function fetchComRetry(url, payload, tentativas) {
   tentativas = tentativas || 3;
-  timeoutMs = timeoutMs || 40000;
   let ultimoErro = 'Sem resposta do servidor.';
   for (let i = 0; i < tentativas; i++) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {method:'POST', body: JSON.stringify(payload), signal: ctrl.signal});
+      const res = await fetch(url, {method:'POST', body: JSON.stringify(payload)});
       if (!res.ok) { ultimoErro = 'Erro do servidor (HTTP '+res.status+').'; }
       else {
         const texto = await res.text();
@@ -372,9 +370,7 @@ async function fetchComRetry(url, payload, tentativas, timeoutMs) {
         catch(_) { ultimoErro = 'Resposta inválida do servidor.'; }
       }
     } catch(e) {
-      ultimoErro = (e && e.name === 'AbortError') ? 'Servidor não respondeu a tempo.' : 'Falha de ligação.';
-    } finally {
-      clearTimeout(t);
+      ultimoErro = 'Falha de ligação.';
     }
     if (i < tentativas - 1) {
       const base = 800 * Math.pow(2, i); // 800, 1600, 3200…
