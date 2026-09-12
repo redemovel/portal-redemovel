@@ -1,5 +1,34 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
 
+// 2026-09-12 (Fase 1b — routing shim): o registo de ponto (e a autenticação
+// que o antecede) passaram a ser servidos por um serviço Cloud Run próprio
+// (cloud-run-registo-ponto/), que fala directamente com o Firestore — ver
+// claude/resumo-sessao-2026-09-09.md, 40º seguimento. Tudo o que NÃO estiver
+// nesta lista continua a ir para a Apps Script Web App (SCRIPT_URL), sem
+// nenhuma alteração de comportamento. A lista espelha EXACTAMENTE
+// ACCOES_AUTENTICACAO + ACCOES_REGISTO_PONTO em cloud-run-registo-ponto/
+// lib/router.js — se uma acção for migrada de um lado, tem de ser migrada
+// no outro também, ou os dois ficam a divergir silenciosamente.
+const CLOUD_RUN_URL = 'https://redemovel-registo-ponto-389728721690.europe-west1.run.app';
+const ACCOES_CLOUD_RUN = new Set([
+  // Autenticação
+  'verificarIP', 'autenticar', 'alterarPassword', 'redefinirPassword',
+  // Registo de ponto (Fase 1b, v1)
+  'listarLocais', 'listarColaboradores',
+  'listarTurnosTipo', 'listarHorariosTipoSemanal', 'listarAtribuicoesSemana',
+  'registarEntrada', 'registarSaida', 'registarPausa',
+  'meuRegistoHoje', 'registosColegas', 'carregarArranqueAssiduidade',
+  'listarAprovacoes', 'decidirAprovacao',
+  'obterHoraServidor',
+  'confirmarLeituraRegras', 'minhaConfirmacaoRegras', 'arranqueMovel', 'listarConfirmacoesRegras',
+]);
+
+// Único sítio que decide o destino de um pedido — usado tanto por api() como
+// por assApi(), para as duas funções nunca poderem divergir na mesma acção.
+function urlParaAccao(acao) {
+  return ACCOES_CLOUD_RUN.has(acao) ? CLOUD_RUN_URL : SCRIPT_URL;
+}
+
 // 2026-09-12: simplificado — uma declaração `var` no topo do ficheiro já é,
 // por si só, uma propriedade de `window` (não é um módulo), por isso não há
 // necessidade de duplicar com `window.X = null` à parte.
@@ -396,7 +425,7 @@ async function fetchComRetry(url, payload, tentativas) {
 async function api(payload) {
   showGlobalLoading();
   try {
-    return await fetchComRetry(SCRIPT_URL, payload, 3);
+    return await fetchComRetry(urlParaAccao(payload.acao), payload, 3);
   } finally {
     hideGlobalLoading();
   }
@@ -464,7 +493,7 @@ async function assApi(payload) {
   };
   showGlobalLoading(msgs[payload.acao] || 'A processar…');
   try {
-    return await fetchComRetry(ASS_URL, {...payload,username:SESSION.username,password:SESSION.password}, 3);
+    return await fetchComRetry(urlParaAccao(payload.acao), {...payload,username:SESSION.username,password:SESSION.password}, 3);
   } finally {
     hideGlobalLoading();
   }
@@ -2648,7 +2677,7 @@ function renderAprovacoesBadge(count) {
 // tentativas — chega para um badge, sem gastar demasiado tempo.
 async function carregarAprovacoesBadge() {
   try {
-    const r = await fetchComRetry(ASS_URL, {
+    const r = await fetchComRetry(urlParaAccao('listarAprovacoes'), {
       acao:'listarAprovacoes', filtros:{estado:'pendente'},
       username: SESSION.username, password: SESSION.password
     }, 2);
