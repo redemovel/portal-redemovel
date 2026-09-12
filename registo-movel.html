@@ -350,8 +350,22 @@ async function entrarNoPainel() {
   document.getElementById('tela-principal').hidden = false;
   document.getElementById('btn-sair').hidden = false;
   document.getElementById('nome-utilizador').textContent = SESSAO.nome;
-  await atualizarEstadoHoje();
-  const confirmado = await verificarRegrasMovel();
+
+  // 2026-09-12: estas eram 2 chamadas sequenciais ao exec da Apps Script
+  // (estado de hoje + confirmação das regras) — cada uma sujeita à mesma
+  // lentidão de rede/redireccionamento sob carga já diagnosticada (ver
+  // resumo de sessão, 22º/24º seguimentos), o que podia somar vários minutos
+  // de espera no pior caso (reportado pelo Ricardo: ~2 minutos). Juntas numa
+  // única acção agregada ('arranqueMovel'), mesmo princípio já aplicado ao
+  // arranque do portal desktop (carregarArranqueAssiduidade).
+  const r = await chamarApi({ acao: 'arranqueMovel', versao: REGRAS_VERSAO_MV });
+  if (!r.ok) {
+    document.getElementById('estado-hoje').textContent = r.erro || 'Erro ao carregar o estado de hoje.';
+    return;
+  }
+  renderEstadoHoje(r.registoHoje || null);
+  const cr = r.confirmacaoRegras || {};
+  const confirmado = renderRegrasMovel(!!cr.confirmado, cr.confirmadoEm);
   // Se ainda não confirmou a leitura das regras, o painel abre-se sozinho e
   // o ecrã desloca-se até ele — os botões de registo ficam bloqueados (ver
   // aplicarBloqueioRegrasMovel) até confirmar.
@@ -361,9 +375,11 @@ async function entrarNoPainel() {
   }
 }
 
-async function atualizarEstadoHoje() {
-  const r = await chamarApi({ acao: 'meuRegistoHoje' });
-  REGISTO_HOJE = (r.ok && r.registo) ? r.registo : null;
+// Actualiza os botões/estado a partir de um registo já obtido (ou null) —
+// separado de atualizarEstadoHoje() para poder ser reaproveitado pelo
+// arranque agregado (entrarNoPainel) sem duplicar outra chamada ao servidor.
+function renderEstadoHoje(registo) {
+  REGISTO_HOJE = registo || null;
   const semRegisto = !REGISTO_HOJE;
   const emAberto = REGISTO_HOJE && REGISTO_HOJE.entradaRealMin !== '' && REGISTO_HOJE.saidaRealMin === '';
   const pausaAberta = emAberto && ['1','2','3'].some(n => REGISTO_HOJE[`pausa${n}InicioMin`] !== '' && REGISTO_HOJE[`pausa${n}FimMin`] === '');
@@ -383,6 +399,11 @@ async function atualizarEstadoHoje() {
   else if (emAberto) estadoEl.textContent = `Entrada às ${minParaHora(REGISTO_HOJE.entradaRealMin)} — a trabalhar`;
   else if (REGISTO_HOJE && REGISTO_HOJE.saidaRealMin !== '') estadoEl.textContent = `Dia completo — saída às ${minParaHora(REGISTO_HOJE.saidaRealMin)}`;
   else estadoEl.textContent = 'Sem registo hoje ainda.';
+}
+
+async function atualizarEstadoHoje() {
+  const r = await chamarApi({ acao: 'meuRegistoHoje' });
+  renderEstadoHoje((r.ok && r.registo) ? r.registo : null);
 }
 function minParaHora(min) { min = Number(min); const h = Math.floor(min/60), m = min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 
@@ -405,16 +426,17 @@ function toggleRegrasMovel() {
 // texto. Enquanto não confirmar, abre o painel automaticamente e bloqueia os
 // botões de registo (ver aplicarBloqueioRegrasMovel) — não dá para picar
 // ponto sem primeiro tomar conhecimento das regras.
-async function verificarRegrasMovel() {
-  const r = await chamarApi({ acao: 'minhaConfirmacaoRegras', versao: REGRAS_VERSAO_MV });
+// Actualiza o painel de Regras/RGPD a partir de um resultado já obtido —
+// separado de verificarRegrasMovel() para poder ser reaproveitado pelo
+// arranque agregado (entrarNoPainel) sem duplicar outra chamada ao servidor.
+function renderRegrasMovel(confirmado, confirmadoEm) {
   const estado = document.getElementById('regras-estado-mv');
   const badge = document.getElementById('regras-badge-mv');
   const btn = document.getElementById('btn-confirmar-regras-mv');
   const texto = document.getElementById('regras-texto-mv');
   const seta = document.getElementById('regras-seta-mv');
-  const confirmado = !!(r.ok && r.confirmado);
   if (confirmado) {
-    estado.textContent = `✅ Confirmaste a leitura em ${r.confirmadoEm}.`;
+    estado.textContent = `✅ Confirmaste a leitura em ${confirmadoEm}.`;
     estado.className = 'regras-estado-mv ok';
     badge.hidden = true;
     btn.hidden = true;
@@ -428,6 +450,11 @@ async function verificarRegrasMovel() {
   }
   aplicarBloqueioRegrasMovel(!confirmado);
   return confirmado;
+}
+
+async function verificarRegrasMovel() {
+  const r = await chamarApi({ acao: 'minhaConfirmacaoRegras', versao: REGRAS_VERSAO_MV });
+  return renderRegrasMovel(!!(r.ok && r.confirmado), r.confirmadoEm);
 }
 
 // Enquanto não houver confirmação, os botões de Entrada/Saída/Pausa/Retorno
