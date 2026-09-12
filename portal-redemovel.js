@@ -346,9 +346,19 @@ function hideGlobalLoading() {
 //     para um serviço que rejeita por saturação de execuções simultâneas
 //     (o cenário documentado acima), dar mais espaço entre tentativas
 //     sucessivas aumenta a hipótese real de apanhar uma janela livre.
+// 2026-09-12 (correcção no mesmo dia, com dados reais do Ricardo): o valor
+// inicial de 15s estava demasiado apertado — em produção, sob a mesma
+// saturação de execuções simultâneas já documentada, respostas legítimas
+// (que iam suceder) estavam a demorar 8-14s, e o AbortController abortava-as
+// mesmo antes de chegarem, forçando uma nova tentativa do zero. Abortar do
+// lado do browser NÃO cancela a execução do lado da Apps Script (essa
+// continua a correr e a ocupar a mesma quota partilhada) — por isso abortar
+// cedo de mais não alivia a saturação, agrava-a (soma mais um pedido a competir
+// pela mesma quota). Subido para 40s: continua a servir de rede de segurança
+// para uma ligação genuinamente presa, sem interromper respostas apenas lentas.
 async function fetchComRetry(url, payload, tentativas, timeoutMs) {
   tentativas = tentativas || 3;
-  timeoutMs = timeoutMs || 15000;
+  timeoutMs = timeoutMs || 40000;
   let ultimoErro = 'Sem resposta do servidor.';
   for (let i = 0; i < tentativas; i++) {
     const ctrl = new AbortController();
@@ -3130,12 +3140,21 @@ const REGRAS_VERSAO = 1;
 // verificarRegrasGate() para decidir se bloqueia a navegação.
 async function regrasActivar() {
   const r = await assApi({acao:'minhaConfirmacaoRegras', versao:REGRAS_VERSAO});
+  // 2026-09-12 (correcção no mesmo dia): r.ok===false significa "não
+  // conseguimos perguntar ao servidor" (falha de rede/timeout) — não é o
+  // mesmo que o servidor responder "ainda não confirmaste". Antes desta
+  // correcção, `r.ok && r.confirmado` tratava qualquer falha de rede como
+  // "por confirmar", o que — combinado com o timeout de fetchComRetry —
+  // chegou a mandar de volta para "Regras" um colaborador que já tinha
+  // confirmado, só por causa de uma resposta lenta. Em caso de falha,
+  // não mexe no aviso/badge existentes e não bloqueia a navegação.
+  if (!r.ok) return true;
   const banner = document.getElementById('regras-banner-pendente');
   const info = document.getElementById('regras-confirmado-info');
   const badge = document.getElementById('badge-regras');
   const rodapePendente = document.getElementById('regras-confirmar-pendente-rodape');
   const rodapeFeito = document.getElementById('regras-confirmar-feito-rodape');
-  const confirmado = !!(r.ok && r.confirmado);
+  const confirmado = !!r.confirmado;
   if (confirmado) {
     if (banner) banner.style.display = 'none';
     if (info) { info.style.display = 'block'; info.textContent = `✅ Confirmaste a leitura destas regras em ${r.confirmadoEm}.`; }
