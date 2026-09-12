@@ -109,10 +109,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // o contador de aprovações pendentes (para master/coordenador). Já não
   // volta a carregar dados inteiros da Assiduidade/Gestão a cada troca de
   // separador — isso era um consumo desnecessário para o que era pedido.
+  // 2026-09-12 (3ª ronda): o `visibilitychange` do browser dispara em
+  // QUALQUER regresso de foco a nível do sistema operativo (alt-tab, trocar
+  // de janela/app e voltar, desbloquear o ecrã) — não exige nenhuma
+  // interacção dentro da página. Para quem passa o dia a alternar entre
+  // aplicações (ex.: master a trabalhar noutras janelas), isto disparava um
+  // pedido `listarAprovacoes` de cada vez que o separador voltava a ficar
+  // visível, mesmo sem ninguém a usar a página — mais um pedido a competir
+  // pela mesma quota partilhada e pela mesma camada exec/redirect/echo já
+  // identificada como frágil (ver resumo da sessão, migração Cloud Run).
+  // Intervalo mínimo subido de 10 segundos para 20 minutos, a pedido do
+  // Ricardo, para não sobrecarregar — um contador de aprovações pendentes
+  // não precisa de estar actualizado ao segundo.
+  const REFRESH_BADGE_MIN_MS = 20 * 60 * 1000; // 20 minutos
   let ultimoRefresh = Date.now();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !SESSION) return;
-    if (Date.now() - ultimoRefresh < 10000) return;
+    if (Date.now() - ultimoRefresh < REFRESH_BADGE_MIN_MS) return;
     ultimoRefresh = Date.now();
     if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') carregarAprovacoesBadge();
   });
