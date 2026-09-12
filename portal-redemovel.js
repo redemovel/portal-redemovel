@@ -1064,7 +1064,7 @@ function showGestaoTab(id, btn) {
     const optTodos = document.querySelector('#mapa-local option[value=""]');
     if (optTodos) optTodos.textContent = 'Todos os locais';
   }
-  if (id==='editorregistos') { popularColaboradoresSelect('editor-colaborador'); }
+  if (id==='editorregistos') { popularColaboradoresSelect('editor-colaborador'); if (!LOCAIS_CACHE.length) carregarLocaisCache(); }
 }
 window.showGestaoTab = showGestaoTab;
 
@@ -1181,13 +1181,15 @@ function renderEditorRegistos() {
     return;
   }
   container.innerHTML = `<table class="tbl"><thead><tr>
-    <th>Data</th><th>Entrada</th><th>Saída</th><th>Pausa 1</th><th>Pausa 2</th><th>Estado</th><th>Total</th><th></th>
+    <th>Data</th><th>Local</th><th>Entrada</th><th>Saída</th><th>Pausa 1</th><th>Pausa 2</th><th>Estado</th><th>Total</th><th></th>
   </tr></thead><tbody>${EDITOR_REGISTOS_CACHE.map(r => {
     const p1 = (r.pausa1InicioMin!=='' ) ? `${minParaHora(r.pausa1InicioMin)}–${r.pausa1FimMin!==''?minParaHora(r.pausa1FimMin):'…'}` : '—';
     const p2 = (r.pausa2InicioMin!=='' ) ? `${minParaHora(r.pausa2InicioMin)}–${r.pausa2FimMin!==''?minParaHora(r.pausa2FimMin):'…'}` : '—';
     const badgeManual = r.criadoManualmente ? ' <span style="font-size:.68rem;color:#d97706;font-weight:700" title="Criado manualmente por correcção">🖊 manual</span>' : '';
+    const nomeLocal = (LOCAIS_CACHE.find(l => l.id === r.localId) || {}).nome || r.localId || '—';
     return `<tr>
       <td style="font-weight:600">${assFormatarData(r.data)}${badgeManual}</td>
+      <td style="font-size:.78rem">${nomeLocal}</td>
       <td>${r.entradaRealMin!==''?minParaHora(r.entradaRealMin):'—'}</td>
       <td>${r.saidaRealMin!==''?minParaHora(r.saidaRealMin):'—'}</td>
       <td style="font-size:.75rem;color:var(--text-muted)">${p1}</td>
@@ -1208,6 +1210,10 @@ function abrirEditarRegisto(id) {
   if (!r) return;
   document.getElementById('editor-registo-id').value = id;
   document.getElementById('editor-registo-info').textContent = `${assFormatarData(r.data)} — ${r.username || ''}`;
+  // Local (2026-09-12, pedido do Ricardo): permite corrigir a loja onde o
+  // registo ficou associado, além dos horários já editáveis.
+  const definirLocal = () => { popularSelectLocal('editor-registo-local'); document.getElementById('editor-registo-local').value = r.localId || ''; };
+  if (!LOCAIS_CACHE.length) carregarLocaisCache().then(definirLocal); else definirLocal();
   document.getElementById('editor-entrada').value = r.entradaRealMin!==''?minParaHoraInput(r.entradaRealMin):'';
   document.getElementById('editor-saida').value = r.saidaRealMin!==''?minParaHoraInput(r.saidaRealMin):'';
   document.getElementById('editor-p1-inicio').value = r.pausa1InicioMin!==''?minParaHoraInput(r.pausa1InicioMin):'';
@@ -1225,7 +1231,10 @@ async function guardarRegistoEditado() {
   const id = document.getElementById('editor-registo-id').value;
   const motivo = document.getElementById('editor-motivo').value;
   if (!motivo || !motivo.trim()) { showAlert(err, 'Motivo obrigatório.'); return; }
+  const local = document.getElementById('editor-registo-local').value;
+  if (!local) { showAlert(err, 'Escolhe o local do registo.'); return; }
   const patch = {
+    localId: local,
     entradaRealMin: document.getElementById('editor-entrada').value ? horaParaMin(document.getElementById('editor-entrada').value) : '',
     saidaRealMin: document.getElementById('editor-saida').value ? horaParaMin(document.getElementById('editor-saida').value) : '',
     pausa1InicioMin: document.getElementById('editor-p1-inicio').value ? horaParaMin(document.getElementById('editor-p1-inicio').value) : '',
@@ -1337,7 +1346,7 @@ function popularSelectLocal(id) {
 }
 
 function popularTodosSelects() {
-  ['hor-local','hor-local-mes','at-local','fer-local','pf-local','turno-local-sel','mapa-local'].forEach(popularSelectLocal);
+  ['hor-local','hor-local-mes','at-local','fer-local','pf-local','turno-local-sel','mapa-local','editor-registo-local'].forEach(popularSelectLocal);
 }
 
 function popularColaboradoresSelect(id) {
