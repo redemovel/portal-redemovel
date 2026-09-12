@@ -1,9 +1,12 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
 
-window.SESSION = null;
-window.modalResetTarget = null;
-var SESSION = window.SESSION;
-var modalResetTarget = window.modalResetTarget;
+// 2026-09-12: simplificado — uma declaração `var` no topo do ficheiro já é,
+// por si só, uma propriedade de `window` (não é um módulo), por isso não há
+// necessidade de duplicar com `window.X = null` à parte. `SESSION`/
+// `window.SESSION` continuam a ser exactamente a mesma "gaveta" depois desta
+// limpeza (ver uso em window.SESSION na verificação do visibilitychange, mais abaixo).
+var SESSION = null;
+var modalResetTarget = null;
 
 // ═══════════════════════════════════════
 //  INICIALIZAÇÃO
@@ -13,9 +16,19 @@ async function init() {
   try {
     let ipPublico = 'desconhecido';
     try {
-      const ipRes = await fetch('https://api.ipify.org?format=json');
-      const ipData = await ipRes.json();
-      ipPublico = ipData.ip;
+      // 2026-09-12: timeout — sem isto, um api.ipify.org lento/em baixo
+      // (serviço externo, fora do nosso controlo) podia deixar o ecrã de
+      // login preso indefinidamente à espera, antes mesmo de chegarmos à
+      // Apps Script. 4s chega de sobra para um pedido tão pequeno; falhando,
+      // seguimos com 'desconhecido' como já acontecia antes.
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const ipRes = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
+      clearTimeout(t);
+      if (ipRes.ok) {
+        const ipData = await ipRes.json();
+        ipPublico = ipData.ip;
+      }
     } catch(_) {}
     const res = await api({ acao: 'verificarIP', ip: ipPublico });
     if (res.ok) {
@@ -96,7 +109,6 @@ document.addEventListener('DOMContentLoaded', () => {
 //  DASHBOARD
 // ═══════════════════════════════════════
 async function enterDashboard() {
-  await sincronizarHoraServidor();
   document.getElementById('login-page').style.display='none';
   document.getElementById('dashboard-page').style.display='flex';
   const initials = SESSION.nome.split(' ').map(w=>w[0]).slice(0,2).join('');
@@ -107,7 +119,7 @@ async function enterDashboard() {
   document.getElementById('perfil-nome').textContent=SESSION.nome;
   document.getElementById('perfil-role').textContent=roleLabel(SESSION.role);
   document.getElementById('perfil-local').textContent='📍 '+(SESSION.local||'—');
-  buildChart(); startClock(); setPageDate();
+  buildChart(); setPageDate();
 
   if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') {
     document.getElementById('nav-gestao').style.display='';
@@ -119,7 +131,15 @@ async function enterDashboard() {
   // navegação (ver .topbar-nav.regras-gate no CSS) — só avançamos para
   // mostrarVistaInicial() depois de confirmado (aqui, ou a partir de
   // confirmarLeituraRegras() quando o próprio colaborador confirma).
-  const okRegras = await verificarRegrasGate();
+  //
+  // 2026-09-12: sincronizarHoraServidor() e verificarRegrasGate() não
+  // dependem uma da outra — eram 2 idas-e-voltas sequenciais ao exec da
+  // Apps Script, agora em paralelo (Promise.all), o que corta a espera
+  // desta parte do arranque a cerca de metade. startClock() só é chamado
+  // depois de ambas resolverem, porque precisa do desvio horário que
+  // sincronizarHoraServidor() calcula.
+  const [, okRegras] = await Promise.all([sincronizarHoraServidor(), verificarRegrasGate()]);
+  startClock();
   if (!okRegras) return;
   await mostrarVistaInicial();
 }
@@ -355,7 +375,11 @@ function buildChart() {
 // ═══════════════════════════════════════
 //  ASSIDUIDADE
 // ═══════════════════════════════════════
-const ASS_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
+// 2026-09-12: era o mesmo URL escrito 2ª vez neste ficheiro (mantido como
+// nome à parte por legibilidade — usado nas chamadas de Assiduidade/Gestão
+// — mas apontando sempre para o mesmo SCRIPT_URL, para só haver 1 sítio a
+// actualizar se a implantação da Apps Script alguma vez mudar de URL).
+const ASS_URL = SCRIPT_URL;
 let ASS_REGISTO_HOJE = null;
 let ASS_COLEGAS_CACHE = [];
 let ASS_LOCAL_ID = null;
