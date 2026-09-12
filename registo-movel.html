@@ -265,6 +265,13 @@
 // (Firestore, balizas, fotos no Drive). Esta página deixa de ser servida
 // pela Apps Script, mas continua a falar com ela via fetch, exatamente
 // como já fazia antes.
+// 2026-09-12: este ficheiro vive num repositório/hospedagem à parte
+// (GitHub Pages) de portal-redemovel.js — não há forma de partilhar uma
+// única constante entre os dois sem infraestrutura extra (um ficheiro de
+// configuração à parte, carregado pelos dois). Por agora, se a implantação
+// da Apps Script mudar de URL, este valor tem de ser actualizado aqui E em
+// SCRIPT_URL/ASS_URL no portal-redemovel.js — os três apontam sempre para
+// o mesmo URL.
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3vI11dcmcaf2j5fWWKrTUUWGbHERSY-oqu8w4qCyuo-sYk_uKw/exec';
 let SESSAO = null;
 let REGISTO_HOJE = null;
