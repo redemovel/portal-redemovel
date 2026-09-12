@@ -4,38 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="mobile-web-app-capable" content="yes">
-<script>
-// Robustez extra de layout: medimos a largura real por JS e forçamos um
-// transform:scale() no body, desenhado sempre para 360px de largura lógica,
-// em vez de confiar só na meta viewport. Não é estritamente necessário fora
-// da Apps Script (esta página já não é servida por lá), mas mantém-se por
-// segurança — já testado e sem custo.
-(function(){
-  function ajustar(){
-    var w=window.innerWidth||document.documentElement.clientWidth||360;
-    var h=window.innerHeight||document.documentElement.clientHeight||640;
-    var escala=w/360;
-    var body=document.body;
-    if(body){
-      body.style.transform='scale('+escala+')';
-      body.style.transformOrigin='top left';
-      body.style.width=(100/escala)+'%';
-      // 2026-09-11: apenas a altura MÍNIMA fica presa a uma tela (garante o
-      // preenchimento do ecrã em páginas curtas) — 'height'/'maxHeight' fixos
-      // e 'overflowY:hidden' foram removidos porque bloqueavam o scroll
-      // sempre que o conteúdo crescia além de uma tela (ex.: painel "Regras
-      // e RGPD" expandido), impedindo o colaborador de ver o resto do texto
-      // e o botão "Li e tomei conhecimento". Sem altura máxima fixa, o body
-      // cresce normalmente e o scroll da página trata do resto.
-      body.style.minHeight=(h/escala)+'px';
-    }
-  }
-  if(document.body){ajustar();}
-  else{window.addEventListener('DOMContentLoaded',ajustar);}
-  window.addEventListener('resize',ajustar);
-  window.addEventListener('orientationchange',function(){setTimeout(ajustar,300);});
-})();
-</script>
+<!-- 2026-09-12: o hack de "transform:scale() no body" que existia aqui foi
+     removido. Já estava assinalado como "não estritamente necessário fora da
+     Apps Script" (esta página já só é servida via GitHub Pages) e era a causa
+     do bug "aparece a moldura da câmara mas não aparece o botão de tirar
+     foto": um `transform` em qualquer antepassado (aqui, o <body>) faz com
+     que os elementos `position:fixed` dentro dele deixem de se posicionar
+     face à janela visível do browser e passem a posicionar-se como
+     `position:absolute` face a esse antepassado transformado — ou seja,
+     `.camara-overlay{position:fixed;inset:0;height:100%}` ficava a medir e a
+     posicionar-se relativamente à caixa inteira do <body> (que pode ser mais
+     alta do que o ecrã visível, e desloca-se com o scroll da página) em vez
+     da janela real. A moldura (mais acima no ecrã) calhava ficar visível; a
+     barra de botões (mais abaixo, no fim do ecrã fixo) ficava fora da área
+     realmente visível. `html,body{width:100%}` e `body{min-height:100vh}`,
+     já definidos em CSS mais abaixo, cobrem o que este hack tentava garantir. -->
 <title>Registo Móvel · Redemóvel</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
