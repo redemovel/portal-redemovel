@@ -2,9 +2,12 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD855AIX6BOudkvhvF3
 
 // 2026-09-12: simplificado — uma declaração `var` no topo do ficheiro já é,
 // por si só, uma propriedade de `window` (não é um módulo), por isso não há
-// necessidade de duplicar com `window.X = null` à parte. `SESSION`/
-// `window.SESSION` continuam a ser exactamente a mesma "gaveta" depois desta
-// limpeza (ver uso em window.SESSION na verificação do visibilitychange, mais abaixo).
+// necessidade de duplicar com `window.X = null` à parte.
+// 2026-09-12 (2ª ronda): a verificação do visibilitychange usava
+// `window.SESSION` enquanto o resto do ficheiro usa sempre `SESSION`
+// directamente — hoje são a mesma coisa, mas é frágil (se este ficheiro
+// alguma vez passar a `<script type="module">`, deixam de o ser, e o guard
+// falha em silêncio). Unificado: usar sempre `SESSION`, nunca `window.SESSION`.
 var SESSION = null;
 var modalResetTarget = null;
 
@@ -68,6 +71,17 @@ function hideLoading() { const el=document.getElementById('loading-screen'); el.
 function showLogin() { document.getElementById('login-page').style.display='flex'; }
 function showBlocked(ip) { document.getElementById('blocked-screen').style.display='flex'; document.getElementById('blocked-ip-display').textContent='IP: '+ip; }
 
+// 2026-09-12 (2ª ronda de auditoria): helper único para persistir SESSION —
+// doLogin já gravava depois de autenticar, mas alterarPassword() só
+// actualizava SESSION.password em memória, sem gravar. Resultado: mudar a
+// password e dar F5 fazia o init() restaurar a password ANTIGA do
+// sessionStorage, a revalidação falhava e o colaborador caía de volta no
+// ecrã de login sem perceber porquê. Qualquer mutação de SESSION que deva
+// sobreviver a F5 passa a chamar isto.
+function guardarSessao() {
+  try { sessionStorage.setItem('rmSession', JSON.stringify(SESSION)); } catch(_) {}
+}
+
 // ═══════════════════════════════════════
 //  LOGIN
 // ═══════════════════════════════════════
@@ -80,7 +94,7 @@ async function doLogin() {
   btn.disabled=true; btn.textContent='A autenticar...'; err.style.display='none';
   try {
     const res = await api({ acao:'autenticar', ip:SESSION.ip, username, password });
-    if (res.ok) { SESSION={...SESSION, username:res.username, nome:res.nome, role:res.role, password}; sessionStorage.setItem('rmSession', JSON.stringify(SESSION)); enterDashboard(); }
+    if (res.ok) { SESSION={...SESSION, username:res.username, nome:res.nome, role:res.role, password}; guardarSessao(); enterDashboard(); }
     else showAlert(err, res.erro||'Erro de autenticação.');
   } catch(e) { showAlert(err,'Erro de ligação. Tente novamente.'); }
   btn.disabled=false; btn.textContent='Entrar no Portal';
@@ -97,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // separador — isso era um consumo desnecessário para o que era pedido.
   let ultimoRefresh = Date.now();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !window.SESSION) return;
+    if (document.visibilityState !== 'visible' || !SESSION) return;
     if (Date.now() - ultimoRefresh < 10000) return;
     ultimoRefresh = Date.now();
     if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') carregarAprovacoesBadge();
@@ -196,7 +210,8 @@ function renderIPs(ips) {
   ips.forEach(item=>{
     const div=document.createElement('div'); div.className='ip-item';
     const isAtual=item.ip===SESSION.ip;
-    div.innerHTML=`<div class="ip-info"><div class="ip-local">${item.local}</div><div class="ip-addr">${item.ip}</div></div>${item.fixo?'<span class="ip-badge fixo">Fixo</span>':''}${isAtual?'<span class="ip-badge atual">Este PC</span>':''}${!item.fixo&&item.ativo?`<button class="btn-sm danger" onclick="desativarIP('${item.ip}','${item.local}')">Desativar</button>`:''}${!item.ativo?'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>':''}`;
+    const localAttr = String(item.local ?? '').replace(/'/g,"\\'"), ipAttr = String(item.ip ?? '').replace(/'/g,"\\'");
+    div.innerHTML=`<div class="ip-info"><div class="ip-local">${esc(item.local)}</div><div class="ip-addr">${esc(item.ip)}</div></div>${item.fixo?'<span class="ip-badge fixo">Fixo</span>':''}${isAtual?'<span class="ip-badge atual">Este PC</span>':''}${!item.fixo&&item.ativo?`<button class="btn-sm danger" onclick="desativarIP('${ipAttr}','${localAttr}')">Desativar</button>`:''}${!item.ativo?'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>':''}`;
     lista.appendChild(div);
   });
 }
@@ -232,7 +247,8 @@ function renderUtilizadores(utilizadores) {
   const lista=document.getElementById('lista-users'); lista.innerHTML='';
   utilizadores.forEach(u=>{
     const div=document.createElement('div'); div.className='user-item';
-    div.innerHTML=`<div class="user-info"><div class="user-name-g">${u.nome}</div><div class="user-meta">@${u.username}</div></div><span class="role-badge ${u.role}">${roleLabel(u.role)}</span>${u.ativo?`<button class="btn-sm teal" onclick="abrirResetPass('${u.username}')">🔑 Reset</button>${u.username!==SESSION.username?`<button class="btn-sm danger" onclick="desativarUser('${u.username}')">Desativar</button>`:'`'}`:'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
+    const userAttr = String(u.username ?? '').replace(/'/g,"\\'");
+    div.innerHTML=`<div class="user-info"><div class="user-name-g">${esc(u.nome)}</div><div class="user-meta">@${esc(u.username)}</div></div><span class="role-badge ${esc(u.role)}">${roleLabel(u.role)}</span>${u.ativo?`<button class="btn-sm teal" onclick="abrirResetPass('${userAttr}')">🔑 Reset</button>${u.username!==SESSION.username?`<button class="btn-sm danger" onclick="desativarUser('${userAttr}')">Desativar</button>`:'`'}`:'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
     lista.appendChild(div);
   });
 }
@@ -288,7 +304,7 @@ async function alterarPassword() {
   if (passNova!==passConfirm) { showAlert(err,'As passwords não coincidem.'); return; }
   if (passNova.length<6) { showAlert(err,'Mínimo 6 caracteres.'); return; }
   const res=await api({acao:'alterarPassword',ip:SESSION.ip,username:SESSION.username,passwordAtual:passAtual,passwordNova:passNova});
-  if (res.ok) { SESSION.password=passNova; showAlert(suc,'Password alterada com sucesso!'); document.getElementById('pass-atual').value=''; document.getElementById('pass-nova').value=''; document.getElementById('pass-confirm').value=''; }
+  if (res.ok) { SESSION.password=passNova; guardarSessao(); showAlert(suc,'Password alterada com sucesso!'); document.getElementById('pass-atual').value=''; document.getElementById('pass-nova').value=''; document.getElementById('pass-confirm').value=''; }
   else showAlert(err,res.erro);
 }
 
@@ -322,18 +338,37 @@ function hideGlobalLoading() {
 // 2 para 3 tentativas, com um espaçamento maior e crescente entre elas (em vez
 // de um valor fixo), para dar mais hipótese de apanhar uma janela livre quando
 // o portal está a ser usado por várias lojas em simultâneo.
-async function fetchComRetry(url, payload, tentativas) {
+// 2026-09-12 (2ª ronda de auditoria): duas correcções a este pedido:
+//  1. Timeout por tentativa (AbortController) — sem isto, se o servidor não
+//     responder mesmo, cada tentativa podia ficar pendurada indefinidamente
+//     e, com 3 tentativas, isso eram minutos de espera sem feedback nenhum.
+//  2. Backoff exponencial em vez de quase-linear (900-1400ms, 1400-1900ms) —
+//     para um serviço que rejeita por saturação de execuções simultâneas
+//     (o cenário documentado acima), dar mais espaço entre tentativas
+//     sucessivas aumenta a hipótese real de apanhar uma janela livre.
+async function fetchComRetry(url, payload, tentativas, timeoutMs) {
   tentativas = tentativas || 3;
+  timeoutMs = timeoutMs || 15000;
   let ultimoErro = 'Sem resposta do servidor.';
   for (let i = 0; i < tentativas; i++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {method:'POST', body: JSON.stringify(payload)});
-      if (!res.ok) { ultimoErro = 'Erro do servidor (HTTP '+res.status+').'; throw 0; }
-      const texto = await res.text();
-      try { return JSON.parse(texto); }
-      catch(_) { ultimoErro = 'Resposta inválida do servidor.'; throw 0; }
-    } catch(_) {
-      if (i < tentativas - 1) await new Promise(r => setTimeout(r, 900 + i*500 + Math.random()*500));
+      const res = await fetch(url, {method:'POST', body: JSON.stringify(payload), signal: ctrl.signal});
+      if (!res.ok) { ultimoErro = 'Erro do servidor (HTTP '+res.status+').'; }
+      else {
+        const texto = await res.text();
+        try { return JSON.parse(texto); }
+        catch(_) { ultimoErro = 'Resposta inválida do servidor.'; }
+      }
+    } catch(e) {
+      ultimoErro = (e && e.name === 'AbortError') ? 'Servidor não respondeu a tempo.' : 'Falha de ligação.';
+    } finally {
+      clearTimeout(t);
+    }
+    if (i < tentativas - 1) {
+      const base = 800 * Math.pow(2, i); // 800, 1600, 3200…
+      await new Promise(r => setTimeout(r, base + Math.random()*400));
     }
   }
   return {ok:false, erro: ultimoErro + ' Tenta novamente.'};
@@ -349,6 +384,17 @@ async function api(payload) {
 }
 function roleLabel(role) { return {master:'Master',coordenador_lojas:'Coordenador Lojas',assistente_loja:'Assistente de Loja'}[role]||role; }
 function showAlert(el,msg) { el.textContent=msg; el.style.display='block'; }
+// 2026-09-12 (2ª ronda de auditoria) — item crítico de segurança: o ficheiro
+// injecta em várias tabelas/cartões (innerHTML) valores que vêm do
+// backend/Sheets e, nalguns casos, foram escritos directamente por um
+// colaborador (ex.: motivo/justificativa ao registar fora de baliza ou ao
+// pedir hora extra — texto livre que aparece depois no cartão de Aprovações,
+// visto pelo master/coordenador). Sem escape, um nome ou motivo com
+// "<img src=x onerror=...>" corre no browser de quem o vir a seguir — um
+// vector de XSS armazenado trivial. esc() escapa os 5 caracteres que
+// importam para innerHTML; usar sempre que se interpola texto vindo do
+// servidor (nome, local, motivo, username, etc.) dentro de innerHTML.
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let _GLOBAL_OFFSET = 0;
 async function sincronizarHoraServidor() {
   try {
@@ -516,12 +562,13 @@ async function assIniciar() {
   assCarregarProximosDias();
 }
 
-async function assCarregarTurno() {
-  // No-op — o turno agora é resolvido directamente em assIniciar (mais rápido)
-  return;
-}
-
-function assMinParaHora(min) { const h=Math.floor(Number(min)/60),m=Number(min)%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; }
+// 2026-09-12 (2ª ronda de auditoria): assMinParaHora era idêntica a
+// minParaHora (definida mais abaixo) — mesma lógica, só a sintaxe (template
+// string vs concatenação) diferia. Removida; usar sempre minParaHora().
+// assMinParaHoraH, apesar do nome parecido, NÃO é duplicada de
+// minParaHoraH — arredonda ao número de horas inteiro (com tolerância de 5
+// min) e mostra só "Xh", enquanto minParaHoraH mostra minutos exactos
+// ("Xh30m"). São usadas em sítios diferentes de propósito; mantidas as duas.
 function assMinParaHoraH(min) {
   const m = Number(min);
   const h = Math.floor(m/60);
@@ -639,7 +686,7 @@ function assPerguntarEntradaAntecipada(minutosAntecedencia) {
 function assAbrirModalLocalManual() {
   const overlay = document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  const opcoesLocais = LOCAIS_CACHE.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
+  const opcoesLocais = LOCAIS_CACHE.map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
   overlay.innerHTML=`
     <div style="background:var(--card-bg);border-radius:14px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
       <div style="font-size:1.5rem;margin-bottom:.5rem;text-align:center">📍</div>
@@ -827,8 +874,8 @@ function assAtualizarUI() {
 
   status.style.display=temEntrada?'block':'none';
   if (temEntrada) {
-    document.getElementById('ass-ts-entrada').textContent=assMinParaHora(reg.entradaRealMin);
-    document.getElementById('ass-ts-saida').textContent=temSaida?assMinParaHora(reg.saidaRealMin):'—';
+    document.getElementById('ass-ts-entrada').textContent=minParaHora(reg.entradaRealMin);
+    document.getElementById('ass-ts-saida').textContent=temSaida?minParaHora(reg.saidaRealMin):'—';
     document.getElementById('ass-ts-total').textContent=reg.totalTrabalhadoMin?assMinParaHoraH(reg.totalTrabalhadoMin):'—';
   }
   const estado={normal:'A trabalhar',pendente_aprovacao:'Aguarda aprovação',completo:'Completo'}[reg.estado]||reg.estado;
@@ -842,11 +889,6 @@ function assPopularFiltroColegas() {
   sel.innerHTML='<option value="">Todos os dias</option>';
   dias.forEach(d=>sel.innerHTML+=`<option value="${d}">${assFormatarData(d)}</option>`);
 }
-async function assCarregarColegas() {
-  // mantida por compatibilidade — chama assCarregarPonto que faz tudo
-  return assCarregarPonto();
-}
-
 function assFiltraColegas() {
   const dia=document.getElementById('ass-colegas-filtro').value;
   const lista=dia?ASS_COLEGAS_CACHE.filter(r=>r.data===dia):ASS_COLEGAS_CACHE;
@@ -858,11 +900,13 @@ function assFiltraColegas() {
   container.innerHTML=Object.entries(porData).sort(([a],[b])=>b.localeCompare(a)).map(([data,regs])=>`
     <div style="margin-bottom:1rem">
       <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.5rem">${assFormatarData(data)}</div>
-      ${regs.map(r=>`<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;border-radius:10px;border:1px solid var(--gray-light);background:var(--off-white);margin-bottom:.4rem">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--teal-pale);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--teal);flex-shrink:0">${assIniciais(r.nome)}</div>
-        <div style="flex:1"><div style="font-weight:600;font-size:.85rem">${r.nome}</div><div style="font-size:.72rem;color:var(--text-muted);display:flex;gap:.75rem;margin-top:.1rem"><span>▶ ${r.entradaRealMin!==''?assMinParaHora(r.entradaRealMin):'—'}</span><span>⏹ ${r.saidaRealMin!==''?assMinParaHora(r.saidaRealMin):'—'}</span>${r.totalTrabalhadoMin?`<span>⏱ ${assMinParaHoraH(r.totalTrabalhadoMin)}</span>`:''}</div></div>
-        <button onclick="assSinalizar('${r.username}','${r.nome}','${data}')" style="font-size:.72rem;font-weight:600;background:#fff3e0;color:#d97706;border:none;border-radius:6px;padding:.25rem .6rem;cursor:pointer;font-family:'Outfit',sans-serif">⚑ Sinalizar</button>
-      </div>`).join('')}
+      ${regs.map(r=>{
+        const nomeAttr = String(r.nome ?? '').replace(/'/g,"\\'"), userAttr = String(r.username ?? '').replace(/'/g,"\\'");
+        return `<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;border-radius:10px;border:1px solid var(--gray-light);background:var(--off-white);margin-bottom:.4rem">
+        <div style="width:32px;height:32px;border-radius:8px;background:var(--teal-pale);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--teal);flex-shrink:0">${esc(assIniciais(r.nome))}</div>
+        <div style="flex:1"><div style="font-weight:600;font-size:.85rem">${esc(r.nome)}</div><div style="font-size:.72rem;color:var(--text-muted);display:flex;gap:.75rem;margin-top:.1rem"><span>▶ ${r.entradaRealMin!==''?minParaHora(r.entradaRealMin):'—'}</span><span>⏹ ${r.saidaRealMin!==''?minParaHora(r.saidaRealMin):'—'}</span>${r.totalTrabalhadoMin?`<span>⏱ ${assMinParaHoraH(r.totalTrabalhadoMin)}</span>`:''}</div></div>
+        <button onclick="assSinalizar('${userAttr}','${nomeAttr}','${data}')" style="font-size:.72rem;font-weight:600;background:#fff3e0;color:#d97706;border:none;border-radius:6px;padding:.25rem .6rem;cursor:pointer;font-family:'Outfit',sans-serif">⚑ Sinalizar</button>
+      </div>`;}).join('')}
     </div>`).join('');
 }
 
@@ -967,7 +1011,7 @@ async function assCarregarProximosDias() {
                 pausasInfo.push(minParaHora(t['pausa'+n+'InicioMin'])+'–'+minParaHora(t['pausa'+n+'FimMin']));
               }
             }
-            conteudoTurno = '<span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">'+t.nome+': '+minParaHora(t.inicioMin)+'–'+minParaHora(t.fimMin)+'</span>'
+            conteudoTurno = '<span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">'+esc(t.nome)+': '+minParaHora(t.inicioMin)+'–'+minParaHora(t.fimMin)+'</span>'
               + (pausasInfo.length ? '<span style="color:var(--text-muted);font-size:.7rem;margin-left:.5rem">⏸ '+pausasInfo.join(', ')+'</span>' : '');
           }
         } else {
@@ -1008,13 +1052,13 @@ function assMostrarMeusRegistos() {
         // Esconder pausas com duração zero (clique acidental)
         if (temFim && Number(fim) === Number(ini)) continue;
         const txt = temFim
-          ? assMinParaHora(ini) + '–' + assMinParaHora(fim)
-          : assMinParaHora(ini) + '–em curso';
+          ? minParaHora(ini) + '–' + minParaHora(fim)
+          : minParaHora(ini) + '–em curso';
         pausas.push(txt);
       }
     }
-    const entrada = reg.entradaRealMin !== '' ? assMinParaHora(reg.entradaRealMin) : '—';
-    const saida = reg.saidaRealMin !== '' ? assMinParaHora(reg.saidaRealMin) : '—';
+    const entrada = reg.entradaRealMin !== '' ? minParaHora(reg.entradaRealMin) : '—';
+    const saida = reg.saidaRealMin !== '' ? minParaHora(reg.saidaRealMin) : '—';
     const total = reg.totalTrabalhadoMin ? assMinParaHoraH(reg.totalTrabalhadoMin) : '—';
     return '<div style="display:grid;grid-template-columns:90px 1fr;gap:.5rem;padding:.6rem .8rem;border-radius:8px;background:var(--off-white);margin-bottom:.4rem;font-size:.78rem">'
       + '<div style="font-weight:700;color:var(--text)">'+assFormatarData(reg.data)+'</div>'
@@ -1035,6 +1079,7 @@ function assActivar() { if (SESSION) return assIniciar(); }
 // ═══════════════════════════════════════
 let LOCAIS_CACHE = [];
 let COLABORADORES_CACHE = [];
+let ATRIBUICOES_CACHE = []; // última lista devolvida por carregarAtribuicoes (ver editarAtribuicao)
 let FERIAS_CACHE = [];
 let MINHAS_FERIAS_CACHE = [];
 let TURNOS_CACHE = [];
@@ -1127,13 +1172,13 @@ async function carregarOcupacaoDiaria() {
     const saidos   = l.presentes.filter(p=>p.saidaRealMin!=null);
 
     const linha = (nome,cor,texto) => `<div style="display:flex;justify-content:space-between;padding:.3rem 0;font-size:.82rem;border-bottom:1px solid var(--gray-light)">
-      <span>${nome}</span><span style="color:${cor};font-weight:600">${texto}</span>
+      <span>${esc(nome)}</span><span style="color:${cor};font-weight:600">${esc(texto)}</span>
     </div>`;
 
-    const agoraHtml  = agora.map(p=>linha(p.nome,'var(--success)',`${assMinParaHora(p.entradaRealMin)} → em curso`)).join('');
-    const pausaHtml   = emPausa.map(p=>linha(p.nome,'var(--warning)',`em pausa desde ${assMinParaHora(pausaAbertaDesde(p))}`)).join('');
-    const saidosHtml  = saidos.map(p=>linha(p.nome,'var(--text-muted)',`${assMinParaHora(p.entradaRealMin)} → ${assMinParaHora(p.saidaRealMin)}`)).join('');
-    const ausentesHtml = l.ausentes.map(a=>linha(a.nome,'var(--danger)',`previsto ${assMinParaHora(a.inicioPrevMin)}`)).join('');
+    const agoraHtml  = agora.map(p=>linha(p.nome,'var(--success)',`${minParaHora(p.entradaRealMin)} → em curso`)).join('');
+    const pausaHtml   = emPausa.map(p=>linha(p.nome,'var(--warning)',`em pausa desde ${minParaHora(pausaAbertaDesde(p))}`)).join('');
+    const saidosHtml  = saidos.map(p=>linha(p.nome,'var(--text-muted)',`${minParaHora(p.entradaRealMin)} → ${minParaHora(p.saidaRealMin)}`)).join('');
+    const ausentesHtml = l.ausentes.map(a=>linha(a.nome,'var(--danger)',`previsto ${minParaHora(a.inicioPrevMin)}`)).join('');
 
     const badgeParts=[];
     if(agora.length) badgeParts.push(`${agora.length} presente(s) agora`);
@@ -1149,7 +1194,7 @@ async function carregarOcupacaoDiaria() {
     const semNada = !agora.length && !emPausa.length && !saidos.length && !l.ausentes.length;
 
     return `<div class="panel">
-      <div class="panel-header"><div class="panel-title"><div class="dot"></div>${l.localNome}</div><span class="panel-badge">${badge}</span></div>
+      <div class="panel-header"><div class="panel-title"><div class="dot"></div>${esc(l.localNome)}</div><span class="panel-badge">${esc(badge)}</span></div>
       ${semNada ? '<div style="font-size:.78rem;color:var(--text-muted);padding:.3rem 0">Sem presenças registadas.</div>' : ''}
       ${secao('Presentes agora','var(--success)',agoraHtml)}
       ${secao('Em pausa','var(--warning)',pausaHtml)}
@@ -1213,12 +1258,12 @@ function renderEditorRegistos() {
     const nomeLocal = (LOCAIS_CACHE.find(l => l.id === r.localId) || {}).nome || r.localId || '—';
     return `<tr>
       <td style="font-weight:600">${assFormatarData(r.data)}${badgeManual}</td>
-      <td style="font-size:.78rem">${nomeLocal}</td>
+      <td style="font-size:.78rem">${esc(nomeLocal)}</td>
       <td>${r.entradaRealMin!==''?minParaHora(r.entradaRealMin):'—'}</td>
       <td>${r.saidaRealMin!==''?minParaHora(r.saidaRealMin):'—'}</td>
       <td style="font-size:.75rem;color:var(--text-muted)">${p1}</td>
       <td style="font-size:.75rem;color:var(--text-muted)">${p2}</td>
-      <td style="font-size:.78rem">${r.estado||'—'}</td>
+      <td style="font-size:.78rem">${esc(r.estado)||'—'}</td>
       <td>${r.totalTrabalhadoMin?minParaHoraH(r.totalTrabalhadoMin):'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn-sm teal" onclick="abrirEditarRegisto('${r.id}')">ed Editar</button>
@@ -1325,9 +1370,9 @@ async function abrirHistoricoRegisto(id) {
     const tipoLabel = { criacao_manual: '➕ Criado manualmente', edicao_manual: '✎ Editado', eliminacao_manual: '🗑 Apagado' };
     container.innerHTML = r.historico.map(h => `
       <div style="border-bottom:1px solid var(--border);padding:.6rem 0">
-        <div style="font-weight:600">${tipoLabel[h.tipo]||h.tipo} — ${h.alteradoEm}</div>
-        <div style="color:var(--text-muted)">por ${h.alteradoPor}</div>
-        <div style="margin-top:.3rem"><b>Motivo:</b> ${h.motivo||'—'}</div>
+        <div style="font-weight:600">${esc(tipoLabel[h.tipo]||h.tipo)} — ${esc(h.alteradoEm)}</div>
+        <div style="color:var(--text-muted)">por ${esc(h.alteradoPor)}</div>
+        <div style="margin-top:.3rem"><b>Motivo:</b> ${esc(h.motivo)||'—'}</div>
       </div>`).join('');
   }
   // Eventos do registo móvel (foto+GPS) deste registo, se algum evento tiver
@@ -1340,15 +1385,17 @@ async function abrirHistoricoRegisto(id) {
     if (!eventosMovel.length) {
       blocoMovel.innerHTML = '';
     } else {
-      blocoMovel.innerHTML = `<div style="font-weight:600;margin:.8rem 0 .4rem">📱 Registo móvel (foto + localização)</div>` + eventosMovel.map(e => `
+      blocoMovel.innerHTML = `<div style="font-weight:600;margin:.8rem 0 .4rem">📱 Registo móvel (foto + localização)</div>` + eventosMovel.map(e => {
+        const balizaNome = esc(e.balizaNome), fotoUrl = esc(e.fotoUrl);
+        return `
         <div style="border-bottom:1px solid var(--border);padding:.6rem 0">
-          <div style="font-weight:600">${tipoEventoLabel[e.tipoEvento]||e.tipoEvento} — ${e.criadoEm}</div>
-          <div style="color:${e.dentroBaliza==='TRUE'?'var(--success)':'#d97706'}">${e.dentroBaliza==='TRUE'?`✓ Dentro da baliza${e.balizaNome?' ('+e.balizaNome+')':''}`:`⚠ Fora das zonas habituais${e.balizaNome?' — mais próxima: '+e.balizaNome:''}${e.distanciaMetros!==''?' ('+e.distanciaMetros+'m)':''}`}</div>
+          <div style="font-weight:600">${esc(tipoEventoLabel[e.tipoEvento]||e.tipoEvento)} — ${esc(e.criadoEm)}</div>
+          <div style="color:${e.dentroBaliza==='TRUE'?'var(--success)':'#d97706'}">${e.dentroBaliza==='TRUE'?`✓ Dentro da baliza${balizaNome?' ('+balizaNome+')':''}`:`⚠ Fora das zonas habituais${balizaNome?' — mais próxima: '+balizaNome:''}${e.distanciaMetros!==''?' ('+esc(e.distanciaMetros)+'m)':''}`}</div>
           <div style="margin-top:.3rem;display:flex;gap:.75rem;font-size:.85rem">
-            ${(e.lat!==''&&e.lng!=='')?`<a href="https://www.google.com/maps?q=${e.lat},${e.lng}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>`:''}
-            ${e.fotoUrl?`<a href="${e.fotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
+            ${(e.lat!==''&&e.lng!=='')?`<a href="https://www.google.com/maps?q=${encodeURIComponent(e.lat)},${encodeURIComponent(e.lng)}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>`:''}
+            ${e.fotoUrl?`<a href="${fotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
           </div>
-        </div>`).join('');
+        </div>`;}).join('');
     }
   }
   document.getElementById('modal-historico-registo').classList.add('open');
@@ -1366,17 +1413,23 @@ async function carregarColaboradoresCache() {
 function popularSelectLocal(id) {
   const s=document.getElementById(id); if (!s) return;
   s.innerHTML='<option value="">Selecionar local…</option>';
-  LOCAIS_CACHE.forEach(l=>s.innerHTML+=`<option value="${l.id}">${l.nome}</option>`);
+  LOCAIS_CACHE.forEach(l=>s.innerHTML+=`<option value="${l.id}">${esc(l.nome)}</option>`);
 }
 
+// 2026-09-12 (2ª ronda de auditoria): a lista de ids estava hardcoded aqui
+// — já tinha divergido do HTML sem ninguém notar ('hor-local-mes' já não
+// existe em equipa-redemovel-v3.html; passava sempre em branco por
+// popularSelectLocal ter um "if (!s) return"). Passa a descobrir os selects
+// pelo atributo data-local-select no próprio HTML — acrescentar um select
+// novo de "local" deixa de exigir lembrar de o adicionar aqui também.
 function popularTodosSelects() {
-  ['hor-local','hor-local-mes','at-local','fer-local','pf-local','turno-local-sel','mapa-local','editor-registo-local'].forEach(popularSelectLocal);
+  document.querySelectorAll('[data-local-select]').forEach(s => popularSelectLocal(s.id));
 }
 
 function popularColaboradoresSelect(id) {
   const s=document.getElementById(id); if (!s) return;
   s.innerHTML='<option value="">Selecionar…</option>';
-  COLABORADORES_CACHE.forEach(c=>s.innerHTML+=`<option value="${c.username}">${c.nome}</option>`);
+  COLABORADORES_CACHE.forEach(c=>s.innerHTML+=`<option value="${c.username}">${esc(c.nome)}</option>`);
 }
 
 // ═══════════════════════════════════════
@@ -1387,7 +1440,7 @@ async function carregarTurnos() {
   TURNOS_CACHE=r.turnos;
   const lista=document.getElementById('lista-turnos');
   if (!r.turnos.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem turnos criados.</div>'; return; }
-  lista.innerHTML=`<table class="tbl"><thead><tr><th>Nome</th><th>Local</th><th>Início</th><th>Fim</th><th>Pausas</th><th></th></tr></thead><tbody>${r.turnos.map(t=>{const loc=LOCAIS_CACHE.find(l=>l.id===t.localId);const pausas=[t.pausa1Label,t.pausa2Label,t.pausa3Label].filter(Boolean).join(', ')||'—';return `<tr><td style="font-weight:700">${t.nome}</td><td>${loc?.nome||'—'}</td><td style="color:var(--teal);font-weight:600">${minParaHora(t.inicioMin)}</td><td style="color:var(--teal);font-weight:600">${minParaHora(t.fimMin)}</td><td style="font-size:.78rem;color:var(--text-muted)">${pausas}</td><td><button class="btn-sm teal" onclick="editarTurno('${t.id}')">✎</button> <button class="btn-sm danger" onclick="apagarTurno('${t.id}')">✕</button></td></tr>`;}).join('')}</tbody></table>`;
+  lista.innerHTML=`<table class="tbl"><thead><tr><th>Nome</th><th>Local</th><th>Início</th><th>Fim</th><th>Pausas</th><th></th></tr></thead><tbody>${r.turnos.map(t=>{const loc=LOCAIS_CACHE.find(l=>l.id===t.localId);const pausas=[t.pausa1Label,t.pausa2Label,t.pausa3Label].filter(Boolean).join(', ')||'—';return `<tr><td style="font-weight:700">${esc(t.nome)}</td><td>${esc(loc?.nome)||'—'}</td><td style="color:var(--teal);font-weight:600">${minParaHora(t.inicioMin)}</td><td style="color:var(--teal);font-weight:600">${minParaHora(t.fimMin)}</td><td style="font-size:.78rem;color:var(--text-muted)">${esc(pausas)}</td><td><button class="btn-sm teal" onclick="editarTurno('${t.id}')">✎</button> <button class="btn-sm danger" onclick="apagarTurno('${t.id}')">✕</button></td></tr>`;}).join('')}</tbody></table>`;
 }
 
 function abrirModalTurno() {
@@ -1441,7 +1494,7 @@ async function carregarBalizas() {
   BALIZAS_CACHE = r.balizas;
   const lista = document.getElementById('lista-balizas');
   if (!r.balizas.length) { lista.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem balizas criadas — o registo por telemóvel fica sempre pendente de aprovação até criares pelo menos uma.</div>'; return; }
-  lista.innerHTML = `<table class="tbl"><thead><tr><th>Nome</th><th>Latitude</th><th>Longitude</th><th>Raio</th><th></th></tr></thead><tbody>${r.balizas.map(b=>`<tr><td style="font-weight:700">${b.nome}</td><td style="font-family:monospace">${b.lat}</td><td style="font-family:monospace">${b.lng}</td><td>${b.raioMetros} m</td><td><button class="btn-sm teal" onclick="editarBaliza('${b.id}')">✎</button> <button class="btn-sm danger" onclick="apagarBaliza('${b.id}')">✕</button></td></tr>`).join('')}</tbody></table>`;
+  lista.innerHTML = `<table class="tbl"><thead><tr><th>Nome</th><th>Latitude</th><th>Longitude</th><th>Raio</th><th></th></tr></thead><tbody>${r.balizas.map(b=>`<tr><td style="font-weight:700">${esc(b.nome)}</td><td style="font-family:monospace">${esc(b.lat)}</td><td style="font-family:monospace">${esc(b.lng)}</td><td>${esc(b.raioMetros)} m</td><td><button class="btn-sm teal" onclick="editarBaliza('${b.id}')">✎</button> <button class="btn-sm danger" onclick="apagarBaliza('${b.id}')">✕</button></td></tr>`).join('')}</tbody></table>`;
 }
 
 function abrirModalBaliza() {
@@ -1495,21 +1548,21 @@ async function carregarHorariosTipo() {
   const lista=document.getElementById('lista-horarios-tipo');
   if (!r.horarios.length) { lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Sem horários tipo criados. Crie o primeiro.</div>'; return; }
   const DIAS=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'], CAMPOS=['turnoSeg','turnoTer','turnoQua','turnoQui','turnoSex','turnoSab','turnoDom'];
-  lista.innerHTML=`<table class="tbl"><thead><tr><th>Nome</th><th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th><th></th></tr></thead><tbody>${r.horarios.map(h=>{const celulas=CAMPOS.map(c=>{const t=TURNOS_CACHE.find(x=>x.id===h[c]);return `<td style="font-size:.75rem">${t?`<span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 6px;font-weight:600">${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}</span>`:'<span style="color:var(--gray-mid)">—</span>'}</td>`;}).join('');return `<tr><td style="font-weight:700">${h.nome}</td>${celulas}<td><button class="btn-sm teal" onclick="editarHorarioTipo('${h.id}')">✎</button> <button class="btn-sm danger" onclick="apagarHorarioTipo('${h.id}')">✕</button></td></tr>`;}).join('')}</tbody></table>`;
+  lista.innerHTML=`<table class="tbl"><thead><tr><th>Nome</th><th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th><th></th></tr></thead><tbody>${r.horarios.map(h=>{const celulas=CAMPOS.map(c=>{const t=TURNOS_CACHE.find(x=>x.id===h[c]);return `<td style="font-size:.75rem">${t?`<span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 6px;font-weight:600">${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}</span>`:'<span style="color:var(--gray-mid)">—</span>'}</td>`;}).join('');return `<tr><td style="font-weight:700">${esc(h.nome)}</td>${celulas}<td><button class="btn-sm teal" onclick="editarHorarioTipo('${h.id}')">✎</button> <button class="btn-sm danger" onclick="apagarHorarioTipo('${h.id}')">✕</button></td></tr>`;}).join('')}</tbody></table>`;
 }
 
 async function popularHorariosTipoSelect(selectId) {
   if (!HORARIOS_TIPO_CACHE.length) await carregarHorariosTipo();
   const s=document.getElementById(selectId); if (!s) return;
   s.innerHTML='<option value="">Selecionar horário tipo…</option>';
-  HORARIOS_TIPO_CACHE.forEach(h=>s.innerHTML+=`<option value="${h.id}">${h.nome}</option>`);
+  HORARIOS_TIPO_CACHE.forEach(h=>s.innerHTML+=`<option value="${h.id}">${esc(h.nome)}</option>`);
 }
 
 function popularTurnosNosSelects(prefixo) {
   ['Seg','Ter','Qua','Qui','Sex','Sab','Dom'].forEach(d=>{
     const s=document.getElementById(`${prefixo}turno${d}`); if (!s) return;
     s.innerHTML='<option value="">— Folga —</option>';
-    TURNOS_CACHE.forEach(t=>s.innerHTML+=`<option value="${t.id}">${t.nome} (${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)})</option>`);
+    TURNOS_CACHE.forEach(t=>s.innerHTML+=`<option value="${t.id}">${esc(t.nome)} (${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)})</option>`);
   });
 }
 
@@ -1639,9 +1692,9 @@ const linhasColab = cols.map(col => {
           const pL = ((p.fim - p.inicio) / duracaoTurno) * 100;
           return '<div style="position:absolute;left:' + pPI + '%;width:' + pL + '%;height:100%;background:rgba(255,255,255,.45);border-radius:2px" title="Pausa: ' + p.label + '"></div>';
         }).join('');
-        conteudo = '<div style="position:relative;height:24px;width:100%"><div style="position:absolute;left:' + pctInicio + '%;width:' + largura + '%;height:100%;background:' + cor + ';border-radius:4px;display:flex;align-items:center;overflow:hidden" title="' + t.nome + ': ' + minParaHora(t.inicioMin) + '–' + minParaHora(t.fimMin) + '">' + pausas + '<span style="font-size:.7rem;font-weight:700;color:white;padding:0 6px;white-space:nowrap;overflow:hidden">' + minParaHora(t.inicioMin) + '–' + minParaHora(t.fimMin) + '</span></div></div>';
+        conteudo = '<div style="position:relative;height:24px;width:100%"><div style="position:absolute;left:' + pctInicio + '%;width:' + largura + '%;height:100%;background:' + cor + ';border-radius:4px;display:flex;align-items:center;overflow:hidden" title="' + esc(t.nome) + ': ' + minParaHora(t.inicioMin) + '–' + minParaHora(t.fimMin) + '">' + pausas + '<span style="font-size:.7rem;font-weight:700;color:white;padding:0 6px;white-space:nowrap;overflow:hidden">' + minParaHora(t.inicioMin) + '–' + minParaHora(t.fimMin) + '</span></div></div>';
       }
-      return '<div style="display:grid;grid-template-columns:160px 1fr;border-bottom:1px solid var(--gray-light);background:var(--white)" onmouseover="this.style.background=\'var(--off-white)\'" onmouseout="this.style.background=\'var(--white)\'"><div style="padding:.4rem .75rem;font-size:.78rem;font-weight:600;border-right:1px solid var(--gray-light);display:flex;align-items:center">' + col.nome + '</div><div style="padding:.3rem .25rem;' + grelhaStyle + '">' + conteudo + '</div></div>';
+      return '<div style="display:grid;grid-template-columns:160px 1fr;border-bottom:1px solid var(--gray-light);background:var(--white)" onmouseover="this.style.background=\'var(--off-white)\'" onmouseout="this.style.background=\'var(--white)\'"><div style="padding:.4rem .75rem;font-size:.78rem;font-weight:600;border-right:1px solid var(--gray-light);display:flex;align-items:center">' + esc(col.nome) + '</div><div style="padding:.3rem .25rem;' + grelhaStyle + '">' + conteudo + '</div></div>';
     }).join('');
 
     const corHdr = ehFeriado ? '#7c3aed' : (ehFimDeSemana ? '#64748b' : 'var(--teal)');
@@ -1717,9 +1770,9 @@ if (info?.emFerias) { const ausIco={ferias:'🏖',baixa_medica:'🏥',licenca:'�
       }
       const t=info.turno, cor=info.especial?'#f59e0b':'var(--teal)';
       const label=minParaHora(t.inicioMin).replace(':','h').replace(/^0/,'');
-      return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;padding:.2rem .1rem" title="${t.nome}: ${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}"><div style="background:${cor};border-radius:3px;height:20px;display:flex;align-items:center;justify-content:center"><span style="font-size:.55rem;font-weight:700;color:white">${label}</span></div></div>`;
+      return `<div style="${fundo}border-right:1px solid var(--gray-light);min-width:28px;padding:.2rem .1rem" title="${esc(t.nome)}: ${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}"><div style="background:${cor};border-radius:3px;height:20px;display:flex;align-items:center;justify-content:center"><span style="font-size:.55rem;font-weight:700;color:white">${esc(label)}</span></div></div>`;
     }).join('');
-    return `<div style="display:grid;grid-template-columns:110px repeat(${diasOrdenados.length},1fr);border-bottom:1px solid var(--gray-light);background:var(--white)" onmouseover="this.style.background='var(--off-white)'" onmouseout="this.style.background='var(--white)'"><div style="padding:.4rem .6rem;font-size:.75rem;font-weight:600;border-right:1px solid var(--gray-light);display:flex;align-items:center">${col.nome}</div>${celulas}</div>`;
+    return `<div style="display:grid;grid-template-columns:110px repeat(${diasOrdenados.length},1fr);border-bottom:1px solid var(--gray-light);background:var(--white)" onmouseover="this.style.background='var(--off-white)'" onmouseout="this.style.background='var(--white)'"><div style="padding:.4rem .6rem;font-size:.75rem;font-weight:600;border-right:1px solid var(--gray-light);display:flex;align-items:center">${esc(col.nome)}</div>${celulas}</div>`;
   }).join('');
   container.innerHTML=`<div style="min-width:500px"><div style="display:grid;grid-template-columns:110px repeat(${diasOrdenados.length},1fr);background:var(--teal);color:white;border-radius:8px 8px 0 0"><div style="padding:.5rem .6rem;font-size:.72rem;font-weight:700">Colaborador</div>${cabDias}</div>${linhas}</div>`;
 }
@@ -1801,7 +1854,7 @@ function injectarUIMultiAtribuicao(modoEdicao) {
   const div = document.getElementById('at-checkboxes');
   if (div) {
     div.innerHTML = COLABORADORES_CACHE.map(c =>
-      `<label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;white-space:nowrap"><input type="checkbox" class="at-chk-colab" value="${c.username}"><span>${c.nome}</span></label>`
+      `<label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;white-space:nowrap"><input type="checkbox" class="at-chk-colab" value="${c.username}"><span>${esc(c.nome)}</span></label>`
     ).join('');
   }
 
@@ -2015,12 +2068,12 @@ function popularFiltrosAtribuicoes() {
   const selLocal = document.getElementById('atrib-filtro-local');
   if (selColab && !selColab.dataset.populated) {
     selColab.innerHTML = '<option value="">Todos</option>';
-    COLABORADORES_CACHE.forEach(c => selColab.innerHTML += `<option value="${c.username}">${c.nome}</option>`);
+    COLABORADORES_CACHE.forEach(c => selColab.innerHTML += `<option value="${c.username}">${esc(c.nome)}</option>`);
     selColab.dataset.populated = '1';
   }
   if (selLocal && !selLocal.dataset.populated) {
     selLocal.innerHTML = '<option value="">Todos</option>';
-    LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${l.nome}</option>`);
+    LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${esc(l.nome)}</option>`);
     selLocal.dataset.populated = '1';
   }
 }
@@ -2035,6 +2088,7 @@ async function carregarAtribuicoes() {
   const fS = document.getElementById('atrib-filtro-semana')?.value; if (fS) filtros.semanaInicio = fS;
   const r = await assApi({acao:'listarAtribuicoesSemana', filtros});
   if (!r.ok) return;
+  ATRIBUICOES_CACHE = r.atribuicoes; // reaproveitado por editarAtribuicao — evita repetir o pedido só para achar 1 item
   if (!HORARIOS_TIPO_CACHE.length) await carregarHorariosTipo();
   const lista = document.getElementById('lista-atribuicoes');
   if (!r.atribuicoes.length) {
@@ -2054,10 +2108,10 @@ async function carregarAtribuicoes() {
       const hor = HORARIOS_TIPO_CACHE.find(h => h.id === a.horarioTipoId);
       const semStr = String(a.semanaInicio).slice(0,10);
       return `<tr>
-        <td style="font-weight:600">${col?.nome || a.username}</td>
-        <td>${loc?.nome || a.localId}</td>
+        <td style="font-weight:600">${esc(col?.nome || a.username)}</td>
+        <td>${esc(loc?.nome || a.localId)}</td>
         <td>${assFormatarData(semStr)}</td>
-        <td><span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">${hor?.nome || a.horarioTipoId}</span></td>
+        <td><span style="background:var(--teal-pale);color:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">${esc(hor?.nome || a.horarioTipoId)}</span></td>
         <td style="text-align:right;white-space:nowrap">
           <button class="btn-sm teal" onclick="editarAtribuicao('${a.id}')">✎ Editar</button>
           <button class="btn-sm danger" onclick="apagarAtribuicao('${a.id}','${(col?.nome||a.username).replace(/'/g,"\\'")}','${semStr}')">✕ Apagar</button>
@@ -2067,27 +2121,36 @@ async function carregarAtribuicoes() {
   }</tbody></table>`;
 }
 
-function editarAtribuicao(id) {
-  assApi({acao:'listarAtribuicoesSemana', filtros:{}}).then(r => {
+// 2026-09-12 (2ª ronda de auditoria): usava sempre um pedido
+// listarAtribuicoesSemana sem filtros (todas as atribuições, de todos os
+// colaboradores) só para encontrar 1 item — quando a lista já tinha acabado
+// de ser carregada por carregarAtribuicoes (é o que desenhou o botão que
+// chama esta função). Procura primeiro em ATRIBUICOES_CACHE; só pede ao
+// servidor se, por algum motivo, não encontrar lá (ex.: item fora do filtro
+// actualmente aplicado).
+async function editarAtribuicao(id) {
+  let a = ATRIBUICOES_CACHE.find(x => x.id === id);
+  if (!a) {
+    const r = await assApi({acao:'listarAtribuicoesSemana', filtros:{}});
     if (!r.ok) return;
-    const a = r.atribuicoes.find(x => x.id === id);
-    if (!a) { alert('Atribuição não encontrada.'); return; }
-    document.getElementById('atribuir-err').style.display='none';
-    document.getElementById('atribuir-ok').style.display='none';
-    popularColaboradoresSelect('at-colaborador');
-    popularSelectLocal('at-local');
-    popularHorariosTipoSelect('at-horario-tipo').then(() => {
-      document.getElementById('at-colaborador').value = a.username;
-      document.getElementById('at-local').value = a.localId;
-      document.getElementById('at-semana').value = String(a.semanaInicio).slice(0,10);
-      document.getElementById('at-horario-tipo').value = a.horarioTipoId;
-    });
-    // Modo edição: esconder o bloco de multi-select + repetição
-    injectarUIMultiAtribuicao(true);
-    document.getElementById('modal-atribuir').dataset.editId = id;
-    document.querySelector('#modal-atribuir .modal-title').textContent = 'Editar Atribuição';
-    document.getElementById('modal-atribuir').classList.add('open');
+    a = r.atribuicoes.find(x => x.id === id);
+  }
+  if (!a) { alert('Atribuição não encontrada.'); return; }
+  document.getElementById('atribuir-err').style.display='none';
+  document.getElementById('atribuir-ok').style.display='none';
+  popularColaboradoresSelect('at-colaborador');
+  popularSelectLocal('at-local');
+  popularHorariosTipoSelect('at-horario-tipo').then(() => {
+    document.getElementById('at-colaborador').value = a.username;
+    document.getElementById('at-local').value = a.localId;
+    document.getElementById('at-semana').value = String(a.semanaInicio).slice(0,10);
+    document.getElementById('at-horario-tipo').value = a.horarioTipoId;
   });
+  // Modo edição: esconder o bloco de multi-select + repetição
+  injectarUIMultiAtribuicao(true);
+  document.getElementById('modal-atribuir').dataset.editId = id;
+  document.querySelector('#modal-atribuir .modal-title').textContent = 'Editar Atribuição';
+  document.getElementById('modal-atribuir').classList.add('open');
 }
 
 async function apagarAtribuicao(id, nomeColab, semana) {
@@ -2106,12 +2169,12 @@ function popularFiltrosExcecoes() {
   const selLocal = document.getElementById('exc-filtro-local');
   if (selColab && !selColab.dataset.populated) {
     selColab.innerHTML = '<option value="">Todos</option>';
-    COLABORADORES_CACHE.forEach(c => selColab.innerHTML += `<option value="${c.username}">${c.nome}</option>`);
+    COLABORADORES_CACHE.forEach(c => selColab.innerHTML += `<option value="${c.username}">${esc(c.nome)}</option>`);
     selColab.dataset.populated = '1';
   }
   if (selLocal && !selLocal.dataset.populated) {
     selLocal.innerHTML = '<option value="">Todos</option>';
-    LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${l.nome}</option>`);
+    LOCAIS_CACHE.forEach(l => selLocal.innerHTML += `<option value="${l.id}">${esc(l.nome)}</option>`);
     selLocal.dataset.populated = '1';
   }
 }
@@ -2135,11 +2198,11 @@ async function carregarExcecoes() {
       const t=TURNOS_CACHE.find(x=>x.id===e.turnoTipoId);
       const loc=LOCAIS_CACHE.find(l=>l.id===e.localId);
       return `<tr>
-        <td style="font-weight:600">${col?.nome||e.username}</td>
+        <td style="font-weight:600">${esc(col?.nome||e.username)}</td>
         <td>${assFormatarData(e.data)}</td>
-        <td>${t?`<span style="background:#fff3e0;color:#d97706;border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">${t.nome}: ${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}</span>`:e.turnoTipoId}</td>
-        <td>${loc?.nome||e.localId}</td>
-        <td style="font-size:.78rem;color:var(--text-muted)">${e.motivo||'—'}</td>
+        <td>${t?`<span style="background:#fff3e0;color:#d97706;border-radius:5px;padding:2px 8px;font-weight:600;font-size:.78rem">${esc(t.nome)}: ${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}</span>`:esc(e.turnoTipoId)}</td>
+        <td>${esc(loc?.nome||e.localId)}</td>
+        <td style="font-size:.78rem;color:var(--text-muted)">${esc(e.motivo)||'—'}</td>
         <td style="text-align:right"><button class="btn-sm danger" onclick="removerExcecao('${e.id}')">✕</button></td>
       </tr>`;
     }).join('')
@@ -2155,7 +2218,7 @@ function abrirModalExcecao() {
     selT.innerHTML='<option value="">Selecionar turno…</option>';
     TURNOS_CACHE.forEach(t=>{
       const loc=LOCAIS_CACHE.find(l=>l.id===t.localId);
-      selT.innerHTML+=`<option value="${t.id}">${t.nome} (${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}) · ${loc?.nome||t.localId}</option>`;
+      selT.innerHTML+=`<option value="${t.id}">${esc(t.nome)} (${minParaHora(t.inicioMin)}–${minParaHora(t.fimMin)}) · ${esc(loc?.nome||t.localId)}</option>`;
     });
   };
   if (!TURNOS_CACHE.length) carregarTurnos().then(popularTurnos); else popularTurnos();
@@ -2319,7 +2382,7 @@ function renderFeriasTabela() {
     ? idx.map(i=>{
         const f = linhas[i]._f, o=linhas[i];
         const cor=o.estado==='aprovado'?'color:#00a878':o.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
-        return `<tr><td style="font-weight:600">${o.colaborador}</td><td style="font-size:.8rem">${o.tipo}</td><td>${o.local}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button>${SESSION.role==='master'?` <button class="btn-sm danger" onclick="apagarFeriasConfirm('${f.id}')" title="Apagar">🗑</button>`:''}</td></tr>`;
+        return `<tr><td style="font-weight:600">${esc(o.colaborador)}</td><td style="font-size:.8rem">${o.tipo}</td><td>${esc(o.local)}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td><td style="white-space:nowrap">${f.estado==='pendente'?`<button class="btn-sm teal" onclick="decidirFerias('${f.id}','aprovado')">✓</button> <button class="btn-sm danger" onclick="decidirFerias('${f.id}','rejeitado')">✕</button> `:''}<button class="btn-sm" onclick="abrirEditarFerias('${f.id}')" title="Editar">✎</button>${SESSION.role==='master'?` <button class="btn-sm danger" onclick="apagarFeriasConfirm('${f.id}')" title="Apagar">🗑</button>`:''}</td></tr>`;
       }).join('')
     : `<tr><td colspan="8" style="text-align:center;padding:1.2rem;color:var(--text-muted)">Nenhum registo com estes filtros.</td></tr>`;
   lista.innerHTML = `<table class="tbl"><thead><tr>${th('Colaborador','colaborador')}${th('Tipo','tipo')}${th('Local','local')}${th('Início','inicio')}${th('Fim','fim')}${th('Dias úteis','dias')}${th('Estado','estado')}<th></th></tr>${linhaFiltros}</thead><tbody>${corpo}</tbody></table>`;
@@ -2467,7 +2530,7 @@ function renderMinhasFeriasTabela() {
     ? idx.map(i=>{
         const o=linhas[i];
         const cor=o.estado==='aprovado'?'color:#00a878':o.estado==='rejeitado'?'color:var(--danger)':'color:#d97706';
-        return `<tr><td style="font-size:.8rem">${o.tipo}</td><td>${o.local}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td></tr>`;
+        return `<tr><td style="font-size:.8rem">${o.tipo}</td><td>${esc(o.local)}</td><td>${o.inicio__t}</td><td>${o.fim__t}</td><td style="text-align:center;font-weight:700">${o.dias}</td><td style="${cor};font-weight:600;font-size:.8rem">${o.estado}</td></tr>`;
       }).join('')
     : `<tr><td colspan="6" style="text-align:center;padding:1.2rem;color:var(--text-muted)">Nenhum registo com estes filtros.</td></tr>`;
   lista.innerHTML = `<table class="tbl"><thead><tr>${th('Tipo','tipo')}${th('Local','local')}${th('Início','inicio')}${th('Fim','fim')}${th('Dias úteis','dias')}${th('Estado','estado')}</tr>${linhaFiltros}</thead><tbody>${corpo}</tbody></table>`;
@@ -2529,8 +2592,8 @@ async function carregarAprovacoes() {
     // coordenador poder confirmar visualmente antes de decidir.
     const linksMovel = (a.movelLat != null && a.movelLng != null)
       ? `<div style="margin-top:.4rem;display:flex;gap:.75rem;font-size:.78rem">
-           <a href="https://www.google.com/maps?q=${a.movelLat},${a.movelLng}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>
-           ${a.movelFotoUrl?`<a href="${a.movelFotoUrl}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
+           <a href="https://www.google.com/maps?q=${encodeURIComponent(a.movelLat)},${encodeURIComponent(a.movelLng)}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📍 Ver no mapa</a>
+           ${a.movelFotoUrl?`<a href="${esc(a.movelFotoUrl)}" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600">📷 Ver foto</a>`:''}
          </div>` : '';
     // 2026-09-11, pedido do Ricardo: hora real do registo + hora prevista do
     // turno bem visíveis no cartão (em vez de só embutidas no texto do
@@ -2538,9 +2601,16 @@ async function carregarAprovacoes() {
     // aprovações têm turno previsto (ex.: comerciais/AVAC sem horário fixo).
     const temHoras = a.horaRealMin !== undefined && a.horaRealMin !== null && a.horaRealMin !== '';
     const horasLinha = temHoras
-      ? `<div style="margin-top:.3rem;font-size:.78rem;color:var(--text-muted)">🕐 Registo real: <strong style="color:var(--text)">${assMinParaHora(a.horaRealMin)}</strong> · Turno previsto: <strong style="color:var(--text)">${(a.horaPrevistaMin !== undefined && a.horaPrevistaMin !== null && a.horaPrevistaMin !== '') ? assMinParaHora(a.horaPrevistaMin) : 'sem turno atribuído'}</strong></div>`
+      ? `<div style="margin-top:.3rem;font-size:.78rem;color:var(--text-muted)">🕐 Registo real: <strong style="color:var(--text)">${minParaHora(a.horaRealMin)}</strong> · Turno previsto: <strong style="color:var(--text)">${(a.horaPrevistaMin !== undefined && a.horaPrevistaMin !== null && a.horaPrevistaMin !== '') ? minParaHora(a.horaPrevistaMin) : 'sem turno atribuído'}</strong></div>`
       : '';
-    return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${col?.nome||a.username}</div><div class="aprov-meta">${loc?.nome||a.localId} · ${assFormatarData(a.data)} · ${tipoLabel}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${a.estado}</span></div><div class="aprov-motivo">${a.motivo}</div>${horasLinha}${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${a.decididoPor}: ${a.notaDecisao}</div>`}</div>`;}).join('');
+    // 2026-09-12 (2ª ronda de auditoria) — item crítico de segurança: a.motivo
+    // é texto livre escrito pelo PRÓPRIO colaborador (justificação ao registar
+    // fora de baliza, ou ao pedir hora extra/entrada antecipada) e ia direto
+    // para innerHTML sem escape nenhum — um colaborador podia pôr HTML/script
+    // no motivo e ver isso correr no ecrã do master/coordenador que abrisse
+    // esta lista para decidir. esc() aplicado a tudo o que pode conter texto
+    // não controlado (nome, local, motivo, notas de decisão).
+    return `<div class="aprov-card"><div class="aprov-hdr"><div><div class="aprov-nome">${esc(col?.nome||a.username)}</div><div class="aprov-meta">${esc(loc?.nome||a.localId)} · ${assFormatarData(a.data)} · ${esc(tipoLabel)}</div></div><span style="font-size:.75rem;font-weight:600;color:${a.estado==='pendente'?'#d97706':a.estado==='aprovado'?'#00a878':'var(--danger)'}">${esc(a.estado)}</span></div><div class="aprov-motivo">${esc(a.motivo)}</div>${horasLinha}${linksMovel}${a.estado==='pendente'?`<button class="btn-sm teal" onclick="abrirDecisao('${a.id}')">Decidir</button>`:`<div style="font-size:.75rem;color:var(--text-muted)">Decidido por ${esc(a.decididoPor)}: ${esc(a.notaDecisao)}</div>`}</div>`;}).join('');
 }
 
 function renderAprovacoesBadge(count) {
@@ -2550,14 +2620,19 @@ function renderAprovacoesBadge(count) {
   else { b.textContent = ''; b.style.display = 'none'; }
 }
 
+// 2026-09-12 (2ª ronda de auditoria): esta chamada contornava o
+// fetchComRetry/assApi que o resto do ficheiro usa — um fetch cru, sem
+// qualquer tentativa extra, que falhava em silêncio (catch vazio) numa rede
+// instável, deixando o badge desactualizado sem se notar. Passa a usar
+// fetchComRetry directamente (não assApi, porque esta chamada corre em
+// segundo plano e não deve mostrar o ecrã de "A processar…") com 2
+// tentativas — chega para um badge, sem gastar demasiado tempo.
 async function carregarAprovacoesBadge() {
-  // chamada silenciosa — não mostra loading
   try {
-    const res = await fetch(ASS_URL, {method:'POST', body: JSON.stringify({
+    const r = await fetchComRetry(ASS_URL, {
       acao:'listarAprovacoes', filtros:{estado:'pendente'},
       username: SESSION.username, password: SESSION.password
-    })});
-    const r = await res.json();
+    }, 2);
     if (r.ok) renderAprovacoesBadge(r.aprovacoes.length);
   } catch(_) {}
 }
@@ -2616,7 +2691,7 @@ function atualizarAjusteHora() {
     }
 
     document.getElementById('decisao-ajuste').innerHTML =
-      opcoes.map(v => `<option value="${v}">${assMinParaHora(v)}</option>`).join('');
+      opcoes.map(v => `<option value="${v}">${minParaHora(v)}</option>`).join('');
     bloco.style.display='';
   } else {
     bloco.style.display='none';
@@ -2678,11 +2753,11 @@ async function carregarMapaFerias(anoElId, contElId) {
         const estilo = pendente
           ? 'border:1px dashed var(--teal);color:var(--teal);background:transparent'
           : 'background:var(--teal-pale);color:var(--teal)';
-        return `<div title="${a.localNome} · ${a.diasUteis} dia(s) útil(eis) · ${a.estado}" style="font-size:.62rem;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;${estilo}">${ICONE[a.tipo]||'❓'} ${dIniFmt}–${dFimFmt}</div>`;
+        return `<div title="${esc(a.localNome)} · ${esc(a.diasUteis)} dia(s) útil(eis) · ${esc(a.estado)}" style="font-size:.62rem;border-radius:4px;padding:1px 4px;margin-bottom:2px;white-space:nowrap;${estilo}">${ICONE[a.tipo]||'❓'} ${dIniFmt}–${dFimFmt}</div>`;
       }).join('');
       return `<td style="border:1px solid #eee;padding:3px;vertical-align:top">${badges}</td>`;
     }).join('');
-    return `<tr><td style="padding:4px 8px;font-weight:600;font-size:.78rem;border:1px solid #ddd;white-space:nowrap;background:#fafafa">${col.nome}</td>${tdTotais(col.totais)}${tds}</tr>`;
+    return `<tr><td style="padding:4px 8px;font-weight:600;font-size:.78rem;border:1px solid #ddd;white-space:nowrap;background:#fafafa">${esc(col.nome)}</td>${tdTotais(col.totais)}${tds}</tr>`;
   }).join('');
 
   const tg = r.totaisGerais || {ferias:0,baixa_medica:0,licenca:0,outro:0};
@@ -2708,7 +2783,7 @@ async function carregarMapa() {
   if (!r.colaboradores.length) { container.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text-muted)">Sem registos neste período.</div>'; return; }
   container.innerHTML=`<div style="margin-bottom:1rem;font-size:.82rem;color:var(--text-muted)">Período: ${assFormatarData(r.periodoInicio)} a ${assFormatarData(r.periodoFim)}</div>
   <table class="tbl"><thead><tr><th>Colaborador</th><th>Normal</th><th>Nocturno</th><th>Sábado</th><th>Domingo</th><th>Feriado</th><th>1ª H. Extra</th><th>H. Extra Seg.</th><th>Total</th><th>Distribuição</th><th>🏖 Férias</th><th>🏥 Baixa</th><th>📄 Licença</th><th>❓ Outro</th></tr></thead><tbody>
-  ${r.colaboradores.map(col=>{const t=col.totais,total=t.total||1,a=col.ausencias||{};return `<tr><td style="font-weight:700">${col.nome}</td><td>${minParaHoraH(t.normal)}</td><td style="color:#1e40af">${minParaHoraH(t.noturno)}</td><td style="color:#d97706">${minParaHoraH(t.sabado)}</td><td style="color:var(--danger)">${minParaHoraH(t.domingo)}</td><td style="color:#7c3aed">${minParaHoraH(t.feriado)}</td><td style="color:#dc2626">${minParaHoraH(t.extraPrimeira)}</td><td style="color:#f97316">${minParaHoraH(t.extraSubsequente)}</td><td style="font-weight:800">${minParaHoraH(t.total)}</td><td style="min-width:120px"><div class="hora-bar">${barra('normal',t.normal,total)}${barra('noturno',t.noturno,total)}${barra('sabado',t.sabado,total)}${barra('domingo',t.domingo,total)}${barra('feriado',t.feriado,total)}${barra('extraPrimeira',t.extraPrimeira,total)}${barra('extraSubsequente',t.extraSubsequente,total)}</div></td><td style="text-align:center">${a.ferias||0}</td><td style="text-align:center">${a.baixa_medica||0}</td><td style="text-align:center">${a.licenca||0}</td><td style="text-align:center">${a.outro||0}</td></tr>`;}).join('')}</tbody></table>`;
+  ${r.colaboradores.map(col=>{const t=col.totais,total=t.total||1,a=col.ausencias||{};return `<tr><td style="font-weight:700">${esc(col.nome)}</td><td>${minParaHoraH(t.normal)}</td><td style="color:#1e40af">${minParaHoraH(t.noturno)}</td><td style="color:#d97706">${minParaHoraH(t.sabado)}</td><td style="color:var(--danger)">${minParaHoraH(t.domingo)}</td><td style="color:#7c3aed">${minParaHoraH(t.feriado)}</td><td style="color:#dc2626">${minParaHoraH(t.extraPrimeira)}</td><td style="color:#f97316">${minParaHoraH(t.extraSubsequente)}</td><td style="font-weight:800">${minParaHoraH(t.total)}</td><td style="min-width:120px"><div class="hora-bar">${barra('normal',t.normal,total)}${barra('noturno',t.noturno,total)}${barra('sabado',t.sabado,total)}${barra('domingo',t.domingo,total)}${barra('feriado',t.feriado,total)}${barra('extraPrimeira',t.extraPrimeira,total)}${barra('extraSubsequente',t.extraSubsequente,total)}</div></td><td style="text-align:center">${a.ferias||0}</td><td style="text-align:center">${a.baixa_medica||0}</td><td style="text-align:center">${a.licenca||0}</td><td style="text-align:center">${a.outro||0}</td></tr>`;}).join('')}</tbody></table>`;
 }
 
 function barra(tipo,val,total) { if(!val) return ''; const pct=Math.round((val/total)*100); return `<div class="hora-seg ${tipo}" style="width:${pct}%" title="${tipo}: ${minParaHoraH(val)}"></div>`; }
@@ -2742,8 +2817,6 @@ async function exportarExcel() {
 // ═══════════════════════════════════════
 //  ESCALA PDF
 // ═══════════════════════════════════════
-function escalaPdfActivar() {}
-
 // Modal PDF — acessível a todos os utilizadores
 function abrirModalPDF() {
   const modal = document.getElementById('modal-escala-pdf');
@@ -2751,7 +2824,7 @@ function abrirModalPDF() {
   const sel = document.getElementById('pdf-modal-local');
   sel.innerHTML = '<option value="">Selecionar local…</option>';
   const popular = () => {
-    LOCAIS_CACHE.forEach(l => sel.innerHTML += `<option value="${l.id}">${l.nome}</option>`);
+    LOCAIS_CACHE.forEach(l => sel.innerHTML += `<option value="${l.id}">${esc(l.nome)}</option>`);
     // Pré-seleccionar local do utilizador se existir
     if (SESSION && SESSION.localId) sel.value = SESSION.localId;
   };
@@ -2867,7 +2940,7 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
       (t.pausa3Label && t.pausa3InicioMin!=='' && t.pausa3FimMin!=='') ? `${t.pausa3Label}: ${minParaHora(t.pausa3InicioMin)}–${minParaHora(t.pausa3FimMin)} (${hm(durPausa3)})` : null,
     ].filter(Boolean);
     return `<tr>
-      <td style="padding:2px 6px;font-weight:700;font-size:.62rem;border:1px solid #ccc;white-space:nowrap">${t.nome||'—'}</td>
+      <td style="padding:2px 6px;font-weight:700;font-size:.62rem;border:1px solid #ccc;white-space:nowrap">${esc(t.nome)||'—'}</td>
       <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.inicioMin||0)}</td>
       <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center;font-weight:600;color:#007878">${minParaHora(t.fimMin||0)}</td>
       <td style="padding:2px 6px;font-size:.62rem;border:1px solid #ccc;text-align:center">${hm(dur)}</td>
@@ -2897,12 +2970,12 @@ async function gerarEscalaPDFComDados(localId, mesAno) {
         cor = info.especial ? '#d97706' : '#007878';
         title = `${info.turno.nome}: ${minParaHora(info.turno.inicioMin)}–${minParaHora(info.turno.fimMin)}`;
       }
-      return `<td style="text-align:center;font-size:.5rem;padding:2px 1px;border:1px solid #ddd;background:${bg}" title="${title}">
-        ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${label}</span>`}
+      return `<td style="text-align:center;font-size:.5rem;padding:2px 1px;border:1px solid #ddd;background:${bg}" title="${esc(title)}">
+        ${label==='–'?'<span style="color:#ddd">–</span>':`<span style="color:${cor};font-weight:700">${esc(label)}</span>`}
       </td>`;
     }).join('');
     return `<tr>
-      <td style="padding:2px 6px;font-weight:600;font-size:.64rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${col.nome}</td>
+      <td style="padding:2px 6px;font-weight:600;font-size:.64rem;border:1px solid #ccc;white-space:nowrap;background:#fafafa">${esc(col.nome)}</td>
       ${celdas}
     </tr>`;
   }).join('') : `<tr><td colspan="${diasOrdenados.length+1}" style="padding:6px;text-align:center;color:#999;font-size:.7rem;border:1px solid #ccc">Sem colaboradores atribuídos neste período.</td></tr>`;
@@ -3130,12 +3203,12 @@ async function carregarConfirmacoesRegras() {
   const r = await assApi({acao:'listarConfirmacoesRegras', versao:REGRAS_VERSAO});
   const container = document.getElementById('lista-confirmacoes-regras');
   if (!container) return;
-  if (!r.ok) { container.innerHTML = `<div style="color:var(--danger)">${r.erro}</div>`; return; }
+  if (!r.ok) { container.innerHTML = `<div style="color:var(--danger)">${esc(r.erro)}</div>`; return; }
   const confirmadosSet = new Set(r.confirmacoes.map(c=>c.username));
   const linhas = COLABORADORES_CACHE.map(c => {
     const confirmado = confirmadosSet.has(c.username);
     const info = r.confirmacoes.find(x=>x.username===c.username);
-    return `<tr><td style="font-weight:600">${c.nome}</td><td>${confirmado?`<span style="color:var(--success);font-weight:600">✓ Confirmado — ${info.confirmadoEm}</span>`:'<span style="color:var(--danger);font-weight:600">✗ Por confirmar</span>'}</td></tr>`;
+    return `<tr><td style="font-weight:600">${esc(c.nome)}</td><td>${confirmado?`<span style="color:var(--success);font-weight:600">✓ Confirmado — ${esc(info.confirmadoEm)}</span>`:'<span style="color:var(--danger);font-weight:600">✗ Por confirmar</span>'}</td></tr>`;
   }).join('');
   const total = COLABORADORES_CACHE.length, feitos = confirmadosSet.size;
   container.innerHTML = `<div style="margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted)">${feitos} de ${total} colaborador(es) confirmaram a leitura da versão actual.</div><table class="tbl"><thead><tr><th>Colaborador</th><th>Estado</th></tr></thead><tbody>${linhas}</tbody></table>`;
