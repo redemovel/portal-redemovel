@@ -21,6 +21,8 @@ const ACCOES_CLOUD_RUN = new Set([
   'listarAprovacoes', 'decidirAprovacao',
   'obterHoraServidor',
   'confirmarLeituraRegras', 'minhaConfirmacaoRegras', 'arranqueMovel', 'listarConfirmacoesRegras',
+  // "Ao Vivo" / Ocupação Diária (2026-09-13)
+  'ocupacaoDiaria',
 ]);
 
 // Único sítio que decide o destino de um pedido — usado tanto por api() como
@@ -290,7 +292,16 @@ function renderUtilizadores(utilizadores) {
   utilizadores.forEach(u=>{
     const div=document.createElement('div'); div.className='user-item';
     const userAttr = String(u.username ?? '').replace(/'/g,"\\'");
-    div.innerHTML=`<div class="user-info"><div class="user-name-g">${esc(u.nome)}</div><div class="user-meta">@${esc(u.username)}</div></div><span class="role-badge ${esc(u.role)}">${roleLabel(u.role)}</span>${u.ativo?`<button class="btn-sm teal" onclick="abrirResetPass('${userAttr}')">🔑 Reset</button>${u.username!==SESSION.username?`<button class="btn-sm danger" onclick="desativarUser('${userAttr}')">Desativar</button>`:'`'}`:'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
+    const nomeAttr = String(u.nome ?? '').replace(/'/g,"\\'");
+    const podeEditar = u.username !== SESSION.username; // ninguém edita a própria conta por aqui (ver editarUtilizador)
+    const botoes = [];
+    if (u.ativo) botoes.push(`<button class="btn-sm teal" onclick="abrirResetPass('${userAttr}')">🔑 Reset</button>`);
+    // 2026-09-13: "Editar" cobre nome, perfil e activo/inactivo — incluindo
+    // reactivar quem foi desativado (antes não havia forma nenhuma de o fazer
+    // pelo portal; só editando o campo directamente no Firestore).
+    if (podeEditar) botoes.push(`<button class="btn-sm" onclick="abrirEditarUser('${userAttr}','${nomeAttr}','${u.role}',${u.ativo?'true':'false'})">✎ Editar</button>`);
+    if (u.ativo && podeEditar) botoes.push(`<button class="btn-sm danger" onclick="desativarUser('${userAttr}')">Desativar</button>`);
+    div.innerHTML=`<div class="user-info"><div class="user-name-g">${esc(u.nome)}</div><div class="user-meta">@${esc(u.username)}</div></div><span class="role-badge ${esc(u.role)}">${roleLabel(u.role)}</span>${botoes.join('')}${u.ativo?'':'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
     lista.appendChild(div);
   });
 }
@@ -331,6 +342,26 @@ async function confirmarResetPass() {
   if (!passwordNova||passwordNova.length<6) { showAlert(err,'Mínimo 6 caracteres.'); return; }
   const res=await api({acao:'redefinirPassword',ip:SESSION.ip,master:SESSION.username,passwordMaster:SESSION.password,username:modalResetTarget,passwordNova});
   if (res.ok) { closeModal('modal-reset-pass'); alert('Password redefinida com sucesso.'); } else showAlert(err,res.erro);
+}
+
+let modalEditarTarget = null;
+function abrirEditarUser(username, nomeAtual, roleAtual, ativoAtual) {
+  modalEditarTarget = username;
+  document.getElementById('modal-editar-user-titulo').textContent = 'Editar — @' + username;
+  document.getElementById('me-nome').value = nomeAtual;
+  document.getElementById('me-role').value = roleAtual;
+  document.getElementById('me-ativo').checked = !!ativoAtual;
+  document.getElementById('modal-editar-error').style.display = 'none';
+  document.getElementById('modal-editar-user').classList.add('open');
+}
+
+async function confirmarEditarUser() {
+  const nome=document.getElementById('me-nome').value.trim(), role=document.getElementById('me-role').value, ativo=document.getElementById('me-ativo').checked;
+  const err=document.getElementById('modal-editar-error');
+  err.style.display='none';
+  if (!nome) { showAlert(err,'Nome não pode ficar vazio.'); return; }
+  const res=await api({acao:'editarUtilizador',ip:SESSION.ip,username:SESSION.username,password:SESSION.password,usernameAlvo:modalEditarTarget,alteracoes:{nome,role,ativo}});
+  if (res.ok) { closeModal('modal-editar-user'); await carregarUtilizadores(); } else showAlert(err,res.erro);
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
