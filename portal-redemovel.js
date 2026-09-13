@@ -301,7 +301,10 @@ function renderUtilizadores(utilizadores) {
     // pelo portal; só editando o campo directamente no Firestore).
     if (podeEditar) botoes.push(`<button class="btn-sm" onclick="abrirEditarUser('${userAttr}','${nomeAttr}','${u.role}',${u.ativo?'true':'false'})">✎ Editar</button>`);
     if (u.ativo && podeEditar) botoes.push(`<button class="btn-sm danger" onclick="desativarUser('${userAttr}')">Desativar</button>`);
-    div.innerHTML=`<div class="user-info"><div class="user-name-g">${esc(u.nome)}</div><div class="user-meta">@${esc(u.username)}</div></div><span class="role-badge ${esc(u.role)}">${roleLabel(u.role)}</span>${botoes.join('')}${u.ativo?'':'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
+    // Classe do badge sempre em minúsculas — a coluna "role" em produção não é
+    // consistente (Assistente_loja, Vendas_Empresariais, Backoffice, AC), mas
+    // as classes CSS .role-badge.* são todas minúsculas (ver equipa-redemovel-v3.html).
+    div.innerHTML=`<div class="user-info"><div class="user-name-g">${esc(u.nome)}</div><div class="user-meta">@${esc(u.username)}</div></div><span class="role-badge ${esc(String(u.role||'').toLowerCase())}">${roleLabel(u.role)}</span>${botoes.join('')}${u.ativo?'':'<span style="font-size:0.7rem;color:var(--danger);font-weight:600;">Inativo</span>'}`;
     lista.appendChild(div);
   });
 }
@@ -344,11 +347,34 @@ async function confirmarResetPass() {
   if (res.ok) { closeModal('modal-reset-pass'); alert('Password redefinida com sucesso.'); } else showAlert(err,res.erro);
 }
 
+// 2026-09-13 — os 6 perfis realmente usados em produção (ver editarUtilizador
+// em Codigo.gs), com a grafia exacta tal como está guardada no Firestore.
+// Coordenador de lojas pode atribuir qualquer perfil excepto Master.
+const PERFIS_TODOS = [
+  { value: 'Assistente_loja', label: 'Assistente de Loja' },
+  { value: 'Vendas_Empresariais', label: 'Vendas Empresariais' },
+  { value: 'Backoffice', label: 'Backoffice' },
+  { value: 'AC', label: 'Ar Condicionado' },
+  { value: 'coordenador_lojas', label: 'Coordenador Lojas' },
+  { value: 'master', label: 'Master' },
+];
+function opcoesPerfilEditar(roleAtual) {
+  let lista = SESSION.role === 'master' ? PERFIS_TODOS.slice() : PERFIS_TODOS.filter(p => p.value !== 'master');
+  // Rede de segurança: se o perfil actual do utilizador não bater certo com
+  // nenhuma das opções (grafia inesperada nos dados), mostra-o na mesma como
+  // primeira opção em vez de o modal ficar em branco sem seleção nenhuma.
+  if (roleAtual && !lista.some(p => p.value === roleAtual)) {
+    lista = [{ value: roleAtual, label: roleAtual + ' (perfil desconhecido)' }, ...lista];
+  }
+  return lista.map(p => `<option value="${p.value}">${p.label}</option>`).join('');
+}
+
 let modalEditarTarget = null;
 function abrirEditarUser(username, nomeAtual, roleAtual, ativoAtual) {
   modalEditarTarget = username;
   document.getElementById('modal-editar-user-titulo').textContent = 'Editar — @' + username;
   document.getElementById('me-nome').value = nomeAtual;
+  document.getElementById('me-role').innerHTML = opcoesPerfilEditar(roleAtual);
   document.getElementById('me-role').value = roleAtual;
   document.getElementById('me-ativo').checked = !!ativoAtual;
   document.getElementById('modal-editar-error').style.display = 'none';
@@ -461,7 +487,7 @@ async function api(payload) {
     hideGlobalLoading();
   }
 }
-function roleLabel(role) { return {master:'Master',coordenador_lojas:'Coordenador Lojas',assistente_loja:'Assistente de Loja'}[role]||role; }
+function roleLabel(role) { return {master:'Master',coordenador_lojas:'Coordenador Lojas',assistente_loja:'Assistente de Loja',Assistente_loja:'Assistente de Loja',Vendas_Empresariais:'Vendas Empresariais',Backoffice:'Backoffice',AC:'Ar Condicionado'}[role]||role; }
 function showAlert(el,msg) { el.textContent=msg; el.style.display='block'; }
 // 2026-09-12 (2ª ronda de auditoria) — item crítico de segurança: o ficheiro
 // injecta em várias tabelas/cartões (innerHTML) valores que vêm do
