@@ -120,7 +120,7 @@
     <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
     <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
     <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
-    <button class="aba-btn" data-aba="terminal" onclick="mudarAba('terminal')">🖲 Conferência Terminal</button>
+    <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Conferência de Caixa</button>
     <button class="aba-btn" data-aba="relatorio" onclick="mudarAba('relatorio')">🖨 Relatório contabilidade</button>
     <button class="aba-btn" data-aba="reconciliacao" onclick="mudarAba('reconciliacao')">🔗 Reconciliação GSV</button>
     <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
@@ -174,6 +174,7 @@
         <div><button class="btn" onclick="carregarFolhaCaixa()">Atualizar</button></div>
       </div>
       <div class="resumo-grelha" id="resumo-folha"></div>
+      <div id="folha-conferencia-loja" hidden></div>
       <div class="tabela-scroll">
         <table>
           <thead><tr>
@@ -253,32 +254,58 @@
     </div>
   </div>
 
-  <!-- ── Conferência Terminal ── -->
-  <div class="aba-conteudo" id="aba-terminal" hidden>
+  <!-- ── Conferência de Caixa (por Colaborador) ── -->
+  <div class="aba-conteudo" id="aba-conferenciacaixa" hidden>
     <div class="cartao">
-      <h2>Conferência de Terminal Multibanco/VISA</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Regista o valor do talão de fecho da máquina Multibanco/VISA da loja. O sistema compara automaticamente com o total de vendas por cartão já importadas dos ficheiros Vodafone para o mesmo período — apanha diferenças entre o que o terminal liquidou e o que ficou registado (ex.: venda que não passou no terminal). Regista sempre que fechares o terminal, normalmente ao fechar a loja.</p>
+      <h2>Orientação — o que cada colaborador facturou</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Mostra, por colaborador, quanto foi facturado (GSV + Carregamentos) no período, e como se reparte entre Numerário e Cartão/ATM (Multibanco+VISA juntos — a Vodafone não distingue as duas redes). Serve de orientação antes de inserires o que apuraste de verdade, mais abaixo.</p>
       <div class="filtros">
-        <div><label class="form-label">Loja</label><select id="terminal-loja"></select></div>
-        <div><label class="form-label">De</label><input type="date" class="form-input" id="terminal-de"></div>
-        <div><label class="form-label">Até</label><input type="date" class="form-input" id="terminal-ate"></div>
-        <div><label class="form-label">Valor do talão (€)</label><input type="number" class="form-input" id="terminal-valor" step="0.01"></div>
-      </div>
-      <label class="form-label">Observações</label>
-      <input type="text" class="form-input" id="terminal-observacoes" placeholder="Opcional">
-      <button class="btn" onclick="registarConferenciaTerminalUI()">Registar conferência</button>
-      <div id="resultado-terminal"></div>
-    </div>
-    <div class="cartao">
-      <h2>Histórico de conferências de terminal</h2>
-      <div class="filtros">
-        <div><label class="form-label">Loja</label><select id="terminal-filtro-loja"><option value="">Todas as lojas</option></select></div>
-        <div><button class="btn btn-secundario" onclick="carregarConferenciasTerminal()">Atualizar</button></div>
+        <div><label class="form-label">Colaborador</label><input type="text" class="form-input" id="cc-filtro-colaborador" placeholder="Todos"></div>
+        <div><label class="form-label">Loja</label><select id="cc-filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="cc-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="cc-ate"></div>
+        <div><button class="btn" onclick="pesquisarResumoColaboradores()">Pesquisar</button></div>
       </div>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Data</th><th>Loja</th><th>Período</th><th>Sistema (cartão)</th><th>Talão</th><th>Diferença</th><th>Observações</th><th>Registado por</th></tr></thead>
-          <tbody id="corpo-terminal"><tr><td colspan="8">A carregar…</td></tr></tbody>
+          <thead><tr><th>Colaborador</th><th>Loja</th><th>GSV</th><th>Carregamentos</th><th>Total</th><th>Numerário</th><th>ATM</th><th></th></tr></thead>
+          <tbody id="cc-corpo-resumo"><tr><td colspan="8">Escolhe os filtros e clica em "Pesquisar".</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h2>Caixa do Assistente — inserir apuro real</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Clica em "Apurar" numa linha da tabela acima para pré-preencher o colaborador/loja/período, ou escolhe manualmente. O total apurado (ATM Multibanco + ATM VISA + Numerário + Transferência) é comparado com o total dos documentos desse colaborador no período.</p>
+      <div class="filtros">
+        <div><label class="form-label">Colaborador</label><input type="text" class="form-input" id="apuro-colaborador" placeholder="Nome completo"></div>
+        <div><label class="form-label">Loja</label><select id="apuro-loja"></select></div>
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="apuro-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="apuro-ate"></div>
+      </div>
+      <div class="filtros">
+        <div><label class="form-label">ATM Multibanco (€)</label><input type="number" class="form-input" id="apuro-mb" step="0.01"></div>
+        <div><label class="form-label">ATM VISA (€)</label><input type="number" class="form-input" id="apuro-visa" step="0.01"></div>
+        <div><label class="form-label">Numerário (€)</label><input type="number" class="form-input" id="apuro-numerario" step="0.01"></div>
+        <div><label class="form-label">Transferência (€)</label><input type="number" class="form-input" id="apuro-transferencia" step="0.01"></div>
+      </div>
+      <label class="form-label">Observações</label>
+      <input type="text" class="form-input" id="apuro-observacoes" placeholder="Opcional">
+      <button class="btn" onclick="inserirApuro()">Inserir</button>
+      <div id="resultado-apuro"></div>
+    </div>
+
+    <div class="cartao">
+      <h2>Resumo dos colaboradores — apuros registados</h2>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Linhas a vermelho são as que não bateram certo — é aqui que se vê rapidamente quem precisa de ser revisto.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="cc-hist-filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><button class="btn btn-secundario" onclick="carregarApurosColaboradores()">Atualizar</button></div>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Data</th><th>Colaborador</th><th>Loja</th><th>Período</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
+          <tbody id="cc-corpo-apuros"><tr><td colspan="11">A carregar…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -321,10 +348,11 @@
           <tbody id="relatorio-corpo-arqueios"></tbody>
         </table>
 
-        <h3>Conferências de terminal do período</h3>
+        <h3>Conferência de Caixa por Colaborador — período</h3>
+        <div id="relatorio-conferencia-loja"></div>
         <table>
-          <thead><tr><th>Data</th><th>Período conferido</th><th>Sistema</th><th>Talão</th><th>Diferença</th><th>Observações</th></tr></thead>
-          <tbody id="relatorio-corpo-terminal"></tbody>
+          <thead><tr><th>Colaborador</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
+          <tbody id="relatorio-corpo-colaboradores"></tbody>
         </table>
 
         <p class="rodape-nota" id="relatorio-rodape"></p>
@@ -479,8 +507,8 @@ async function entrarNoPainel() {
 
 function popularSelectsLojas() {
   const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja',
-    'terminal-loja', 'terminal-filtro-loja', 'relatorio-loja'];
-  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'terminal-filtro-loja'];
+    'relatorio-loja', 'apuro-loja', 'cc-filtro-loja', 'cc-hist-filtro-loja'];
+  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'cc-filtro-loja', 'cc-hist-filtro-loja'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel || sel.options.length > (comTodas.includes(id) ? 1 : 0)) return;
@@ -499,11 +527,13 @@ function mudarAba(nome) {
   if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); carregarFolhaCaixa(); }
   if (nome === 'diverso' && !ABAS_CARREGADAS.has('diverso')) { ABAS_CARREGADAS.add('diverso'); carregarDiversos(); }
   if (nome === 'arqueio' && !ABAS_CARREGADAS.has('arqueio')) { ABAS_CARREGADAS.add('arqueio'); atualizarSaldoTeoricoArqueio(); carregarArqueios(); }
-  if (nome === 'terminal' && !ABAS_CARREGADAS.has('terminal')) {
-    ABAS_CARREGADAS.add('terminal');
-    if (!document.getElementById('terminal-de').value) document.getElementById('terminal-de').value = hojeISO();
-    if (!document.getElementById('terminal-ate').value) document.getElementById('terminal-ate').value = hojeISO();
-    carregarConferenciasTerminal();
+  if (nome === 'conferenciacaixa' && !ABAS_CARREGADAS.has('conferenciacaixa')) {
+    ABAS_CARREGADAS.add('conferenciacaixa');
+    if (!document.getElementById('cc-de').value) document.getElementById('cc-de').value = hojeISO();
+    if (!document.getElementById('cc-ate').value) document.getElementById('cc-ate').value = hojeISO();
+    if (!document.getElementById('apuro-de').value) document.getElementById('apuro-de').value = hojeISO();
+    if (!document.getElementById('apuro-ate').value) document.getElementById('apuro-ate').value = hojeISO();
+    carregarApurosColaboradores();
   }
   if (nome === 'relatorio' && !ABAS_CARREGADAS.has('relatorio')) {
     ABAS_CARREGADAS.add('relatorio');
@@ -555,42 +585,80 @@ async function importarFicheiro(tipo) {
   }
 }
 
-// ═══ Conferência Terminal ═══
-async function registarConferenciaTerminalUI() {
-  const resultadoEl = document.getElementById('resultado-terminal');
-  const loja = document.getElementById('terminal-loja').value;
-  const de = document.getElementById('terminal-de').value;
-  const ate = document.getElementById('terminal-ate').value;
-  const valorTerminal = document.getElementById('terminal-valor').value;
-  const observacoes = document.getElementById('terminal-observacoes').value;
-  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
-  if (!de || !ate) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (de/até).</div>'; return; }
-  if (valorTerminal === '') { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor do talão do terminal.</div>'; return; }
+// ═══ Conferência de Caixa por Colaborador ═══
+let ULTIMO_RESUMO_COLABORADORES = [];
 
-  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
-  const r = await chamarApi({ acao: 'registarConferenciaTerminal', dados: { loja, de, ate, valorTerminal, observacoes } });
-  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
+async function pesquisarResumoColaboradores() {
+  const corpo = document.getElementById('cc-corpo-resumo');
+  corpo.innerHTML = '<tr><td colspan="8"><span class="spinner"></span>A pesquisar…</td></tr>';
+  const filtros = {};
+  const colaborador = document.getElementById('cc-filtro-colaborador').value.trim(); if (colaborador) filtros.colaborador = colaborador;
+  const loja = document.getElementById('cc-filtro-loja').value; if (loja) filtros.loja = loja;
+  const de = document.getElementById('cc-de').value; if (de) filtros.de = de;
+  const ate = document.getElementById('cc-ate').value; if (ate) filtros.ate = ate;
 
-  const classe = r.destacar ? 'alerta-erro' : 'alerta-ok';
-  const texto = r.diferenca === 0 ? 'Bateu certo — sem diferença.' : `Diferença de ${formatarEuro(r.diferenca)} (sistema ${formatarEuro(r.valorSistema)}, talão ${formatarEuro(r.valorTerminal)})${r.destacar ? ' — acima da tolerância, fica destacado.' : '.'}`;
-  resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
-  document.getElementById('terminal-valor').value = '';
-  document.getElementById('terminal-observacoes').value = '';
-  carregarConferenciasTerminal();
+  const r = await chamarApi({ acao: 'resumoColaboradoresPeriodo', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="8">' + (r.erro || 'Erro ao pesquisar.') + '</td></tr>'; return; }
+  ULTIMO_RESUMO_COLABORADORES = r.linhas;
+  corpo.innerHTML = r.linhas.length ? r.linhas.map((l, i) => `<tr>
+    <td>${l.colaborador}</td><td>${l.loja}</td><td>${formatarEuro(l.gsv)}</td><td>${formatarEuro(l.carregamentos)}</td>
+    <td>${formatarEuro(l.total)}</td><td>${formatarEuro(l.numerario)}</td><td>${formatarEuro(l.atm)}</td>
+    <td><button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="preencherApuro(${i})">Apurar</button></td>
+  </tr>`).join('') : '<tr><td colspan="8">Sem movimentos para os filtros escolhidos.</td></tr>';
 }
 
-async function carregarConferenciasTerminal() {
-  const corpo = document.getElementById('corpo-terminal');
-  corpo.innerHTML = '<tr><td colspan="8"><span class="spinner"></span>A carregar…</td></tr>';
+function preencherApuro(indice) {
+  const l = ULTIMO_RESUMO_COLABORADORES[indice];
+  if (!l) return;
+  document.getElementById('apuro-colaborador').value = l.colaborador;
+  document.getElementById('apuro-loja').value = l.loja;
+  const de = document.getElementById('cc-de').value; if (de) document.getElementById('apuro-de').value = de;
+  const ate = document.getElementById('cc-ate').value; if (ate) document.getElementById('apuro-ate').value = ate;
+  document.getElementById('apuro-mb').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('apuro-mb').focus();
+}
+
+async function inserirApuro() {
+  const resultadoEl = document.getElementById('resultado-apuro');
+  const colaborador = document.getElementById('apuro-colaborador').value.trim();
+  const loja = document.getElementById('apuro-loja').value;
+  const de = document.getElementById('apuro-de').value;
+  const ate = document.getElementById('apuro-ate').value;
+  const atmMultibanco = document.getElementById('apuro-mb').value || 0;
+  const atmVisa = document.getElementById('apuro-visa').value || 0;
+  const numerario = document.getElementById('apuro-numerario').value || 0;
+  const transferencia = document.getElementById('apuro-transferencia').value || 0;
+  const observacoes = document.getElementById('apuro-observacoes').value;
+  if (!colaborador) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o colaborador.</div>'; return; }
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a loja.</div>'; return; }
+  if (!de || !ate) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (de/até).</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A inserir…</div>';
+  const r = await chamarApi({ acao: 'registarApuroColaborador', dados: { colaborador, loja, de, ate, atmMultibanco, atmVisa, numerario, transferencia, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao inserir.') + '</div>'; return; }
+
+  const classe = r.confere ? 'alerta-ok' : 'alerta-erro';
+  const texto = r.confere
+    ? `Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
+    : `NÃO CONFERE — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}, diferença ${formatarEuro(r.diferenca)}.`;
+  resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
+  ['apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
+  carregarApurosColaboradores();
+}
+
+async function carregarApurosColaboradores() {
+  const corpo = document.getElementById('cc-corpo-apuros');
+  corpo.innerHTML = '<tr><td colspan="11"><span class="spinner"></span>A carregar…</td></tr>';
   const filtros = {};
-  const loja = document.getElementById('terminal-filtro-loja').value; if (loja) filtros.loja = loja;
-  const r = await chamarApi({ acao: 'listarConferenciasTerminal', filtros });
-  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="8">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
-  corpo.innerHTML = r.conferencias.length ? r.conferencias.map(c => `<tr${c.destacar ? ' style="background:#fdecea"' : ''}>
-    <td>${c.atualizadoEm || ''}</td><td>${c.loja}</td><td>${c.de} a ${c.ate}</td>
-    <td>${formatarEuro(c.valorSistema)}</td><td>${formatarEuro(c.valorTerminal)}</td>
-    <td>${formatarEuro(c.diferenca)}${c.destacar ? ' ⚠️' : ''}</td><td>${c.observacoes || ''}</td><td>${c.registadoPor || ''}</td>
-  </tr>`).join('') : '<tr><td colspan="8">Ainda sem conferências registadas.</td></tr>';
+  const loja = document.getElementById('cc-hist-filtro-loja').value; if (loja) filtros.loja = loja;
+  const r = await chamarApi({ acao: 'listarApurosColaborador', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="11">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.apuros.length ? r.apuros.map(a => `<tr${a.destacar ? ' style="background:#fdecea"' : ''}>
+    <td>${a.atualizadoEm || ''}</td><td>${a.colaborador}</td><td>${a.loja}</td><td>${a.de} a ${a.ate}</td>
+    <td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td><td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td>
+    <td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
+    <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="11">Ainda sem apuros registados.</td></tr>';
 }
 
 // ═══ Relatório contabilidade (página pronta a imprimir/gravar em PDF) ═══
@@ -607,10 +675,14 @@ async function gerarRelatorio() {
 
   statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
 
-  const [folha, arqueios, terminais] = await Promise.all([
+  const [folha, arqueios, apuros] = await Promise.all([
     chamarApi({ acao: 'folhaCaixa', loja, filtros: { de, ate } }),
     chamarApi({ acao: 'listarArqueios', filtros: { loja, de, ate, limite: 200 } }),
-    chamarApi({ acao: 'listarConferenciasTerminal', filtros: { loja, de, ate, limite: 200 } }),
+    // Sem de/ate aqui de propósito: listarApurosColaborador filtra por
+    // quando o apuro foi REGISTADO, não pelo período que ele cobre — filtra-se
+    // abaixo, em memória, pelo período exacto do relatório (a.de/a.ate),
+    // mesma lógica que folhaCaixa usa para calcular conferenciaLoja.
+    chamarApi({ acao: 'listarApurosColaborador', filtros: { loja, limite: 200 } }),
   ]);
 
   if (!folha.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (folha.erro || 'Erro ao carregar a Folha de Caixa.') + '</div>'; return; }
@@ -636,11 +708,25 @@ async function gerarRelatorio() {
     <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td><td>${a.observacoes || ''}</td>
   </tr>`).join('') : '<tr><td colspan="5">Sem arqueios no período.</td></tr>';
 
-  const listaTerminais = terminais.ok ? terminais.conferencias : [];
-  document.getElementById('relatorio-corpo-terminal').innerHTML = listaTerminais.length ? listaTerminais.map(c => `<tr>
-    <td>${c.atualizadoEm || ''}</td><td>${c.de} a ${c.ate}</td><td>${formatarEuro(c.valorSistema)}</td>
-    <td>${formatarEuro(c.valorTerminal)}</td><td>${formatarEuro(c.diferenca)}${c.destacar ? ' ⚠️' : ''}</td><td>${c.observacoes || ''}</td>
-  </tr>`).join('') : '<tr><td colspan="6">Sem conferências de terminal no período.</td></tr>';
+  const confLojaEl = document.getElementById('relatorio-conferencia-loja');
+  if (folha.conferenciaLoja) {
+    const c = folha.conferenciaLoja;
+    const classe = c.confere ? 'alerta-ok' : 'alerta-erro';
+    const texto = c.confere
+      ? `Confere — documentos ${formatarEuro(c.totalDocumentos)} = apurado ${formatarEuro(c.totalApurado)} (${c.nColaboradoresApurados} colaborador(es)).`
+      : `NÃO CONFERE — documentos ${formatarEuro(c.totalDocumentos)}, apurado ${formatarEuro(c.totalApurado)} (${c.nColaboradoresApurados} colaborador(es)), diferença ${formatarEuro(c.diferenca)}.`;
+    confLojaEl.innerHTML = `<div class="alerta ${classe}" style="margin-bottom:.75rem">${texto}</div>`;
+  } else {
+    confLojaEl.innerHTML = '';
+  }
+
+  const listaApuros = (apuros.ok ? apuros.apuros : []).filter(a => a.de === de && a.ate === ate);
+  document.getElementById('relatorio-corpo-colaboradores').innerHTML = listaApuros.length ? listaApuros.map(a => `<tr>
+    <td>${a.colaborador}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
+    <td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td>
+    <td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
+    <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="8">Sem apuros de colaboradores registados exactamente para este período.</td></tr>';
 
   document.getElementById('relatorio-rodape').textContent = 'Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.';
 
@@ -748,6 +834,20 @@ async function carregarFolhaCaixa() {
     <div class="resumo-item"><div class="valor">${formatarEuro(r.resumo.debitosNumerario)}</div><div class="rotulo">Débitos numerário</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(r.resumo.totalDigital)}</div><div class="rotulo">Total digital/cartão</div></div>
   `;
+
+  const confEl = document.getElementById('folha-conferencia-loja');
+  if (r.conferenciaLoja) {
+    const c = r.conferenciaLoja;
+    const classe = c.confere ? 'alerta-ok' : 'alerta-erro';
+    const texto = c.confere
+      ? `Confere — documentos ${formatarEuro(c.totalDocumentos)} = apurado ${formatarEuro(c.totalApurado)} (${c.nColaboradoresApurados} colaborador(es) já apuraram este período).`
+      : `NÃO CONFERE — documentos ${formatarEuro(c.totalDocumentos)}, apurado ${formatarEuro(c.totalApurado)} até agora (${c.nColaboradoresApurados} colaborador(es) já apuraram este período), diferença ${formatarEuro(c.diferenca)}. Normal se ainda faltar algum colaborador apurar em "🧾 Conferência de Caixa".`;
+    confEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
+    confEl.hidden = false;
+  } else {
+    confEl.hidden = true;
+    confEl.innerHTML = '';
+  }
 
   corpo.innerHTML = r.movimentos.length ? r.movimentos.map(m => `<tr>
     <td>${m.dataHora}</td><td>${m.origem}</td><td>${m.tipo}</td><td>${m.metodoPagamento}</td><td>${m.descricao || ''}</td>
