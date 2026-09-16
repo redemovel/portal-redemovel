@@ -1008,7 +1008,7 @@ async function guardarCodigosGSV(username) {
   const valor = document.getElementById('cod-' + username).value;
   const codigosGSV = valor.split(',').map(c => c.trim()).filter(Boolean);
   statusEl.innerHTML = '<span class="spinner"></span>';
-  const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', username, codigosGSV });
+  const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', alvoUsername: username, codigosGSV });
   if (!r.ok) {
     statusEl.innerHTML = '⚠️';
     statusEl.title = r.erro || 'Erro ao gravar.';
