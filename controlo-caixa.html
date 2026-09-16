@@ -74,6 +74,16 @@
   .aba-btn { background: var(--white); border: 2px solid var(--gray-light); color: var(--text-muted); border-radius: 10px; padding: .6rem 1.1rem; font-family: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; }
   .aba-btn.ativa { background: var(--teal); border-color: var(--teal); color: var(--white); }
   .rodape-nota { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
+  .relatorio-cabecalho { margin-bottom: 1rem; }
+  @media print {
+    .topo, .abas, .no-print { display: none !important; }
+    body { background: var(--white); }
+    .wrap { max-width: none; padding: 0; margin: 0; }
+    .cartao { box-shadow: none; border: none; padding: 0; margin-bottom: 1rem; }
+    table { font-size: .72rem; }
+    th { position: static; }
+    .tabela-scroll { max-height: none; overflow: visible; border: none; }
+  }
 </style>
 </head>
 <body>
@@ -110,6 +120,8 @@
     <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
     <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
     <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
+    <button class="aba-btn" data-aba="terminal" onclick="mudarAba('terminal')">🖲 Conferência Terminal</button>
+    <button class="aba-btn" data-aba="relatorio" onclick="mudarAba('relatorio')">🖨 Relatório contabilidade</button>
     <button class="aba-btn" data-aba="reconciliacao" onclick="mudarAba('reconciliacao')">🔗 Reconciliação GSV</button>
     <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
     <button class="aba-btn" data-aba="historico" onclick="mudarAba('historico')">🕒 Histórico de importações</button>
@@ -241,6 +253,85 @@
     </div>
   </div>
 
+  <!-- ── Conferência Terminal ── -->
+  <div class="aba-conteudo" id="aba-terminal" hidden>
+    <div class="cartao">
+      <h2>Conferência de Terminal Multibanco/VISA</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Regista o valor do talão de fecho da máquina Multibanco/VISA da loja. O sistema compara automaticamente com o total de vendas por cartão já importadas dos ficheiros Vodafone para o mesmo período — apanha diferenças entre o que o terminal liquidou e o que ficou registado (ex.: venda que não passou no terminal). Regista sempre que fechares o terminal, normalmente ao fechar a loja.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="terminal-loja"></select></div>
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="terminal-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="terminal-ate"></div>
+        <div><label class="form-label">Valor do talão (€)</label><input type="number" class="form-input" id="terminal-valor" step="0.01"></div>
+      </div>
+      <label class="form-label">Observações</label>
+      <input type="text" class="form-input" id="terminal-observacoes" placeholder="Opcional">
+      <button class="btn" onclick="registarConferenciaTerminalUI()">Registar conferência</button>
+      <div id="resultado-terminal"></div>
+    </div>
+    <div class="cartao">
+      <h2>Histórico de conferências de terminal</h2>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="terminal-filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><button class="btn btn-secundario" onclick="carregarConferenciasTerminal()">Atualizar</button></div>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Data</th><th>Loja</th><th>Período</th><th>Sistema (cartão)</th><th>Talão</th><th>Diferença</th><th>Observações</th><th>Registado por</th></tr></thead>
+          <tbody id="corpo-terminal"><tr><td colspan="8">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Relatório contabilidade ── -->
+  <div class="aba-conteudo" id="aba-relatorio" hidden>
+    <div class="cartao no-print">
+      <h2>Relatório para a contabilidade</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Junta a Folha de Caixa, os Arqueios e as Conferências de Terminal do período escolhido numa página pronta a imprimir ou gravar em PDF, para acompanhar os documentos enviados para a contabilidade.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="relatorio-loja"></select></div>
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="relatorio-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="relatorio-ate"></div>
+        <div><button class="btn" onclick="gerarRelatorio()">Gerar relatório</button></div>
+        <div><button class="btn btn-secundario" id="btn-imprimir-relatorio" onclick="window.print()" hidden>🖨 Imprimir / Gravar PDF</button></div>
+      </div>
+      <div id="relatorio-status"></div>
+    </div>
+
+    <div id="relatorio-imprimivel" hidden>
+      <div class="cartao">
+        <div class="relatorio-cabecalho">
+          <h2 id="relatorio-titulo-loja"></h2>
+          <div id="relatorio-titulo-periodo" class="rodape-nota"></div>
+        </div>
+
+        <h3>Resumo de movimentos (Folha de Caixa)</h3>
+        <div class="resumo-grelha" id="relatorio-resumo-folha"></div>
+
+        <h3>Movimentos do período</h3>
+        <table>
+          <thead><tr><th>Data/Hora</th><th>Origem</th><th>Tipo</th><th>Método</th><th>Descrição</th><th>Valor</th><th>Numerário</th></tr></thead>
+          <tbody id="relatorio-corpo-folha"></tbody>
+        </table>
+
+        <h3>Arqueios do período</h3>
+        <table>
+          <thead><tr><th>Data</th><th>Teórico</th><th>Contado</th><th>Diferença</th><th>Observações</th></tr></thead>
+          <tbody id="relatorio-corpo-arqueios"></tbody>
+        </table>
+
+        <h3>Conferências de terminal do período</h3>
+        <table>
+          <thead><tr><th>Data</th><th>Período conferido</th><th>Sistema</th><th>Talão</th><th>Diferença</th><th>Observações</th></tr></thead>
+          <tbody id="relatorio-corpo-terminal"></tbody>
+        </table>
+
+        <p class="rodape-nota" id="relatorio-rodape"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Reconciliação GSV ── -->
   <div class="aba-conteudo" id="aba-reconciliacao" hidden>
     <div class="cartao">
@@ -307,8 +398,9 @@
 </div>
 
 <script>
-// SCRIPT_URL: substituir pelo URL real depois do deploy (ver README.md,
-// passo 4 — "Service URL"). Mesma convenção do resto do portal.
+// SCRIPT_URL: já preenchido com o serviço em produção (deploy confirmado
+// em 2026-09-16). Se um dia recriares o serviço com outro nome/projeto,
+// actualiza aqui — ver README.md, passo 4 ("Service URL").
 const SCRIPT_URL = 'https://redemovel-controlo-caixa-389728721690.europe-west1.run.app';
 
 let SESSAO = null;
@@ -386,8 +478,9 @@ async function entrarNoPainel() {
 }
 
 function popularSelectsLojas() {
-  const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja'];
-  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja'];
+  const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja',
+    'terminal-loja', 'terminal-filtro-loja', 'relatorio-loja'];
+  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'terminal-filtro-loja'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel || sel.options.length > (comTodas.includes(id) ? 1 : 0)) return;
@@ -406,6 +499,26 @@ function mudarAba(nome) {
   if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); carregarFolhaCaixa(); }
   if (nome === 'diverso' && !ABAS_CARREGADAS.has('diverso')) { ABAS_CARREGADAS.add('diverso'); carregarDiversos(); }
   if (nome === 'arqueio' && !ABAS_CARREGADAS.has('arqueio')) { ABAS_CARREGADAS.add('arqueio'); atualizarSaldoTeoricoArqueio(); carregarArqueios(); }
+  if (nome === 'terminal' && !ABAS_CARREGADAS.has('terminal')) {
+    ABAS_CARREGADAS.add('terminal');
+    if (!document.getElementById('terminal-de').value) document.getElementById('terminal-de').value = hojeISO();
+    if (!document.getElementById('terminal-ate').value) document.getElementById('terminal-ate').value = hojeISO();
+    carregarConferenciasTerminal();
+  }
+  if (nome === 'relatorio' && !ABAS_CARREGADAS.has('relatorio')) {
+    ABAS_CARREGADAS.add('relatorio');
+    if (!document.getElementById('relatorio-de').value) document.getElementById('relatorio-de').value = primeiroDiaMesISO();
+    if (!document.getElementById('relatorio-ate').value) document.getElementById('relatorio-ate').value = hojeISO();
+  }
+}
+
+function hojeISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function primeiroDiaMesISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
 }
 
 // ═══ Importação ═══
@@ -440,6 +553,100 @@ async function importarFicheiro(tipo) {
   } catch (err) {
     resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (err.message || 'Erro inesperado.') + '</div>';
   }
+}
+
+// ═══ Conferência Terminal ═══
+async function registarConferenciaTerminalUI() {
+  const resultadoEl = document.getElementById('resultado-terminal');
+  const loja = document.getElementById('terminal-loja').value;
+  const de = document.getElementById('terminal-de').value;
+  const ate = document.getElementById('terminal-ate').value;
+  const valorTerminal = document.getElementById('terminal-valor').value;
+  const observacoes = document.getElementById('terminal-observacoes').value;
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
+  if (!de || !ate) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (de/até).</div>'; return; }
+  if (valorTerminal === '') { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor do talão do terminal.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
+  const r = await chamarApi({ acao: 'registarConferenciaTerminal', dados: { loja, de, ate, valorTerminal, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
+
+  const classe = r.destacar ? 'alerta-erro' : 'alerta-ok';
+  const texto = r.diferenca === 0 ? 'Bateu certo — sem diferença.' : `Diferença de ${formatarEuro(r.diferenca)} (sistema ${formatarEuro(r.valorSistema)}, talão ${formatarEuro(r.valorTerminal)})${r.destacar ? ' — acima da tolerância, fica destacado.' : '.'}`;
+  resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
+  document.getElementById('terminal-valor').value = '';
+  document.getElementById('terminal-observacoes').value = '';
+  carregarConferenciasTerminal();
+}
+
+async function carregarConferenciasTerminal() {
+  const corpo = document.getElementById('corpo-terminal');
+  corpo.innerHTML = '<tr><td colspan="8"><span class="spinner"></span>A carregar…</td></tr>';
+  const filtros = {};
+  const loja = document.getElementById('terminal-filtro-loja').value; if (loja) filtros.loja = loja;
+  const r = await chamarApi({ acao: 'listarConferenciasTerminal', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="8">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.conferencias.length ? r.conferencias.map(c => `<tr${c.destacar ? ' style="background:#fdecea"' : ''}>
+    <td>${c.atualizadoEm || ''}</td><td>${c.loja}</td><td>${c.de} a ${c.ate}</td>
+    <td>${formatarEuro(c.valorSistema)}</td><td>${formatarEuro(c.valorTerminal)}</td>
+    <td>${formatarEuro(c.diferenca)}${c.destacar ? ' ⚠️' : ''}</td><td>${c.observacoes || ''}</td><td>${c.registadoPor || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="8">Ainda sem conferências registadas.</td></tr>';
+}
+
+// ═══ Relatório contabilidade (página pronta a imprimir/gravar em PDF) ═══
+async function gerarRelatorio() {
+  const statusEl = document.getElementById('relatorio-status');
+  const imprimivelEl = document.getElementById('relatorio-imprimivel');
+  const btnImprimir = document.getElementById('btn-imprimir-relatorio');
+  const loja = document.getElementById('relatorio-loja').value;
+  const de = document.getElementById('relatorio-de').value;
+  const ate = document.getElementById('relatorio-ate').value;
+  imprimivelEl.hidden = true; btnImprimir.hidden = true;
+  if (!loja) { statusEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
+  if (!de || !ate) { statusEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (de/até).</div>'; return; }
+
+  statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
+
+  const [folha, arqueios, terminais] = await Promise.all([
+    chamarApi({ acao: 'folhaCaixa', loja, filtros: { de, ate } }),
+    chamarApi({ acao: 'listarArqueios', filtros: { loja, de, ate, limite: 200 } }),
+    chamarApi({ acao: 'listarConferenciasTerminal', filtros: { loja, de, ate, limite: 200 } }),
+  ]);
+
+  if (!folha.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (folha.erro || 'Erro ao carregar a Folha de Caixa.') + '</div>'; return; }
+
+  document.getElementById('relatorio-titulo-loja').textContent = loja;
+  document.getElementById('relatorio-titulo-periodo').textContent = `Período: ${de} a ${ate} · Gerado em ${new Date().toLocaleString('pt-PT')}`;
+
+  document.getElementById('relatorio-resumo-folha').innerHTML = `
+    <div class="resumo-item"><div class="valor">${formatarEuro(folha.saldoAtualNumerario)}</div><div class="rotulo">Saldo actual (numerário)</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(folha.resumo.creditosNumerario)}</div><div class="rotulo">Créditos numerário</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(folha.resumo.debitosNumerario)}</div><div class="rotulo">Débitos numerário</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(folha.resumo.totalDigital)}</div><div class="rotulo">Total digital/cartão</div></div>
+  `;
+
+  document.getElementById('relatorio-corpo-folha').innerHTML = folha.movimentos.length ? folha.movimentos.map(m => `<tr>
+    <td>${m.dataHora}</td><td>${m.origem}</td><td>${m.tipo}</td><td>${m.metodoPagamento}</td><td>${m.descricao || ''}</td>
+    <td>${formatarEuro(m.valor)}</td><td>${m.numerario ? 'Sim' : 'Não'}</td>
+  </tr>`).join('') : '<tr><td colspan="7">Sem movimentos no período.</td></tr>';
+
+  const listaArqueios = arqueios.ok ? arqueios.arqueios : [];
+  document.getElementById('relatorio-corpo-arqueios').innerHTML = listaArqueios.length ? listaArqueios.map(a => `<tr>
+    <td>${a.atualizadoEm || ''}</td><td>${formatarEuro(a.saldoTeorico)}</td><td>${formatarEuro(a.saldoContado)}</td>
+    <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td><td>${a.observacoes || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="5">Sem arqueios no período.</td></tr>';
+
+  const listaTerminais = terminais.ok ? terminais.conferencias : [];
+  document.getElementById('relatorio-corpo-terminal').innerHTML = listaTerminais.length ? listaTerminais.map(c => `<tr>
+    <td>${c.atualizadoEm || ''}</td><td>${c.de} a ${c.ate}</td><td>${formatarEuro(c.valorSistema)}</td>
+    <td>${formatarEuro(c.valorTerminal)}</td><td>${formatarEuro(c.diferenca)}${c.destacar ? ' ⚠️' : ''}</td><td>${c.observacoes || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Sem conferências de terminal no período.</td></tr>';
+
+  document.getElementById('relatorio-rodape').textContent = 'Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.';
+
+  statusEl.innerHTML = '';
+  imprimivelEl.hidden = false;
+  btnImprimir.hidden = false;
 }
 
 // ═══ Reconciliação GSV ═══
