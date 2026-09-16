@@ -429,7 +429,8 @@
     <div class="cartao">
       <h2>👤 Colaboradores — códigos VDF/GSV</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
-      <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">Atualizar</button>
+      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve o(s) código(s) e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga qualquer código que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
+      <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">🔄 Recarregar lista</button>
       <div class="tabela-scroll">
         <table>
           <thead><tr><th>Colaborador</th><th>Utilizador</th><th>Perfil</th><th>Códigos GSV (separados por vírgula)</th><th></th></tr></thead>
@@ -995,18 +996,28 @@ async function carregarColaboradoresGSV() {
   corpo.innerHTML = r.colaboradores.length ? r.colaboradores.map(c => `<tr>
     <td>${c.nome}</td><td>${c.username}</td><td>${c.role || ''}</td>
     <td><input type="text" class="form-input" style="margin-bottom:0" id="cod-${c.username}" value="${(c.codigosGSV || []).join(', ')}" placeholder="ex.: N_AFLOPES3"></td>
-    <td><button class="btn btn-secundario" style="padding:.5rem 1rem;font-size:.8rem" onclick="guardarCodigosGSV('${c.username}')">Guardar</button></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-secundario" style="padding:.5rem 1rem;font-size:.8rem" onclick="guardarCodigosGSV('${c.username}')">Guardar</button>
+      <span id="status-cod-${c.username}" style="font-size:1rem;vertical-align:middle;margin-left:.3rem"></span>
+    </td>
   </tr>`).join('') : '<tr><td colspan="5">Sem colaboradores activos.</td></tr>';
 }
 
 async function guardarCodigosGSV(username) {
-  const resultadoEl = document.getElementById('resultado-colaboradores-gsv');
+  const statusEl = document.getElementById('status-cod-' + username);
   const valor = document.getElementById('cod-' + username).value;
   const codigosGSV = valor.split(',').map(c => c.trim()).filter(Boolean);
-  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gravar…</div>';
+  statusEl.innerHTML = '<span class="spinner"></span>';
   const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', username, codigosGSV });
-  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
-  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Gravado — ${r.codigosGSV.length ? r.codigosGSV.join(', ') : 'sem códigos'}.</div>`;
+  if (!r.ok) {
+    statusEl.innerHTML = '⚠️';
+    statusEl.title = r.erro || 'Erro ao gravar.';
+    document.getElementById('resultado-colaboradores-gsv').innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>';
+    return;
+  }
+  statusEl.innerHTML = '✅';
+  statusEl.title = 'Gravado — ' + (r.codigosGSV.length ? r.codigosGSV.join(', ') : 'sem códigos');
+  document.getElementById('resultado-colaboradores-gsv').innerHTML = '';
 }
 
 function formatarEuro(v) {
