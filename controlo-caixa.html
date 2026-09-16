@@ -699,8 +699,11 @@ async function gerarRelatorio() {
     chamarApi({ acao: 'listarArqueios', filtros: { loja, de, ate, limite: 200 } }),
     // Sem de/ate aqui de propósito: listarApurosColaborador filtra por
     // quando o apuro foi REGISTADO, não pelo período que ele cobre — filtra-se
-    // abaixo, em memória, pelo período exacto do relatório (a.de/a.ate),
-    // mesma lógica que folhaCaixa usa para calcular conferenciaLoja.
+    // abaixo, em memória, pelos apuros CONTIDOS no período do relatório
+    // (a.de/a.ate dentro de de/ate, não exactamente iguais — corrigido em
+    // 2026-09-16, era o mesmo bug do backend: um apuro diário nunca aparecia
+    // num relatório semanal/mensal que o continha), mesma lógica que
+    // conferenciaLoja usa (lib/conferenciaColaborador.js).
     chamarApi({ acao: 'listarApurosColaborador', filtros: { loja, limite: 200 } }),
   ]);
 
@@ -739,13 +742,13 @@ async function gerarRelatorio() {
     confLojaEl.innerHTML = '';
   }
 
-  const listaApuros = (apuros.ok ? apuros.apuros : []).filter(a => a.de === de && a.ate === ate);
+  const listaApuros = (apuros.ok ? apuros.apuros : []).filter(a => a.de >= de && a.ate <= ate);
   document.getElementById('relatorio-corpo-colaboradores').innerHTML = listaApuros.length ? listaApuros.map(a => `<tr>
     <td>${a.colaborador}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
     <td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td>
     <td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
     <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td>
-  </tr>`).join('') : '<tr><td colspan="8">Sem apuros de colaboradores registados exactamente para este período.</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="8">Sem apuros de colaboradores registados dentro deste período.</td></tr>';
 
   document.getElementById('relatorio-rodape').textContent = 'Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.';
 
