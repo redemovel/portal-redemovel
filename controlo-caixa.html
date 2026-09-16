@@ -125,6 +125,7 @@
     <button class="aba-btn" data-aba="reconciliacao" onclick="mudarAba('reconciliacao')">🔗 Reconciliação GSV</button>
     <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
     <button class="aba-btn" data-aba="historico" onclick="mudarAba('historico')">🕒 Histórico de importações</button>
+    <button class="aba-btn" data-aba="colaboradores" onclick="mudarAba('colaboradores')">👤 Colaboradores</button>
   </div>
 
   <!-- ── Importar ── -->
@@ -423,6 +424,22 @@
     </div>
   </div>
 
+  <!-- ── Colaboradores (códigos VDF/GSV) ── -->
+  <div class="aba-conteudo" id="aba-colaboradores" hidden>
+    <div class="cartao">
+      <h2>👤 Colaboradores — códigos VDF/GSV</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
+      <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">Atualizar</button>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Colaborador</th><th>Utilizador</th><th>Perfil</th><th>Códigos GSV (separados por vírgula)</th><th></th></tr></thead>
+          <tbody id="corpo-colaboradores-gsv"><tr><td colspan="5">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="resultado-colaboradores-gsv"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -540,6 +557,7 @@ function mudarAba(nome) {
     if (!document.getElementById('relatorio-de').value) document.getElementById('relatorio-de').value = primeiroDiaMesISO();
     if (!document.getElementById('relatorio-ate').value) document.getElementById('relatorio-ate').value = hojeISO();
   }
+  if (nome === 'colaboradores' && !ABAS_CARREGADAS.has('colaboradores')) { ABAS_CARREGADAS.add('colaboradores'); carregarColaboradoresGSV(); }
 }
 
 function hojeISO() {
@@ -966,6 +984,29 @@ async function carregarHistorico() {
     <td>${i.importadoPor || ''}</td><td>${i.totalNoFicheiro}</td><td>${i.novas}</td><td>${i.jaExistiam}</td>
     <td>${(i.avisos || []).length}</td>
   </tr>`).join('') : '<tr><td colspan="8">Ainda sem importações.</td></tr>';
+}
+
+// ═══ Colaboradores — códigos VDF/GSV ═══
+async function carregarColaboradoresGSV() {
+  const corpo = document.getElementById('corpo-colaboradores-gsv');
+  corpo.innerHTML = '<tr><td colspan="5"><span class="spinner"></span>A carregar…</td></tr>';
+  const r = await chamarApi({ acao: 'listarColaboradoresGSV' });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="5">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.colaboradores.length ? r.colaboradores.map(c => `<tr>
+    <td>${c.nome}</td><td>${c.username}</td><td>${c.role || ''}</td>
+    <td><input type="text" class="form-input" style="margin-bottom:0" id="cod-${c.username}" value="${(c.codigosGSV || []).join(', ')}" placeholder="ex.: N_AFLOPES3"></td>
+    <td><button class="btn btn-secundario" style="padding:.5rem 1rem;font-size:.8rem" onclick="guardarCodigosGSV('${c.username}')">Guardar</button></td>
+  </tr>`).join('') : '<tr><td colspan="5">Sem colaboradores activos.</td></tr>';
+}
+
+async function guardarCodigosGSV(username) {
+  const resultadoEl = document.getElementById('resultado-colaboradores-gsv');
+  const valor = document.getElementById('cod-' + username).value;
+  const codigosGSV = valor.split(',').map(c => c.trim()).filter(Boolean);
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gravar…</div>';
+  const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', username, codigosGSV });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Gravado — ${r.codigosGSV.length ? r.codigosGSV.join(', ') : 'sem códigos'}.</div>`;
 }
 
 function formatarEuro(v) {
