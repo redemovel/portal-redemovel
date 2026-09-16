@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controlo de Caixa · Redemóvel</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #007878; --teal-dark: #005f5f; --white: #ffffff; --off-white: #f5f9f9;
+    --gray-light: #e8f0f0; --text: #1a2e2e; --text-muted: #5a7878;
+    --success: #00a878; --warning: #f59e0b; --danger: #E8000D;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; }
+  body { font-family: 'Outfit', Arial, sans-serif; background: var(--off-white); color: var(--text); min-height: 100vh; }
+  .topo {
+    background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: var(--white);
+    padding: 1.1rem 1.75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+  }
+  .topo-titulo { font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; }
+  .topo-sub { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
+  .topo-user { display: flex; align-items: center; gap: .75rem; font-size: .85rem; }
+  .btn-sair { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: var(--white); border-radius: 8px; padding: 0.45rem 0.9rem; font-family: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+  .login-wrap { max-width: 380px; margin: 4rem auto; }
+  .cartao { background: var(--white); border-radius: 14px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,40,40,0.06); margin-bottom: 1.25rem; }
+  .cartao h2 { margin: 0 0 1rem; font-size: 1.05rem; color: var(--text); }
+  .cartao h3 { margin: 1.25rem 0 .6rem; font-size: .92rem; color: var(--text-muted); }
+  .form-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem; }
+  .form-input, select {
+    width: 100%; padding: 0.75rem 0.9rem; border: 2px solid var(--gray-light); border-radius: 10px;
+    font-family: inherit; font-size: 0.92rem; color: var(--text); background: var(--off-white); outline: none; margin-bottom: 0.9rem;
+  }
+  .form-input:focus, select:focus { border-color: var(--teal); }
+  .btn {
+    padding: 0.8rem 1.4rem; border: none; border-radius: 10px; font-family: inherit;
+    font-size: 0.9rem; font-weight: 700; cursor: pointer; color: var(--white); background: var(--teal); transition: opacity .15s;
+  }
+  .btn:hover { opacity: .92; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secundario { background: var(--gray-light); color: var(--text-muted); }
+  .grelha-import { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+  .caixa-ficheiro { border: 2px dashed var(--gray-light); border-radius: 12px; padding: 1.1rem; }
+  .caixa-ficheiro h4 { margin: 0 0 .5rem; font-size: .88rem; color: var(--text); }
+  .caixa-ficheiro p { margin: 0 0 .75rem; font-size: .75rem; color: var(--text-muted); line-height: 1.4; }
+  input[type=file] { font-size: .8rem; margin-bottom: .75rem; width: 100%; }
+  .alerta { padding: 0.7rem 0.9rem; border-radius: 8px; font-size: 0.8rem; margin-top: .6rem; line-height: 1.4; }
+  .alerta-erro { background: #fdecea; color: #b3000a; }
+  .alerta-ok { background: #e6f7f0; color: #006644; }
+  .alerta-aviso { background: #fff4e0; color: #92610a; }
+  .spinner { width: 14px; height: 14px; border: 2.5px solid var(--gray-light); border-top-color: var(--teal); border-radius: 50%; animation: girar 0.8s linear infinite; display: inline-block; vertical-align: middle; margin-right: .4rem; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--gray-light); }
+  th { color: var(--text-muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; position: sticky; top: 0; background: var(--white); }
+  tbody tr:hover { background: var(--off-white); }
+  .tabela-scroll { max-height: 420px; overflow-y: auto; border: 1px solid var(--gray-light); border-radius: 10px; }
+  .badge { display: inline-block; padding: .15rem .5rem; border-radius: 6px; font-size: .7rem; font-weight: 700; }
+  .badge-ok { background: #e6f7f0; color: #006644; }
+  .badge-atipico { background: #fff4e0; color: #92610a; }
+  .badge-ambiguo { background: #fdecea; color: #b3000a; }
+  .badge-estimado { background: #e8f0fb; color: #1a4fa0; }
+  .resumo-grelha { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  .resumo-item { background: var(--off-white); border-radius: 10px; padding: .8rem; text-align: center; }
+  .resumo-item .valor { font-size: 1.3rem; font-weight: 800; color: var(--teal-dark); }
+  .resumo-item .rotulo { font-size: .7rem; color: var(--text-muted); margin-top: .2rem; }
+  .filtros { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
+  .filtros > div { flex: 1; min-width: 140px; }
+  .filtros .form-input, .filtros select { margin-bottom: 0; }
+  .campo-busca { max-width: 260px; }
+  [hidden] { display: none !important; }
+  .abas { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .aba-btn { background: var(--white); border: 2px solid var(--gray-light); color: var(--text-muted); border-radius: 10px; padding: .6rem 1.1rem; font-family: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; }
+  .aba-btn.ativa { background: var(--teal); border-color: var(--teal); color: var(--white); }
+  .rodape-nota { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div>
+    <div class="topo-titulo">💰 Controlo de Caixa</div>
+    <div class="topo-sub">Redemóvel · Carregamentos, GSV e reconciliação de comissões</div>
+  </div>
+  <div class="topo-user" id="topo-user" hidden>
+    <span id="nome-utilizador"></span>
+    <button class="btn-sair" onclick="sair()">Sair</button>
+  </div>
+</div>
+
+<!-- ═══ LOGIN ═══ -->
+<div class="wrap login-wrap" id="tela-login">
+  <div class="cartao">
+    <h2>Entrar</h2>
+    <div class="alerta alerta-erro" id="login-err" hidden></div>
+    <label class="form-label">Utilizador</label>
+    <input type="text" class="form-input" id="inp-user" autocomplete="username" autocapitalize="none">
+    <label class="form-label">Password</label>
+    <input type="password" class="form-input" id="inp-pass" autocomplete="current-password">
+    <button class="btn" id="btn-entrar" onclick="entrar()" style="width:100%">Entrar</button>
+  </div>
+</div>
+
+<!-- ═══ PRINCIPAL ═══ -->
+<div class="wrap" id="tela-principal" hidden>
+
+  <div class="abas">
+    <button class="aba-btn ativa" data-aba="importar" onclick="mudarAba('importar')">📥 Importar ficheiros</button>
+    <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
+    <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
+    <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
+    <button class="aba-btn" data-aba="reconciliacao" onclick="mudarAba('reconciliacao')">🔗 Reconciliação GSV</button>
+    <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
+    <button class="aba-btn" data-aba="historico" onclick="mudarAba('historico')">🕒 Histórico de importações</button>
+  </div>
+
+  <!-- ── Importar ── -->
+  <div class="aba-conteudo" id="aba-importar">
+    <div class="cartao">
+      <h2>Importar ficheiros Vodafone</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os três ficheiros em qualquer ordem.</p>
+      <div class="grelha-import">
+        <div class="caixa-ficheiro">
+          <h4>Relatório de cobranças (CSV)</h4>
+          <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
+          <input type="file" id="ficheiro-cobrancas" accept=".csv">
+          <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
+          <div id="resultado-cobrancas"></div>
+        </div>
+        <div class="caixa-ficheiro">
+          <h4>Invoice GSV (.xls)</h4>
+          <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
+          <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
+          <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
+          <div id="resultado-gsv"></div>
+        </div>
+        <div class="caixa-ficheiro">
+          <h4>Comissões mensais (.xls)</h4>
+          <p>1st_Comissions — ciclo 15→14, reconcilia automaticamente com o GSV.</p>
+          <input type="file" id="ficheiro-comissoes" accept=".xls,.xlsx">
+          <button class="btn" style="width:100%" onclick="importarFicheiro('comissoes')">Importar</button>
+          <div id="resultado-comissoes"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Folha de Caixa ── -->
+  <div class="aba-conteudo" id="aba-folha" hidden>
+    <div class="cartao">
+      <h2>💳 Saldo de numerário por loja</h2>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado na Folha de Caixa mas não altera este saldo.</p>
+      <div class="resumo-grelha" id="resumo-saldos"><div class="resumo-item">A carregar…</div></div>
+    </div>
+    <div class="cartao">
+      <h2>Folha de Caixa — movimentos por loja</h2>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="folha-loja"></select></div>
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="folha-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="folha-ate"></div>
+        <div><button class="btn" onclick="carregarFolhaCaixa()">Atualizar</button></div>
+      </div>
+      <div class="resumo-grelha" id="resumo-folha"></div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr>
+            <th>Data/Hora</th><th>Origem</th><th>Tipo</th><th>Método</th><th>Descrição</th><th>Valor</th><th>Numerário</th><th>Saldo acumulado</th>
+          </tr></thead>
+          <tbody id="corpo-folha"><tr><td colspan="8">Escolhe uma loja e clica em "Atualizar".</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Movimento diverso ── -->
+  <div class="aba-conteudo" id="aba-diverso" hidden>
+    <div class="cartao">
+      <h2>Registar movimento diverso</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Depósitos bancários e entradas digitais (MB Way, transferência) que não vêm de nenhum ficheiro Vodafone. Só o depósito bancário e as "outras" entradas/saídas em numerário mexem no saldo de caixa físico.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="diverso-loja"></select></div>
+        <div><label class="form-label">Tipo</label>
+          <select id="diverso-tipo">
+            <option value="deposito">Depósito bancário (numerário)</option>
+            <option value="mbway">MB Way recebido</option>
+            <option value="transferencia">Transferência recebida</option>
+            <option value="outraEntrada">Outra entrada em numerário</option>
+            <option value="outraSaida">Outra saída em numerário</option>
+          </select>
+        </div>
+        <div><label class="form-label">Valor (€)</label><input type="number" class="form-input" id="diverso-valor" min="0.01" step="0.01"></div>
+      </div>
+      <label class="form-label">Observações</label>
+      <input type="text" class="form-input" id="diverso-observacoes" placeholder="Opcional">
+      <button class="btn" onclick="registarDiverso()">Registar</button>
+      <div id="resultado-diverso"></div>
+    </div>
+    <div class="cartao">
+      <h2>Movimentos diversos recentes</h2>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="diverso-filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><button class="btn btn-secundario" onclick="carregarDiversos()">Atualizar</button></div>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Data</th><th>Loja</th><th>Tipo</th><th>Valor</th><th>Numerário</th><th>Observações</th><th>Registado por</th></tr></thead>
+          <tbody id="corpo-diversos"><tr><td colspan="7">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Arqueio ── -->
+  <div class="aba-conteudo" id="aba-arqueio" hidden>
+    <div class="cartao">
+      <h2>Fecho de caixa (Arqueio)</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Compara o dinheiro contado fisicamente na loja com o saldo teórico do sistema. Uma diferença acima de 2€ fica destacada para o coordenador/master.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="arqueio-loja" onchange="atualizarSaldoTeoricoArqueio()"></select></div>
+        <div><label class="form-label">Saldo teórico (sistema)</label><input type="text" class="form-input" id="arqueio-teorico" disabled></div>
+        <div><label class="form-label">Saldo contado (€)</label><input type="number" class="form-input" id="arqueio-contado" step="0.01"></div>
+      </div>
+      <label class="form-label">Observações</label>
+      <input type="text" class="form-input" id="arqueio-observacoes" placeholder="Opcional">
+      <button class="btn" onclick="registarArqueioUI()">Registar arqueio</button>
+      <div id="resultado-arqueio"></div>
+    </div>
+    <div class="cartao">
+      <h2>Histórico de arqueios</h2>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="arqueio-filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><button class="btn btn-secundario" onclick="carregarArqueios()">Atualizar</button></div>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Data</th><th>Loja</th><th>Teórico</th><th>Contado</th><th>Diferença</th><th>Observações</th><th>Registado por</th></tr></thead>
+          <tbody id="corpo-arqueios"><tr><td colspan="7">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Reconciliação GSV ── -->
+  <div class="aba-conteudo" id="aba-reconciliacao" hidden>
+    <div class="cartao">
+      <h2>Reconciliação GSV — cobrado vs. comissão vs. valor líquido</h2>
+      <div class="filtros">
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="filtro-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="filtro-ate"></div>
+        <div><label class="form-label">Loja</label><select id="filtro-loja"><option value="">Todas as lojas</option></select></div>
+        <div><button class="btn" onclick="carregarReconciliacao()">Atualizar</button></div>
+      </div>
+
+      <div class="resumo-grelha" id="resumo-reconciliacao"></div>
+
+      <input type="text" class="form-input campo-busca" id="busca-linhas" placeholder="Filtrar por Nº Documento, Refª SAP ou descrição…" oninput="filtrarLinhasReconciliacao()">
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr>
+            <th>Nº Documento</th><th>Loja</th><th>Data/Hora</th><th>Tipo</th><th>Refª SAP</th><th>Descrição</th>
+            <th>Total C/IVA</th><th>Comissão</th><th>Origem</th><th>Valor líq. Vodafone</th><th>Estado</th>
+          </tr></thead>
+          <tbody id="corpo-reconciliacao"><tr><td colspan="11">Carrega os filtros e clica em "Atualizar".</td></tr></tbody>
+        </table>
+      </div>
+      <p class="rodape-nota" id="nota-reconciliacao"></p>
+    </div>
+  </div>
+
+  <!-- ── Classificação ── -->
+  <div class="aba-conteudo" id="aba-classificacao" hidden>
+    <div class="cartao">
+      <h2>Classificação automática de produtos (Refª SAP → categoria/margem)</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Aprendida a partir das comissões confirmadas — sem necessidade de classificação manual. <button class="btn btn-secundario" style="padding:.3rem .7rem;font-size:.75rem" onclick="carregarClassificacao()">Atualizar</button></p>
+      <h3>✅ Confirmadas</h3>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Refª SAP</th><th>Categoria</th><th>Percentagem</th><th>Observações</th><th>Exemplo</th></tr></thead>
+          <tbody id="corpo-confirmadas"><tr><td colspan="5">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+      <h3>⚠️ Atípicas (percentagem fora do conhecido — normalmente CAP em artigo caro)</h3>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Refª SAP</th><th>Descrição</th><th>Último rácio observado</th></tr></thead>
+          <tbody id="corpo-atipicas"><tr><td colspan="3">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Histórico ── -->
+  <div class="aba-conteudo" id="aba-historico" hidden>
+    <div class="cartao">
+      <h2>Histórico de importações</h2>
+      <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarHistorico()">Atualizar</button>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Ficheiro</th><th>Importado por</th><th>Total</th><th>Novas</th><th>Já existiam</th><th>Avisos</th></tr></thead>
+          <tbody id="corpo-historico"><tr><td colspan="8">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// SCRIPT_URL: substituir pelo URL real depois do deploy (ver README.md,
+// passo 4 — "Service URL"). Mesma convenção do resto do portal.
+const SCRIPT_URL = 'https://redemovel-controlo-caixa-389728721690.europe-west1.run.app';
+
+let SESSAO = null;
+let ULTIMA_RECONCILIACAO = null;
+
+// Mesma lista de nomes canónicos de lib/lojas.js — manter sincronizado se
+// alguma vez mudar (ex.: nova loja a abrir).
+const NOMES_LOJAS = [
+  'Redemóvel - Ovar', 'Redemóvel - Arouca', 'Redemóvel - Av. Liberdade',
+  'Redemóvel - CC 8ª Avenida', 'Redemóvel - Oliveira de Azeméis',
+];
+
+// ═══ Chamada à API — mesmo padrão de retry do resto do portal ═══
+async function chamarApi(payload) {
+  const corpo = { ...payload, username: SESSAO ? SESSAO.username : payload.username, password: SESSAO ? SESSAO.password : payload.password };
+  const TENTATIVAS = 3;
+  for (let i = 0; i < TENTATIVAS; i++) {
+    try {
+      const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(corpo) });
+      if (!res.ok) throw 0;
+      return JSON.parse(await res.text());
+    } catch (_) {
+      if (i < TENTATIVAS - 1) await new Promise(r => setTimeout(r, 900 + i * 500));
+    }
+  }
+  return { ok: false, erro: 'Sem resposta do servidor. Verifica a ligação e tenta novamente.' };
+}
+
+function lerFicheiroBase64(ficheiro) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onerror = () => reject(new Error('Não foi possível ler o ficheiro.'));
+    leitor.onload = () => {
+      // resultado = "data:<mime>;base64,<dados>" — interessa só a parte depois da vírgula
+      const virgula = leitor.result.indexOf(',');
+      resolve(leitor.result.slice(virgula + 1));
+    };
+    leitor.readAsDataURL(ficheiro);
+  });
+}
+
+// ═══ Login ═══
+async function entrar() {
+  const erroEl = document.getElementById('login-err');
+  erroEl.hidden = true;
+  const username = document.getElementById('inp-user').value.trim().toLowerCase();
+  const password = document.getElementById('inp-pass').value;
+  if (!username || !password) { erroEl.textContent = 'Preenche utilizador e password.'; erroEl.hidden = false; return; }
+  const btn = document.getElementById('btn-entrar');
+  btn.disabled = true; btn.textContent = 'A entrar…';
+  const r = await chamarApi({ acao: 'listarImportacoes', username, password, limite: 1 });
+  btn.disabled = false; btn.textContent = 'Entrar';
+  if (!r.ok) { erroEl.textContent = r.erro || 'Credenciais inválidas ou sem permissão para o Controlo de Caixa.'; erroEl.hidden = false; return; }
+  SESSAO = { username, password };
+  sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO));
+  await entrarNoPainel();
+}
+
+function sair() {
+  SESSAO = null;
+  sessionStorage.removeItem('caixaSessao');
+  document.getElementById('tela-principal').hidden = true;
+  document.getElementById('topo-user').hidden = true;
+  document.getElementById('tela-login').hidden = false;
+  document.getElementById('inp-pass').value = '';
+}
+
+async function entrarNoPainel() {
+  document.getElementById('tela-login').hidden = true;
+  document.getElementById('tela-principal').hidden = false;
+  document.getElementById('topo-user').hidden = false;
+  document.getElementById('nome-utilizador').textContent = SESSAO.username;
+  popularSelectsLojas();
+  await Promise.all([carregarClassificacao(), carregarHistorico()]);
+}
+
+function popularSelectsLojas() {
+  const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja'];
+  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja'];
+  selects.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel || sel.options.length > (comTodas.includes(id) ? 1 : 0)) return;
+    NOMES_LOJAS.forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; sel.appendChild(o); });
+  });
+}
+
+// ═══ Abas ═══
+let ABAS_CARREGADAS = new Set();
+function mudarAba(nome) {
+  document.querySelectorAll('.aba-conteudo').forEach(el => el.hidden = true);
+  document.querySelectorAll('.aba-btn').forEach(el => el.classList.remove('ativa'));
+  document.getElementById('aba-' + nome).hidden = false;
+  document.querySelector('.aba-btn[data-aba="' + nome + '"]').classList.add('ativa');
+  if (nome === 'reconciliacao' && !ULTIMA_RECONCILIACAO) carregarReconciliacao();
+  if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); carregarFolhaCaixa(); }
+  if (nome === 'diverso' && !ABAS_CARREGADAS.has('diverso')) { ABAS_CARREGADAS.add('diverso'); carregarDiversos(); }
+  if (nome === 'arqueio' && !ABAS_CARREGADAS.has('arqueio')) { ABAS_CARREGADAS.add('arqueio'); atualizarSaldoTeoricoArqueio(); carregarArqueios(); }
+}
+
+// ═══ Importação ═══
+const ACCOES_IMPORTACAO = { cobrancas: 'importarCobrancas', gsv: 'importarGSV', comissoes: 'importarComissoes' };
+
+async function importarFicheiro(tipo) {
+  const inputEl = document.getElementById('ficheiro-' + tipo);
+  const resultadoEl = document.getElementById('resultado-' + tipo);
+  const ficheiro = inputEl.files && inputEl.files[0];
+  if (!ficheiro) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe um ficheiro primeiro.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A importar…</div>';
+  try {
+    const conteudoBase64 = await lerFicheiroBase64(ficheiro);
+    const r = await chamarApi({ acao: ACCOES_IMPORTACAO[tipo], conteudoBase64, nomeFicheiro: ficheiro.name });
+    if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao importar.') + '</div>'; return; }
+
+    let extra = '';
+    if (tipo === 'comissoes') {
+      extra = ` · ${r.reconciliadas} reconciliadas · ${r.ambiguas} ambíguas (documento com vários artigos) · ${r.aguardamGSV} aguardam o GSV`;
+    }
+    let html = `<div class="alerta alerta-ok">${r.novas} novas, ${r.jaExistiam} já existiam, de ${r.totalNoFicheiro} linhas no ficheiro${extra}.</div>`;
+    if (r.avisos && r.avisos.length) {
+      html += `<div class="alerta alerta-aviso">${r.avisos.length} aviso(s):<br>${r.avisos.slice(0, 10).map(a => '• ' + a).join('<br>')}${r.avisos.length > 10 ? '<br>…' : ''}</div>`;
+    }
+    resultadoEl.innerHTML = html;
+    inputEl.value = '';
+    // Depois de importar, o histórico/classificação podem ter mudado — refresca em segundo plano.
+    carregarHistorico();
+    carregarClassificacao();
+    ULTIMA_RECONCILIACAO = null;
+  } catch (err) {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (err.message || 'Erro inesperado.') + '</div>';
+  }
+}
+
+// ═══ Reconciliação GSV ═══
+async function carregarReconciliacao() {
+  const corpo = document.getElementById('corpo-reconciliacao');
+  corpo.innerHTML = '<tr><td colspan="11"><span class="spinner"></span>A carregar…</td></tr>';
+  const filtros = {};
+  const de = document.getElementById('filtro-de').value; if (de) filtros.de = de;
+  const ate = document.getElementById('filtro-ate').value; if (ate) filtros.ate = ate;
+  const loja = document.getElementById('filtro-loja').value; if (loja) filtros.loja = loja;
+
+  const r = await chamarApi({ acao: 'relatorioReconciliacaoGSV', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="11">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  ULTIMA_RECONCILIACAO = r;
+
+  const s = r.resumo;
+  document.getElementById('resumo-reconciliacao').innerHTML = `
+    <div class="resumo-item"><div class="valor">${s.linhas}</div><div class="rotulo">Linhas</div></div>
+    <div class="resumo-item"><div class="valor">${s.confirmadas}</div><div class="rotulo">Confirmadas</div></div>
+    <div class="resumo-item"><div class="valor">${s.estimadas}</div><div class="rotulo">Estimadas</div></div>
+    <div class="resumo-item"><div class="valor">${s.ambiguas}</div><div class="rotulo">Ambíguas</div></div>
+    <div class="resumo-item"><div class="valor">${s.semClassificacao}</div><div class="rotulo">Por classificar</div></div>
+    <div class="resumo-item"><div class="valor">${s.devolucoes}</div><div class="rotulo">Devoluções</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(s.totalCobrado)}</div><div class="rotulo">Total cobrado</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(s.totalComissaoConfirmada)}</div><div class="rotulo">Comissão confirmada</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(s.totalComissaoEstimada)}</div><div class="rotulo">Comissão estimada</div></div>
+  `;
+
+  // Popula o filtro de lojas com as lojas realmente vistas nas linhas (só na 1ª carga).
+  const filtroLoja = document.getElementById('filtro-loja');
+  if (filtroLoja.options.length <= 1) {
+    const lojas = [...new Set(r.linhas.map(l => l.loja).filter(Boolean))].sort();
+    lojas.forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; filtroLoja.appendChild(o); });
+  }
+
+  document.getElementById('busca-linhas').value = '';
+  renderLinhasReconciliacao(r.linhas);
+  document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(r.linhas.length, 500)} de ${r.linhas.length} linha(s)${r.linhas.length > 500 ? ' — usa os filtros de data/loja ou a busca para reduzir.' : ''}.`;
+}
+
+function renderLinhasReconciliacao(linhas) {
+  const corpo = document.getElementById('corpo-reconciliacao');
+  if (!linhas.length) { corpo.innerHTML = '<tr><td colspan="11">Sem linhas para os filtros escolhidos.</td></tr>'; return; }
+  corpo.innerHTML = linhas.slice(0, 500).map(l => {
+    let estadoBadge;
+    if (l.tipo === 'Devoluções') estadoBadge = '<span class="badge" style="background:var(--gray-light);color:var(--text-muted)">Devolução</span>';
+    else if (l.ambiguo) estadoBadge = '<span class="badge badge-ambiguo">Ambíguo</span>';
+    else if (l.origemComissao === 'confirmada') estadoBadge = '<span class="badge badge-ok">Confirmada</span>';
+    else if (l.comissao !== null) estadoBadge = '<span class="badge badge-estimado">Estimada</span>';
+    else estadoBadge = '<span class="badge badge-atipico">Por classificar</span>';
+    return `<tr>
+      <td>${l.nDocumento}</td><td>${l.loja || ''}</td><td>${l.dataHora || ''}</td><td>${l.tipo || ''}</td>
+      <td>${l.refSAP || ''}</td><td>${l.descricaoSAP || ''}</td>
+      <td>${formatarEuro(l.totalCIVA)}</td><td>${l.comissao !== null ? formatarEuro(l.comissao) : '—'}</td>
+      <td>${l.origemComissao || '—'}</td><td>${l.valorLiquidoVodafone !== null ? formatarEuro(l.valorLiquidoVodafone) : '—'}</td>
+      <td>${estadoBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarLinhasReconciliacao() {
+  if (!ULTIMA_RECONCILIACAO) return;
+  const termo = document.getElementById('busca-linhas').value.trim().toLowerCase();
+  if (!termo) { renderLinhasReconciliacao(ULTIMA_RECONCILIACAO.linhas); return; }
+  const filtradas = ULTIMA_RECONCILIACAO.linhas.filter(l =>
+    String(l.nDocumento).toLowerCase().includes(termo) ||
+    String(l.refSAP).toLowerCase().includes(termo) ||
+    String(l.descricaoSAP).toLowerCase().includes(termo));
+  renderLinhasReconciliacao(filtradas);
+}
+
+// ═══ Folha de Caixa ═══
+async function carregarSaldos() {
+  const el = document.getElementById('resumo-saldos');
+  el.innerHTML = '<div class="resumo-item"><span class="spinner"></span>A carregar…</div>';
+  const r = await chamarApi({ acao: 'listarSaldos' });
+  if (!r.ok) { el.innerHTML = '<div class="resumo-item">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
+  el.innerHTML = NOMES_LOJAS.map(loja => {
+    const s = r.saldos.find(x => x.loja === loja);
+    return `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">${loja.replace('Redemóvel - ', '')}</div></div>`;
+  }).join('');
+}
+
+async function carregarFolhaCaixa() {
+  const corpo = document.getElementById('corpo-folha');
+  const loja = document.getElementById('folha-loja').value;
+  if (!loja) { corpo.innerHTML = '<tr><td colspan="8">Escolhe uma loja.</td></tr>'; return; }
+  corpo.innerHTML = '<tr><td colspan="8"><span class="spinner"></span>A carregar…</td></tr>';
+  const filtros = {};
+  const de = document.getElementById('folha-de').value; if (de) filtros.de = de;
+  const ate = document.getElementById('folha-ate').value; if (ate) filtros.ate = ate;
+
+  const r = await chamarApi({ acao: 'folhaCaixa', loja, filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="8">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+
+  document.getElementById('resumo-folha').innerHTML = `
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.saldoAtualNumerario)}</div><div class="rotulo">Saldo actual (numerário)</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.resumo.creditosNumerario)}</div><div class="rotulo">Créditos numerário</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.resumo.debitosNumerario)}</div><div class="rotulo">Débitos numerário</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.resumo.totalDigital)}</div><div class="rotulo">Total digital/cartão</div></div>
+  `;
+
+  corpo.innerHTML = r.movimentos.length ? r.movimentos.map(m => `<tr>
+    <td>${m.dataHora}</td><td>${m.origem}</td><td>${m.tipo}</td><td>${m.metodoPagamento}</td><td>${m.descricao || ''}</td>
+    <td>${formatarEuro(m.valor)}</td>
+    <td>${m.numerario ? '<span class="badge badge-ok">Sim</span>' : '<span class="badge" style="background:var(--gray-light);color:var(--text-muted)">Não</span>'}</td>
+    <td>${m.saldoAcumulado !== null ? formatarEuro(m.saldoAcumulado) : '—'}</td>
+  </tr>`).join('') : '<tr><td colspan="8">Sem movimentos para os filtros escolhidos.</td></tr>';
+}
+
+// ═══ Movimento diverso ═══
+async function registarDiverso() {
+  const resultadoEl = document.getElementById('resultado-diverso');
+  const loja = document.getElementById('diverso-loja').value;
+  const tipo = document.getElementById('diverso-tipo').value;
+  const valor = document.getElementById('diverso-valor').value;
+  const observacoes = document.getElementById('diverso-observacoes').value;
+  if (!valor || Number(valor) <= 0) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um valor positivo.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
+  const r = await chamarApi({ acao: 'registarMovimentoDiverso', dados: { loja, tipo, valor, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Registado.${r.saldoNumerario !== null ? ' Novo saldo de numerário da loja: ' + formatarEuro(r.saldoNumerario) + '.' : ' (não afecta o numerário — movimento digital.)'}</div>`;
+  document.getElementById('diverso-valor').value = '';
+  document.getElementById('diverso-observacoes').value = '';
+  carregarDiversos();
+  carregarSaldos();
+  ABAS_CARREGADAS.delete('folha');
+}
+
+async function carregarDiversos() {
+  const corpo = document.getElementById('corpo-diversos');
+  corpo.innerHTML = '<tr><td colspan="7"><span class="spinner"></span>A carregar…</td></tr>';
+  const filtros = {};
+  const loja = document.getElementById('diverso-filtro-loja').value; if (loja) filtros.loja = loja;
+  const r = await chamarApi({ acao: 'listarMovimentosDiversos', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="7">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.movimentos.length ? r.movimentos.map(m => `<tr>
+    <td>${m.atualizadoEm || ''}</td><td>${m.loja}</td><td>${m.tipoNome}</td><td>${formatarEuro(m.valor)}</td>
+    <td>${m.numerario ? 'Sim' : 'Não'}</td><td>${m.observacoes || ''}</td><td>${m.registadoPor || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="7">Ainda sem movimentos diversos.</td></tr>';
+}
+
+// ═══ Arqueio ═══
+async function atualizarSaldoTeoricoArqueio() {
+  const loja = document.getElementById('arqueio-loja').value;
+  const campo = document.getElementById('arqueio-teorico');
+  if (!loja) { campo.value = ''; return; }
+  campo.value = 'A carregar…';
+  const r = await chamarApi({ acao: 'listarSaldos' });
+  if (!r.ok) { campo.value = '—'; return; }
+  const s = r.saldos.find(x => x.loja === loja);
+  campo.value = formatarEuro(s ? s.saldoNumerario : 0);
+}
+
+async function registarArqueioUI() {
+  const resultadoEl = document.getElementById('resultado-arqueio');
+  const loja = document.getElementById('arqueio-loja').value;
+  const saldoContado = document.getElementById('arqueio-contado').value;
+  const observacoes = document.getElementById('arqueio-observacoes').value;
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
+  if (saldoContado === '') { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor contado.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
+  const r = await chamarApi({ acao: 'registarArqueio', dados: { loja, saldoContado, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
+
+  const classe = r.destacar ? 'alerta-erro' : 'alerta-ok';
+  const texto = r.diferenca === 0 ? 'Bateu certo — sem diferença.' : `Diferença de ${formatarEuro(r.diferenca)} (teórico ${formatarEuro(r.saldoTeorico)}, contado ${formatarEuro(r.saldoContado)})${r.destacar ? ' — acima da tolerância, fica destacado.' : '.'}`;
+  resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
+  document.getElementById('arqueio-contado').value = '';
+  document.getElementById('arqueio-observacoes').value = '';
+  carregarArqueios();
+}
+
+async function carregarArqueios() {
+  const corpo = document.getElementById('corpo-arqueios');
+  corpo.innerHTML = '<tr><td colspan="7"><span class="spinner"></span>A carregar…</td></tr>';
+  const filtros = {};
+  const loja = document.getElementById('arqueio-filtro-loja').value; if (loja) filtros.loja = loja;
+  const r = await chamarApi({ acao: 'listarArqueios', filtros });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="7">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.arqueios.length ? r.arqueios.map(a => `<tr${a.destacar ? ' style="background:#fdecea"' : ''}>
+    <td>${a.atualizadoEm || ''}</td><td>${a.loja}</td><td>${formatarEuro(a.saldoTeorico)}</td><td>${formatarEuro(a.saldoContado)}</td>
+    <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td><td>${a.observacoes || ''}</td><td>${a.registadoPor || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="7">Ainda sem arqueios registados.</td></tr>';
+}
+
+// ═══ Classificação ═══
+async function carregarClassificacao() {
+  const corpoConf = document.getElementById('corpo-confirmadas');
+  const corpoAtip = document.getElementById('corpo-atipicas');
+  corpoConf.innerHTML = '<tr><td colspan="5"><span class="spinner"></span>A carregar…</td></tr>';
+  corpoAtip.innerHTML = '<tr><td colspan="3"><span class="spinner"></span>A carregar…</td></tr>';
+
+  const r = await chamarApi({ acao: 'relatorioClassificacao' });
+  if (!r.ok) { corpoConf.innerHTML = corpoAtip.innerHTML = '<tr><td colspan="5">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+
+  corpoConf.innerHTML = r.confirmadas.length ? r.confirmadas.map(c => `<tr>
+    <td>${c.id}</td><td>${c.categoriaNome || '—'}</td><td>${(c.percentagem * 100).toFixed(1)}%</td>
+    <td>${c.nObservacoes || 0}</td><td>${c.descricaoExemplo || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="5">Nenhuma classificação confirmada ainda.</td></tr>';
+
+  corpoAtip.innerHTML = r.atipicas.length ? r.atipicas.map(c => `<tr>
+    <td>${c.id}</td><td>${c.descricaoExemplo || ''}</td><td>${c.ultimoRacioObservado !== undefined ? (c.ultimoRacioObservado * 100).toFixed(2) + '%' : '—'}</td>
+  </tr>`).join('') : '<tr><td colspan="3">Nenhuma referência atípica.</td></tr>';
+}
+
+// ═══ Histórico ═══
+async function carregarHistorico() {
+  const corpo = document.getElementById('corpo-historico');
+  corpo.innerHTML = '<tr><td colspan="8"><span class="spinner"></span>A carregar…</td></tr>';
+  const r = await chamarApi({ acao: 'listarImportacoes', limite: 50 });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="8">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  corpo.innerHTML = r.importacoes.length ? r.importacoes.map(i => `<tr>
+    <td>${i.atualizadoEm || i.criadoEm || ''}</td><td>${i.tipo}</td><td>${i.ficheiroNome || ''}</td>
+    <td>${i.importadoPor || ''}</td><td>${i.totalNoFicheiro}</td><td>${i.novas}</td><td>${i.jaExistiam}</td>
+    <td>${(i.avisos || []).length}</td>
+  </tr>`).join('') : '<tr><td colspan="8">Ainda sem importações.</td></tr>';
+}
+
+function formatarEuro(v) {
+  if (v === null || v === undefined) return '—';
+  return Number(v).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+}
+
+// ═══ Arranque ═══
+(function iniciar() {
+  try {
+    const guardada = sessionStorage.getItem('caixaSessao');
+    if (guardada) { SESSAO = JSON.parse(guardada); entrarNoPainel(); }
+  } catch (_) {}
+  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+})();
+</script>
+</body>
+</html>
