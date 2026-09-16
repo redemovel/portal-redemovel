@@ -65,6 +65,19 @@
   .resumo-item { background: var(--off-white); border-radius: 10px; padding: .8rem; text-align: center; }
   .resumo-item .valor { font-size: 1.3rem; font-weight: 800; color: var(--teal-dark); }
   .resumo-item .rotulo { font-size: .7rem; color: var(--text-muted); margin-top: .2rem; }
+  /* Conferência de Caixa da loja, em destaque no Relatório contabilidade —
+     pedido do Ricardo (2026-09-16): "o total da loja mais visível", em vez
+     de uma frase pequena dentro de uma caixa de alerta. */
+  .conferencia-badge { text-align: center; font-size: 1.1rem; font-weight: 800; padding: .7rem 1rem; border-radius: 10px; margin-bottom: .9rem; }
+  .resumo-grelha-grande .valor { font-size: 2rem; }
+  /* Movimentos do período — dispensáveis por omissão (pedido do Ricardo:
+     "o que queremos são os grandes totais"), disponíveis num clique. */
+  details.relatorio-detalhe { border: 1px solid var(--gray-light); border-radius: 10px; padding: 0 .9rem; margin: 1rem 0; }
+  details.relatorio-detalhe summary { cursor: pointer; font-weight: 700; font-size: .85rem; color: var(--text-muted); padding: .8rem 0; list-style: none; }
+  details.relatorio-detalhe summary::-webkit-details-marker { display: none; }
+  details.relatorio-detalhe summary::before { content: '▸ '; }
+  details.relatorio-detalhe[open] summary::before { content: '▾ '; }
+  details.relatorio-detalhe table { margin-bottom: .9rem; }
   .filtros { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
   .filtros > div { flex: 1; min-width: 140px; }
   .filtros .form-input, .filtros select { margin-bottom: 0; }
@@ -334,26 +347,29 @@
           <div id="relatorio-titulo-periodo" class="rodape-nota"></div>
         </div>
 
+        <h3>Conferência de Caixa — resumo da loja</h3>
+        <div id="relatorio-conferencia-loja"></div>
+
+        <table>
+          <thead><tr><th>Colaborador</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
+          <tbody id="relatorio-corpo-colaboradores"></tbody>
+        </table>
+
         <h3>Resumo de movimentos (Folha de Caixa)</h3>
         <div class="resumo-grelha" id="relatorio-resumo-folha"></div>
 
-        <h3>Movimentos do período</h3>
-        <table>
-          <thead><tr><th>Data/Hora</th><th>Origem</th><th>Tipo</th><th>Método</th><th>Descrição</th><th>Valor</th><th>Numerário</th></tr></thead>
-          <tbody id="relatorio-corpo-folha"></tbody>
-        </table>
+        <details class="relatorio-detalhe">
+          <summary>Ver movimentos do período (opcional)</summary>
+          <table>
+            <thead><tr><th>Data/Hora</th><th>Origem</th><th>Tipo</th><th>Método</th><th>Descrição</th><th>Valor</th><th>Numerário</th></tr></thead>
+            <tbody id="relatorio-corpo-folha"></tbody>
+          </table>
+        </details>
 
         <h3>Arqueios do período</h3>
         <table>
           <thead><tr><th>Data</th><th>Teórico</th><th>Contado</th><th>Diferença</th><th>Observações</th></tr></thead>
           <tbody id="relatorio-corpo-arqueios"></tbody>
-        </table>
-
-        <h3>Conferência de Caixa por Colaborador — período</h3>
-        <div id="relatorio-conferencia-loja"></div>
-        <table>
-          <thead><tr><th>Colaborador</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
-          <tbody id="relatorio-corpo-colaboradores"></tbody>
         </table>
 
         <p class="rodape-nota" id="relatorio-rodape"></p>
@@ -730,16 +746,24 @@ async function gerarRelatorio() {
     <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td><td>${a.observacoes || ''}</td>
   </tr>`).join('') : '<tr><td colspan="5">Sem arqueios no período.</td></tr>';
 
+  // Pedido do Ricardo (2026-09-16): "queremos os grandes totais" bem
+  // visíveis, não uma frase pequena — mesmo tratamento visual (números
+  // grandes) do resumo da Folha de Caixa, com uma faixa CONFERE/NÃO CONFERE
+  // por cima e a diferença a vermelho/verde consoante o resultado.
   const confLojaEl = document.getElementById('relatorio-conferencia-loja');
   if (folha.conferenciaLoja) {
     const c = folha.conferenciaLoja;
     const classe = c.confere ? 'alerta-ok' : 'alerta-erro';
-    const texto = c.confere
-      ? `Confere — documentos ${formatarEuro(c.totalDocumentos)} = apurado ${formatarEuro(c.totalApurado)} (${c.nColaboradoresApurados} colaborador(es)).`
-      : `NÃO CONFERE — documentos ${formatarEuro(c.totalDocumentos)}, apurado ${formatarEuro(c.totalApurado)} (${c.nColaboradoresApurados} colaborador(es)), diferença ${formatarEuro(c.diferenca)}.`;
-    confLojaEl.innerHTML = `<div class="alerta ${classe}" style="margin-bottom:.75rem">${texto}</div>`;
+    const corDiferenca = c.confere ? 'var(--teal-dark)' : '#b3000a';
+    confLojaEl.innerHTML = `
+      <div class="conferencia-badge ${classe}">${c.confere ? '✅ CONFERE' : '⚠️ NÃO CONFERE'}</div>
+      <div class="resumo-grelha resumo-grelha-grande">
+        <div class="resumo-item"><div class="valor">${formatarEuro(c.totalDocumentos)}</div><div class="rotulo">Documentos (GSV + Carregamentos)</div></div>
+        <div class="resumo-item"><div class="valor">${formatarEuro(c.totalApurado)}</div><div class="rotulo">Apurado (${c.nColaboradoresApurados} colaborador(es))</div></div>
+        <div class="resumo-item"><div class="valor" style="color:${corDiferenca}">${formatarEuro(c.diferenca)}</div><div class="rotulo">Diferença</div></div>
+      </div>`;
   } else {
-    confLojaEl.innerHTML = '';
+    confLojaEl.innerHTML = '<p class="rodape-nota">Escolhe um período (De e Até) para ver a conferência agregada da loja.</p>';
   }
 
   const listaApuros = (apuros.ok ? apuros.apuros : []).filter(a => a.de >= de && a.ate <= ate);
