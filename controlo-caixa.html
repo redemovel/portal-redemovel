@@ -689,7 +689,18 @@ async function importarFicheiro(tipo) {
   try {
     const conteudoBase64 = await lerFicheiroBase64(ficheiro);
     const r = await chamarApi({ acao: ACCOES_IMPORTACAO[tipo], conteudoBase64, nomeFicheiro: ficheiro.name });
-    if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao importar.') + '</div>'; return; }
+    if (!r.ok) {
+      // Importação cancelada (ex. colaborador não reconhecido) — nada foi
+      // gravado, mas fica um registo de auditoria da tentativa (pedido do
+      // Ricardo, 2026-09-17); refresca o histórico para o mostrar.
+      let htmlErro = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao importar.') + '</div>';
+      if (r.colaboradoresNaoReconhecidos && r.colaboradoresNaoReconhecidos.length) {
+        htmlErro += '<div class="alerta alerta-erro">Vai a "👤 Colaboradores" e associa: <strong>' + r.colaboradoresNaoReconhecidos.map(c => `"${c}"`).join(', ') + '</strong> — depois volta a escolher e importar este mesmo ficheiro.</div>';
+      }
+      resultadoEl.innerHTML = htmlErro;
+      carregarHistorico();
+      return;
+    }
 
     let extra = '';
     if (tipo === 'comissoes') {
