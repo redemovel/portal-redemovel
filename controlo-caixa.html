@@ -468,6 +468,28 @@
         </table>
       </div>
     </div>
+
+    <!-- Reset de testes — só visível para Master, só enquanto o módulo
+         ainda não está em produção (pedido do Ricardo, 2026-09-17). -->
+    <div class="cartao" id="cartao-reset-testes" hidden style="border:2px solid #b3000a">
+      <h2 style="color:#b3000a">⚠️ Reset de testes</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">
+        Apaga TODOS os dados de teste do Controlo de Caixa — movimentos importados (Cobranças/GSV),
+        apuros por colaborador, arqueios, conferências de terminal, movimentos diversos, saldos de
+        numerário, classificação de produtos aprendida e o histórico de importações. Depois de
+        confirmar, tens de reimportar os ficheiros Vodafone de novo (agora já com os códigos GSV
+        todos configurados em "👤 Colaboradores", para os nomes ficarem correctos desde o início).
+      </p>
+      <p class="alerta alerta-erro" style="margin-bottom:1rem">
+        Isto <strong>NUNCA</strong> toca na Assiduidade nem na lista de utilizadores/logins — só nas
+        colecções deste módulo. Mas dentro do Controlo de Caixa é irreversível: usa isto só enquanto
+        estiveres em fase de testes, nunca depois de estar em produção.
+      </p>
+      <label class="form-label" for="reset-confirmacao">Escreve <code>APAGAR TUDO</code> para confirmar</label>
+      <input type="text" class="form-input" id="reset-confirmacao" placeholder="APAGAR TUDO" style="max-width:260px">
+      <button class="btn" style="background:#b3000a;margin-top:.6rem" onclick="executarResetTestes()">🗑 Apagar todos os dados de teste</button>
+      <div id="resultado-reset-testes" style="margin-top:1rem"></div>
+    </div>
   </div>
 
   <!-- ── Colaboradores (códigos VDF/GSV) ── -->
@@ -559,6 +581,10 @@ function ehMasterOuCoordenador() {
   return r === 'master' || r === 'coordenador_lojas' || r === 'coordenador';
 }
 
+function ehMaster() {
+  return String((SESSAO && SESSAO.role) || '').toLowerCase() === 'master';
+}
+
 function sair() {
   SESSAO = null;
   sessionStorage.removeItem('caixaSessao');
@@ -585,6 +611,10 @@ async function entrarNoPainel() {
   // a tab a quem não pode usá-la.
   const btnReconciliacao = document.querySelector('.aba-btn[data-aba="reconciliacao"]');
   if (btnReconciliacao) btnReconciliacao.hidden = !ehMasterOuCoordenador();
+  // Reset de testes — só Master (pedido do Ricardo, 2026-09-17); a acção já
+  // recusa no servidor, isto é só para não mostrar a quem não pode usar.
+  const cartaoReset = document.getElementById('cartao-reset-testes');
+  if (cartaoReset) cartaoReset.hidden = !ehMaster();
   popularSelectsLojas();
   await Promise.all([carregarClassificacao(), carregarHistorico()]);
 }
@@ -1258,6 +1288,31 @@ async function carregarHistorico() {
     <td>${i.importadoPor || ''}</td><td>${i.totalNoFicheiro}</td><td>${i.novas}</td><td>${i.jaExistiam}</td>
     <td>${(i.avisos || []).length}</td>
   </tr>`).join('') : '<tr><td colspan="8">Ainda sem importações.</td></tr>';
+}
+
+// Reset de testes — pede confirmação por escrito (não só um clique), já que
+// isto é irreversível dentro do Controlo de Caixa (pedido do Ricardo,
+// 2026-09-17, enquanto o módulo ainda não está em produção).
+async function executarResetTestes() {
+  const resultadoEl = document.getElementById('resultado-reset-testes');
+  const confirmacao = document.getElementById('reset-confirmacao').value;
+  if (confirmacao.trim() !== 'APAGAR TUDO') {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escreve exactamente "APAGAR TUDO" na caixa de texto para confirmar.</div>';
+    return;
+  }
+  if (!confirm('Confirmado: isto apaga TODOS os movimentos, apuros, arqueios e importações de teste do Controlo de Caixa. A Assiduidade e os utilizadores NÃO são tocados. Continuar?')) return;
+
+  resultadoEl.innerHTML = '<span class="spinner"></span> A apagar…';
+  const r = await chamarApi({ acao: 'resetTestesControloCaixa', confirmacao });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao apagar.') + '</div>'; return; }
+
+  document.getElementById('reset-confirmacao').value = '';
+  const detalhe = r.colecoes.map(c => `${c}: ${r.apagados[c]}`).join(' · ');
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">✅ Apagados ${r.totalApagados} documento(s) no total.<br><span style="font-size:.78rem;opacity:.8">${detalhe}</span><br><br>Agora reimporta os ficheiros Vodafone em "📥 Importar ficheiros" — com os códigos GSV já todos configurados em "👤 Colaboradores", os nomes ficam certos desde a primeira importação.</div>`;
+  // As tabs que dependem destes dados ficam desactualizadas até se voltar a
+  // pesquisar/importar — não têm de ser recarregadas sozinhas aqui (seguindo
+  // a mesma regra de nunca disparar leituras sem uma acção explícita).
+  carregarHistorico();
 }
 
 // ═══ Colaboradores — códigos VDF/GSV ═══
