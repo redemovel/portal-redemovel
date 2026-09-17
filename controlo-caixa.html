@@ -341,31 +341,26 @@
 
   <!-- ── Relatório contabilidade ── -->
   <div class="aba-conteudo" id="aba-relatorio" hidden>
+    <!-- ── Caixa Mês (Fase 3b, 2026-09-17; fundido com o antigo "Gerar
+         relatório entre datas" em 2026-09-17 a pedido do Ricardo — eram
+         duas coisas a fazer praticamente o mesmo trabalho na mesma tab,
+         com propósitos confusos entre si) — um único fluxo: escolhe loja
+         + mês, confirma tudo (vistos diários/mensais, fecho), e o mesmo
+         "Ver mês" já prepara a página pronta a imprimir/gravar em PDF
+         (Folha de Caixa, Arqueios e apuros por colaborador do mês) — sem
+         precisar de escolher um período à parte. ── -->
     <div class="cartao no-print">
-      <h2>Relatório para a contabilidade</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Junta a Folha de Caixa, os Arqueios e as Conferências de Terminal do período escolhido numa página pronta a imprimir ou gravar em PDF, para acompanhar os documentos enviados para a contabilidade.</p>
+      <h2>📅 Caixa Mês — fecho e relatório para a contabilidade</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Escolhe a loja e o mês: confirma, dia a dia, que o Multibanco, VISA, Depósitos bancários e Transferências recebidas entraram na conta (contra o extracto do banco), dá visto aos totais do mês de Carregamentos e de GSV, e fecha o mês. O mesmo botão "Ver mês" já prepara a página pronta a imprimir/gravar em PDF (Folha de Caixa, Arqueios e apuros por colaborador do mês) para acompanhar os documentos enviados para a contabilidade. Uma vez fechado, apagar ou corrigir um apuro desse mês fica bloqueado até um Master o reabrir.</p>
       <div class="filtros">
         <div><label class="form-label">Loja</label><select id="relatorio-loja"></select></div>
-        <div><label class="form-label">De</label><input type="date" class="form-input" id="relatorio-de"></div>
-        <div><label class="form-label">Até</label><input type="date" class="form-input" id="relatorio-ate"></div>
-        <div><button class="btn" onclick="gerarRelatorio()">Gerar relatório</button></div>
+        <div><label class="form-label">Mês</label><input type="month" class="form-input" id="cm-mes"></div>
+        <div><button class="btn" onclick="verMesCaixa()">🔍 Ver mês</button></div>
         <div><button class="btn btn-secundario" id="btn-imprimir-relatorio" onclick="window.print()" hidden>🖨 Imprimir / Gravar PDF</button></div>
       </div>
+      <input type="hidden" id="relatorio-de">
+      <input type="hidden" id="relatorio-ate">
       <div id="relatorio-status"></div>
-    </div>
-
-    <!-- ── Caixa Mês (Fase 3b, 2026-09-17) — fecho mensal por loja: vistos
-         diários (bancários), vistos mensais (Carregamentos/GSV), fechar/
-         reabrir o mês, e depósito em trânsito. Usa a mesma loja escolhida
-         acima ("relatorio-loja"); o mês é independente do período De/Até do
-         relatório impresso. ── -->
-    <div class="cartao no-print">
-      <h2>📅 Caixa Mês</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Fecho mensal por loja: confirma, dia a dia, que o Multibanco, VISA, Depósitos bancários e Transferências recebidas entraram na conta (contra o extracto do banco), dá visto aos totais do mês de Carregamentos e de GSV, e só depois fecha o mês. Uma vez fechado, apagar ou corrigir um apuro desse mês fica bloqueado até um Master o reabrir.</p>
-      <div class="filtros">
-        <div><label class="form-label">Mês</label><input type="month" class="form-input" id="cm-mes"></div>
-        <div><button class="btn" onclick="carregarCaixaMes()">🔍 Ver mês</button></div>
-      </div>
       <div id="cm-resultado"></div>
     </div>
 
@@ -676,10 +671,10 @@ function mudarAba(nome) {
   }
   if (nome === 'relatorio' && !ABAS_CARREGADAS.has('relatorio')) {
     ABAS_CARREGADAS.add('relatorio');
-    if (!document.getElementById('relatorio-de').value) document.getElementById('relatorio-de').value = primeiroDiaMesISO();
-    if (!document.getElementById('relatorio-ate').value) document.getElementById('relatorio-ate').value = hojeISO();
-    // Só pré-preenche o mês do Caixa Mês (nenhuma leitura) — "🔍 Ver mês" é
-    // que pesquisa, mesma regra do resto da página.
+    // Só pré-preenche o mês (nenhuma leitura) — "🔍 Ver mês" é que pesquisa
+    // e gera o relatório, mesma regra do resto da página. O período De/Até
+    // do relatório impresso é calculado a partir deste mês (verMesCaixa()),
+    // já não se escolhe à parte.
     if (!document.getElementById('cm-mes').value) document.getElementById('cm-mes').value = mesAtualISO();
   }
   if (nome === 'colaboradores' && !ABAS_CARREGADAS.has('colaboradores')) { ABAS_CARREGADAS.add('colaboradores'); carregarColaboradoresGSV(); }
@@ -1078,6 +1073,34 @@ async function gerarRelatorio() {
 // ═══ Caixa Mês (Fase 3b, 2026-09-17) ═══
 let CM_ESTADO = null; // último resultado de estadoCaixaMes — reaproveitado pelos botões (marcar visto, fechar, ...) sem repetir a leitura
 
+// Devolve o primeiro e o último dia do mês "AAAA-MM" — usado para gerar o
+// relatório impresso a partir do mês do Caixa Mês, em vez de um período
+// livre à parte (fundido a pedido do Ricardo, 2026-09-17).
+function limitesDoMes(mesISO) {
+  const [ano, mesNum] = mesISO.split('-').map(Number);
+  const de = `${mesISO}-01`;
+  const ultimoDia = new Date(ano, mesNum, 0).getDate(); // dia 0 do mês seguinte = último dia deste mês
+  const ate = `${mesISO}-${String(ultimoDia).padStart(2, '0')}`;
+  return { de, ate };
+}
+
+// Único ponto de entrada do botão "🔍 Ver mês": carrega o Caixa Mês
+// (vistos, fecho) e, ao mesmo tempo, prepara/gera a página pronta a
+// imprimir/gravar em PDF para o mesmo período (o mês inteiro) — antes eram
+// dois botões separados ("Gerar relatório" com um período livre + "Ver
+// mês"), confuso e redundante.
+async function verMesCaixa() {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  const resultadoEl = document.getElementById('cm-resultado');
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
+  if (!mes) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe o mês.</div>'; return; }
+  const { de, ate } = limitesDoMes(mes);
+  document.getElementById('relatorio-de').value = de;
+  document.getElementById('relatorio-ate').value = ate;
+  await Promise.all([carregarCaixaMes(), gerarRelatorio()]);
+}
+
 async function carregarCaixaMes() {
   const resultadoEl = document.getElementById('cm-resultado');
   const loja = document.getElementById('relatorio-loja').value;
@@ -1188,6 +1211,21 @@ function mostrarCaixaMes() {
     `;
   }
 
+  // Pedido do Ricardo (2026-09-17): "totalizadores do mês das rubricas
+  // conferidas MB, VISA, transferências e depósitos" — quanto já está
+  // confirmado (com visto válido) em cada um dos 4 tipos, para o mês
+  // inteiro, contra o total geral desse tipo no mês (mostra o que falta
+  // quando ainda não está tudo confirmado).
+  const ROTULOS_TIPO_DIARIO = { multibanco: 'Multibanco', visa: 'VISA', depositos: 'Depósitos bancários', transferencias: 'Transferências recebidas' };
+  const totaisDiariosHtml = ['multibanco', 'visa', 'depositos', 'transferencias'].map(tipo => {
+    const t = e.totaisDiarios[tipo];
+    const falta = t.geral - t.confirmado;
+    return `<div class="resumo-item">
+      <div class="valor">${formatarEuro(t.confirmado)}</div>
+      <div class="rotulo">${ROTULOS_TIPO_DIARIO[tipo]} — confirmado${Math.abs(falta) > 0.01 ? ` <span style="color:#b3000a">(falta ${formatarEuro(falta)})</span>` : ''}</div>
+    </div>`;
+  }).join('');
+
   resultadoEl.innerHTML = `
     <h3 style="margin-top:1.25rem">Vistos diários (Multibanco, VISA, Depósitos bancários, Transferências)</h3>
     <div class="tabela-scroll">
@@ -1196,6 +1234,8 @@ function mostrarCaixaMes() {
         <tbody>${linhasDias}</tbody>
       </table>
     </div>
+    <h3>Totais do mês — rubricas confirmadas</h3>
+    <div class="resumo-grelha">${totaisDiariosHtml}</div>
     <h3>Vistos mensais</h3>
     <div class="resumo-grelha">
       ${linhaVistoMensal('carregamentos', 'Total do mês — Carregamentos/Pag. Fatura')}
