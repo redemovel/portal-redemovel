@@ -1098,21 +1098,35 @@ function mostrarCaixaMes() {
   const podeGerir = ehMasterOuCoordenador();
   const podeReabrir = ehMaster();
 
+  // Bug real reportado pelo Ricardo (2026-09-17): os totais só apareciam
+  // DEPOIS de já teres dado o visto — impossível decidir se está certo sem
+  // o ver primeiro. Agora mostra sempre o valor actual (calculado ao vivo),
+  // e o estado do visto por cima: dado e ainda válido, dado mas
+  // desactualizado (algo mudou desde então — ex. chegou um ficheiro novo),
+  // ou por dar.
+  const estadoVisto = (temVisto, valido, vistoPor) => {
+    if (temVisto && valido) return `✅ Visto (${vistoPor || ''})`;
+    if (temVisto && !valido) return `⚠️ Mudou desde o visto (${vistoPor || ''}) — precisa de novo visto`;
+    return '⏳ Por dar visto';
+  };
+
   const linhasDias = e.dias.length ? e.dias.map(d => `<tr>
     <td>${d.dia}</td><td>${formatarEuro(d.totalMB)}</td><td>${formatarEuro(d.totalVISA)}</td>
     <td>${formatarEuro(d.totalDepositos)}</td><td>${formatarEuro(d.totalTransferencias)}</td>
-    <td>${d.visto
-      ? `✅ Visto (${d.visto.vistoPor || ''})` + (podeGerir && !e.trancado ? ` · <a href="#" onclick="desfazerVistoDiarioCM('${d.dia}');return false">desfazer</a>` : '')
-      : (podeGerir && !e.trancado ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="marcarVistoDiarioCM('${d.dia}')">Dar visto</button>` : '⏳ Por dar visto')}</td>
-  </tr>`).join('') : '<tr><td colspan="6">Sem movimentos (Multibanco/VISA/Depósitos/Transferências) neste mês.</td></tr>';
+    <td>${estadoVisto(!!d.visto, d.vistoValido, d.visto && d.visto.vistoPor)}
+      ${d.visto && d.vistoValido && podeGerir && !e.trancado ? ` · <a href="#" onclick="desfazerVistoDiarioCM('${d.dia}');return false">desfazer</a>` : ''}
+      ${(!d.visto || !d.vistoValido) && podeGerir && !e.trancado ? ` <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="marcarVistoDiarioCM('${d.dia}')">${d.visto ? 'Dar novo visto' : 'Dar visto'}</button>` : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Sem Multibanco/VISA apurado nem Depósitos/Transferências registados neste mês (nada por confirmar ainda — os totais do GSV/Carregamentos importados são os "Vistos mensais", abaixo).</td></tr>';
 
   const linhaVistoMensal = (tipo, rotulo) => {
     const v = e.vistosMensais[tipo];
+    const valido = tipo === 'carregamentos' ? e.vistoCarregamentos : e.vistoGSV;
+    const totalAtual = e.totaisMensaisAtual[tipo];
     return `<div class="resumo-item">
-      <div class="valor">${v ? formatarEuro(v.totalMes) : '—'}</div>
-      <div class="rotulo">${rotulo}${v ? ` · ✅ visto (${v.vistoPor || ''})` : ''}</div>
-      ${!v && podeGerir && !e.trancado ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem;margin-top:.4rem" onclick="marcarVistoMensalCM('${tipo}')">Dar visto</button>` : ''}
-      ${v && podeGerir && !e.trancado ? `<div class="rodape-nota"><a href="#" onclick="desfazerVistoMensalCM('${tipo}');return false">desfazer</a></div>` : ''}
+      <div class="valor">${formatarEuro(totalAtual)}</div>
+      <div class="rotulo">${rotulo} · ${estadoVisto(!!v, valido, v && v.vistoPor)}</div>
+      ${(!v || !valido) && podeGerir && !e.trancado ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem;margin-top:.4rem" onclick="marcarVistoMensalCM('${tipo}')">${v ? 'Dar novo visto' : 'Dar visto'}</button>` : ''}
+      ${v && valido && podeGerir && !e.trancado ? `<div class="rodape-nota"><a href="#" onclick="desfazerVistoMensalCM('${tipo}');return false">desfazer</a></div>` : ''}
     </div>`;
   };
 
