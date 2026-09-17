@@ -495,14 +495,16 @@
   <!-- ── Colaboradores (códigos VDF/GSV) ── -->
   <div class="aba-conteudo" id="aba-colaboradores" hidden>
     <div class="cartao">
-      <h2>👤 Colaboradores — códigos VDF/GSV</h2>
+      <h2>👤 Colaboradores — códigos VDF/GSV e nomes alternativos</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
-      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve o(s) código(s) e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga qualquer código que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
+      <p class="rodape-nota" style="margin-bottom:1rem">O ficheiro de Cobranças, esse, já traz um nome legível — mas às vezes com uma grafia diferente da pessoa (ex.: "Ana Lopes" em vez do nome completo "Ana Filipa Calhau Lopes"), o que faz aparecer a mesma pessoa duas vezes. Escreve aqui essas outras grafias, em "Nomes alternativos", para ficarem sempre associadas ao colaborador certo.</p>
+      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve os valores e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga o que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
+      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), a forma mais simples enquanto ainda estás em testes é associar tudo aqui primeiro e só depois usar o "⚠️ Reset de testes" (tab "🕒 Histórico de importações") e reimportar os ficheiros Vodafone de novo.</p>
       <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">🔄 Recarregar lista</button>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Colaborador</th><th>Utilizador</th><th>Perfil</th><th>Códigos GSV (separados por vírgula)</th><th></th></tr></thead>
-          <tbody id="corpo-colaboradores-gsv"><tr><td colspan="5">A carregar…</td></tr></tbody>
+          <thead><tr><th>Colaborador</th><th>Utilizador</th><th>Perfil</th><th>Códigos GSV (separados por vírgula)</th><th>Nomes alternativos — Cobranças (separados por vírgula)</th><th></th></tr></thead>
+          <tbody id="corpo-colaboradores-gsv"><tr><td colspan="6">A carregar…</td></tr></tbody>
         </table>
       </div>
       <div id="resultado-colaboradores-gsv"></div>
@@ -1315,28 +1317,31 @@ async function executarResetTestes() {
   carregarHistorico();
 }
 
-// ═══ Colaboradores — códigos VDF/GSV ═══
+// ═══ Colaboradores — códigos VDF/GSV e nomes alternativos ═══
 async function carregarColaboradoresGSV() {
   const corpo = document.getElementById('corpo-colaboradores-gsv');
-  corpo.innerHTML = '<tr><td colspan="5"><span class="spinner"></span>A carregar…</td></tr>';
+  corpo.innerHTML = '<tr><td colspan="6"><span class="spinner"></span>A carregar…</td></tr>';
   const r = await chamarApi({ acao: 'listarColaboradoresGSV' });
-  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="5">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="6">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
   corpo.innerHTML = r.colaboradores.length ? r.colaboradores.map(c => `<tr>
     <td>${c.nome}</td><td>${c.username}</td><td>${c.role || ''}</td>
     <td><input type="text" class="form-input" style="margin-bottom:0" id="cod-${c.username}" value="${(c.codigosGSV || []).join(', ')}" placeholder="ex.: N_AFLOPES3"></td>
+    <td><input type="text" class="form-input" style="margin-bottom:0" id="alias-${c.username}" value="${(c.nomesAlternativos || []).join(', ')}" placeholder="ex.: Ana Lopes"></td>
     <td style="white-space:nowrap">
       <button class="btn btn-secundario" style="padding:.5rem 1rem;font-size:.8rem" onclick="guardarCodigosGSV('${c.username}')">Guardar</button>
       <span id="status-cod-${c.username}" style="font-size:1rem;vertical-align:middle;margin-left:.3rem"></span>
     </td>
-  </tr>`).join('') : '<tr><td colspan="5">Sem colaboradores activos.</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="6">Sem colaboradores activos.</td></tr>';
 }
 
 async function guardarCodigosGSV(username) {
   const statusEl = document.getElementById('status-cod-' + username);
   const valor = document.getElementById('cod-' + username).value;
   const codigosGSV = valor.split(',').map(c => c.trim()).filter(Boolean);
+  const valorAlias = document.getElementById('alias-' + username).value;
+  const nomesAlternativos = valorAlias.split(',').map(a => a.trim()).filter(Boolean);
   statusEl.innerHTML = '<span class="spinner"></span>';
-  const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', alvoUsername: username, codigosGSV });
+  const r = await chamarApi({ acao: 'atualizarCodigosGSVColaborador', alvoUsername: username, codigosGSV, nomesAlternativos });
   if (!r.ok) {
     statusEl.innerHTML = '⚠️';
     statusEl.title = r.erro || 'Erro ao gravar.';
@@ -1344,7 +1349,8 @@ async function guardarCodigosGSV(username) {
     return;
   }
   statusEl.innerHTML = '✅';
-  statusEl.title = 'Gravado — ' + (r.codigosGSV.length ? r.codigosGSV.join(', ') : 'sem códigos');
+  statusEl.title = 'Gravado — ' + (r.codigosGSV.length ? r.codigosGSV.join(', ') : 'sem códigos')
+    + ' · aliases: ' + ((r.nomesAlternativos || []).length ? r.nomesAlternativos.join(', ') : 'nenhum');
   document.getElementById('resultado-colaboradores-gsv').innerHTML = '';
 }
 
