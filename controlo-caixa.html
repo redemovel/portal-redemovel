@@ -268,8 +268,36 @@
     </div>
   </div>
 
-  <!-- ── Conferência de Caixa (por Colaborador) ── -->
+  <!-- ── Caixa dia (Conferência de Caixa por Colaborador, Fase 3a) ── -->
   <div class="aba-conteudo" id="aba-conferenciacaixa" hidden>
+    <div class="cartao">
+      <h2>Caixa dia</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Os fechos são sempre diários: escolhe a loja e o dia — todo o resto desta página (saldo por apurar, saldo em caixa, apuros) refere-se sempre a este dia.</p>
+      <div class="filtros">
+        <div><label class="form-label">Loja</label><select id="cd-loja" onchange="mudarLojaOuDiaCaixaDia()"></select></div>
+        <div><label class="form-label">Dia</label><input type="date" class="form-input" id="cd-dia" onchange="mudarLojaOuDiaCaixaDia()"></div>
+        <div><button class="btn btn-secundario" onclick="carregarResumoDia()">Atualizar</button></div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h2>Saldo do dia por apurar</h2>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Quanto falta apurar hoje, em numerário e em ATM (Multibanco+VISA), para bater certo com os documentos Vodafone do dia. O objectivo é chegar a ZERO nos dois, quando todos os colaboradores já tiverem apurado.</p>
+      <div id="cd-resumo-dia"><div class="resumo-item">A carregar…</div></div>
+    </div>
+
+    <div class="cartao">
+      <h2>💳 Saldo em numerário da loja</h2>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Dinheiro físico que devia estar na gaveta da loja neste momento. Regista aqui o depósito bancário assim que o dinheiro sai da loja — o saldo é actualizado de imediato.</p>
+      <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
+      <div class="filtros">
+        <div><label class="form-label">Depósito bancário (€)</label><input type="number" class="form-input" id="cd-deposito-valor" min="0.01" step="0.01"></div>
+        <div><label class="form-label">Observações</label><input type="text" class="form-input" id="cd-deposito-observacoes" placeholder="Opcional"></div>
+        <div><button class="btn btn-secundario" onclick="registarDepositoCaixaDia()">Registar depósito</button></div>
+      </div>
+      <div id="cd-resultado-deposito"></div>
+    </div>
+
     <div class="cartao">
       <h2>Orientação — o que cada colaborador facturou</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">Mostra, por colaborador, quanto foi facturado (GSV + Carregamentos) no período, e como se reparte entre Numerário e Cartão/ATM (Multibanco+VISA juntos — a Vodafone não distingue as duas redes). Serve de orientação antes de inserires o que apuraste de verdade, mais abaixo.</p>
@@ -289,13 +317,12 @@
     </div>
 
     <div class="cartao">
-      <h2>Caixa do Assistente — inserir apuro real</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Clica em "Apurar" numa linha da tabela acima para pré-preencher o colaborador/loja/período, ou escolhe manualmente. O total apurado (ATM Multibanco + ATM VISA + Numerário + Transferência) é comparado com o total dos documentos desse colaborador no período.</p>
+      <h2>Inserir apuro real do dia</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Clica em "Apurar" numa linha da tabela acima para pré-preencher o colaborador, ou escolhe manualmente. Loja e dia são os escolhidos no topo da página. O total apurado (ATM Multibanco + ATM VISA + Numerário + Transferência) é comparado com o total dos documentos desse colaborador nesse dia.</p>
       <div class="filtros">
-        <div><label class="form-label">Colaborador</label><input type="text" class="form-input" id="apuro-colaborador" placeholder="Nome completo"></div>
-        <div><label class="form-label">Loja</label><select id="apuro-loja"></select></div>
-        <div><label class="form-label">De</label><input type="date" class="form-input" id="apuro-de"></div>
-        <div><label class="form-label">Até</label><input type="date" class="form-input" id="apuro-ate"></div>
+        <div><label class="form-label">Colaborador</label><input type="text" class="form-input" id="apuro-colaborador" placeholder="Nome completo" oninput="verificarJaApuradoHoje()"></div>
+        <div><label class="form-label">Loja</label><input type="text" class="form-input" id="apuro-loja-mostrar" disabled></div>
+        <div><label class="form-label">Dia</label><input type="text" class="form-input" id="apuro-dia-mostrar" disabled></div>
       </div>
       <div class="filtros">
         <div><label class="form-label">ATM Multibanco (€)</label><input type="number" class="form-input" id="apuro-mb" step="0.01"></div>
@@ -305,7 +332,9 @@
       </div>
       <label class="form-label">Observações</label>
       <input type="text" class="form-input" id="apuro-observacoes" placeholder="Opcional">
-      <button class="btn" onclick="inserirApuro()">Inserir</button>
+      <div id="apuro-aviso-ja-apurado"></div>
+      <button class="btn" id="btn-inserir-apuro" onclick="pedirConfirmacaoApuro()">Apurar</button>
+      <div id="apuro-confirmacao"></div>
       <div id="resultado-apuro"></div>
     </div>
 
@@ -318,7 +347,7 @@
       </div>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Data</th><th>Colaborador</th><th>Loja</th><th>Período</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
+          <thead><tr><th>Data</th><th>Colaborador</th><th>Loja</th><th>Dia</th><th>MB</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th></tr></thead>
           <tbody id="cc-corpo-apuros"><tr><td colspan="11">A carregar…</td></tr></tbody>
         </table>
       </div>
@@ -541,7 +570,7 @@ async function entrarNoPainel() {
 
 function popularSelectsLojas() {
   const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja',
-    'relatorio-loja', 'apuro-loja', 'cc-filtro-loja', 'cc-hist-filtro-loja'];
+    'relatorio-loja', 'cd-loja', 'cc-filtro-loja', 'cc-hist-filtro-loja'];
   const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'cc-filtro-loja', 'cc-hist-filtro-loja'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
@@ -565,8 +594,11 @@ function mudarAba(nome) {
     ABAS_CARREGADAS.add('conferenciacaixa');
     if (!document.getElementById('cc-de').value) document.getElementById('cc-de').value = hojeISO();
     if (!document.getElementById('cc-ate').value) document.getElementById('cc-ate').value = hojeISO();
-    if (!document.getElementById('apuro-de').value) document.getElementById('apuro-de').value = hojeISO();
-    if (!document.getElementById('apuro-ate').value) document.getElementById('apuro-ate').value = hojeISO();
+    if (!document.getElementById('cd-dia').value) document.getElementById('cd-dia').value = hojeISO();
+    if (!document.getElementById('cd-loja').value) document.getElementById('cd-loja').value = NOMES_LOJAS[0];
+    atualizarLojaDiaMostrados();
+    carregarResumoDia();
+    carregarSaldoLojaCaixaDia();
     carregarApurosColaboradores();
   }
   if (nome === 'relatorio' && !ABAS_CARREGADAS.has('relatorio')) {
@@ -620,8 +652,84 @@ async function importarFicheiro(tipo) {
   }
 }
 
-// ═══ Conferência de Caixa por Colaborador ═══
+// ═══ Caixa dia (Conferência de Caixa por Colaborador, Fase 3a) ═══
 let ULTIMO_RESUMO_COLABORADORES = [];
+let CD_RESUMO_DIA = null; // último resultado de resumoDiaLoja — reaproveitado para saber quem já apurou hoje, sem leitura extra
+
+function atualizarLojaDiaMostrados() {
+  document.getElementById('apuro-loja-mostrar').value = document.getElementById('cd-loja').value;
+  document.getElementById('apuro-dia-mostrar').value = document.getElementById('cd-dia').value;
+}
+
+function mudarLojaOuDiaCaixaDia() {
+  atualizarLojaDiaMostrados();
+  document.getElementById('apuro-confirmacao').innerHTML = '';
+  document.getElementById('resultado-apuro').innerHTML = '';
+  carregarResumoDia();
+  carregarSaldoLojaCaixaDia();
+}
+
+// Saldo do dia por apurar — pedido do Ricardo: "ir mostrando a soma dos
+// valores de forma a que no último apuro seja idealmente saldo ZERO em
+// numerário e em ATMs". Uma só chamada (resumoDiaLoja) serve para: (a) este
+// painel, e (b) saber quem já apurou hoje, sem nenhuma leitura extra —
+// ver verificarJaApuradoHoje().
+async function carregarResumoDia() {
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const el = document.getElementById('cd-resumo-dia');
+  if (!loja || !dia) { el.innerHTML = '<p class="rodape-nota">Escolhe a loja e o dia.</p>'; return; }
+  el.innerHTML = '<div class="resumo-item"><span class="spinner"></span> A carregar…</div>';
+  const r = await chamarApi({ acao: 'resumoDiaLoja', loja, dia });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o resumo do dia.') + '</div>'; CD_RESUMO_DIA = null; return; }
+  CD_RESUMO_DIA = r;
+
+  const zeroNumerario = Math.abs(r.faltaApurarNumerario) < 0.005;
+  const zeroAtm = Math.abs(r.faltaApurarAtm) < 0.005;
+  el.innerHTML = `
+    <div class="resumo-grelha resumo-grelha-grande">
+      <div class="resumo-item"><div class="valor" style="color:${zeroNumerario ? 'var(--teal-dark)' : '#b3000a'}">${formatarEuro(r.faltaApurarNumerario)}</div><div class="rotulo">Falta apurar — Numerário${zeroNumerario ? ' ✅' : ''}</div></div>
+      <div class="resumo-item"><div class="valor" style="color:${zeroAtm ? 'var(--teal-dark)' : '#b3000a'}">${formatarEuro(r.faltaApurarAtm)}</div><div class="rotulo">Falta apurar — ATM${zeroAtm ? ' ✅' : ''}</div></div>
+      <div class="resumo-item"><div class="valor">${formatarEuro(r.totalDocumentosNumerario)}</div><div class="rotulo">Documentos — Numerário</div></div>
+      <div class="resumo-item"><div class="valor">${formatarEuro(r.totalDocumentosAtm)}</div><div class="rotulo">Documentos — ATM</div></div>
+    </div>
+    ${r.apuros.length ? `<div class="tabela-scroll"><table>
+      <thead><tr><th>Colaborador</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th><th>Confere</th></tr></thead>
+      <tbody>${r.apuros.map(a => `<tr${a.confere ? '' : ' style="background:#fdecea"'}>
+        <td>${a.colaborador}</td><td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
+        <td>${formatarEuro(a.diferenca)}</td><td>${a.confere ? '✅' : '⚠️'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<p class="rodape-nota">Ainda ninguém apurou hoje nesta loja.</p>'}
+  `;
+  verificarJaApuradoHoje();
+}
+
+async function carregarSaldoLojaCaixaDia() {
+  const loja = document.getElementById('cd-loja').value;
+  const el = document.getElementById('cd-saldo-loja');
+  if (!loja) { el.innerHTML = ''; return; }
+  const r = await chamarApi({ acao: 'listarSaldos' });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo.') + '</div>'; return; }
+  const s = r.saldos.find(x => x.loja === loja);
+  el.innerHTML = `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">Saldo actual em caixa (numerário)</div></div>`;
+}
+
+async function registarDepositoCaixaDia() {
+  const resultadoEl = document.getElementById('cd-resultado-deposito');
+  const loja = document.getElementById('cd-loja').value;
+  const valor = document.getElementById('cd-deposito-valor').value;
+  const observacoes = document.getElementById('cd-deposito-observacoes').value;
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a loja no topo da página.</div>'; return; }
+  if (!valor || Number(valor) <= 0) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor do depósito.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
+  const r = await chamarApi({ acao: 'registarMovimentoDiverso', dados: { loja, tipo: 'deposito', valor, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Depósito registado. Novo saldo em caixa: ${formatarEuro(r.saldoNumerario)}.</div>`;
+  document.getElementById('cd-deposito-valor').value = '';
+  document.getElementById('cd-deposito-observacoes').value = '';
+  carregarSaldoLojaCaixaDia();
+}
 
 async function pesquisarResumoColaboradores() {
   const corpo = document.getElementById('cc-corpo-resumo');
@@ -646,38 +754,93 @@ function preencherApuro(indice) {
   const l = ULTIMO_RESUMO_COLABORADORES[indice];
   if (!l) return;
   document.getElementById('apuro-colaborador').value = l.colaborador;
-  document.getElementById('apuro-loja').value = l.loja;
-  const de = document.getElementById('cc-de').value; if (de) document.getElementById('apuro-de').value = de;
-  const ate = document.getElementById('cc-ate').value; if (ate) document.getElementById('apuro-ate').value = ate;
+  if (NOMES_LOJAS.includes(l.loja)) { document.getElementById('cd-loja').value = l.loja; atualizarLojaDiaMostrados(); carregarResumoDia(); carregarSaldoLojaCaixaDia(); }
+  verificarJaApuradoHoje();
   document.getElementById('apuro-mb').scrollIntoView({ behavior: 'smooth', block: 'center' });
   document.getElementById('apuro-mb').focus();
 }
 
-async function inserirApuro() {
+// Pedido do Ricardo: "cada vez que é feito um apuro de um colaborador,
+// deixa de ter o botão apuro ativo". Reaproveita CD_RESUMO_DIA (já carregado
+// pelo resumoDiaLoja para o painel de saldo) — nenhuma leitura extra só para
+// esta verificação. A permissão para corrigir continua a ser sempre
+// validada a sério no servidor (ver conferenciaColaborador.js); isto é só
+// para o colaborador perceber a situação antes de tentar gravar.
+function verificarJaApuradoHoje() {
+  const avisoEl = document.getElementById('apuro-aviso-ja-apurado');
+  const btn = document.getElementById('btn-inserir-apuro');
+  document.getElementById('apuro-confirmacao').innerHTML = '';
+  const colaborador = document.getElementById('apuro-colaborador').value.trim();
+  const existente = colaborador && CD_RESUMO_DIA ? CD_RESUMO_DIA.apuros.find(a => a.colaborador === colaborador) : null;
+  if (existente) {
+    avisoEl.innerHTML = `<div class="alerta alerta-aviso">⚠️ ${colaborador} já tem um apuro registado hoje (total ${formatarEuro(existente.totalApurado)}, ${existente.confere ? 'confere' : 'NÃO confere'}). Só um Master ou Coordenador pode corrigi-lo.</div>`;
+    btn.textContent = 'Corrigir apuro (Master/Coordenador)';
+  } else {
+    avisoEl.innerHTML = '';
+    btn.textContent = 'Apurar';
+  }
+}
+
+// Pedido do Ricardo: "apresentar uma mensagem com o que irá ser o resultado
+// final, para que o colaborador confirme se é isso que pretende gravar" —
+// mostra os valores a gravar SEM nenhuma leitura extra ao Firestore (o total
+// documentos só é conhecido depois de gravar, no próprio registarApuroColaborador).
+function pedirConfirmacaoApuro() {
+  const confEl = document.getElementById('apuro-confirmacao');
+  const resultadoEl = document.getElementById('resultado-apuro');
+  resultadoEl.innerHTML = '';
+  const colaborador = document.getElementById('apuro-colaborador').value.trim();
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const arred = n => Math.round((Number(n) || 0) * 100) / 100;
+  const mb = arred(document.getElementById('apuro-mb').value);
+  const visa = arred(document.getElementById('apuro-visa').value);
+  const numerario = arred(document.getElementById('apuro-numerario').value);
+  const transferencia = arred(document.getElementById('apuro-transferencia').value);
+  const total = arred(mb + visa + numerario + transferencia);
+
+  if (!colaborador) { confEl.innerHTML = '<div class="alerta alerta-erro">Indica o colaborador.</div>'; return; }
+  if (!loja || !dia) { confEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a loja e o dia no topo da página.</div>'; return; }
+
+  confEl.innerHTML = `
+    <div class="alerta alerta-aviso">
+      Vais gravar o apuro de <strong>${colaborador}</strong>, loja ${loja}, dia ${dia}:<br>
+      ATM Multibanco ${formatarEuro(mb)} + ATM VISA ${formatarEuro(visa)} + Numerário ${formatarEuro(numerario)} + Transferência ${formatarEuro(transferencia)}
+      = <strong>Total apurado ${formatarEuro(total)}</strong>.<br><br>
+      Confirmas que estes são os valores finais?
+      <div style="margin-top:.6rem">
+        <button class="btn" onclick="confirmarGravarApuro()">✅ Confirmar e gravar</button>
+        <button class="btn btn-secundario" onclick="document.getElementById('apuro-confirmacao').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+}
+
+async function confirmarGravarApuro() {
+  const confEl = document.getElementById('apuro-confirmacao');
   const resultadoEl = document.getElementById('resultado-apuro');
   const colaborador = document.getElementById('apuro-colaborador').value.trim();
-  const loja = document.getElementById('apuro-loja').value;
-  const de = document.getElementById('apuro-de').value;
-  const ate = document.getElementById('apuro-ate').value;
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
   const atmMultibanco = document.getElementById('apuro-mb').value || 0;
   const atmVisa = document.getElementById('apuro-visa').value || 0;
   const numerario = document.getElementById('apuro-numerario').value || 0;
   const transferencia = document.getElementById('apuro-transferencia').value || 0;
   const observacoes = document.getElementById('apuro-observacoes').value;
-  if (!colaborador) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o colaborador.</div>'; return; }
-  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a loja.</div>'; return; }
-  if (!de || !ate) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (de/até).</div>'; return; }
 
-  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A inserir…</div>';
-  const r = await chamarApi({ acao: 'registarApuroColaborador', dados: { colaborador, loja, de, ate, atmMultibanco, atmVisa, numerario, transferencia, observacoes } });
-  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao inserir.') + '</div>'; return; }
+  confEl.innerHTML = '';
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gravar…</div>';
+  const r = await chamarApi({ acao: 'registarApuroColaborador', dados: { colaborador, loja, de: dia, ate: dia, atmMultibanco, atmVisa, numerario, transferencia, observacoes } });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
 
   const classe = r.confere ? 'alerta-ok' : 'alerta-erro';
   const texto = r.confere
     ? `Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
     : `NÃO CONFERE — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}, diferença ${formatarEuro(r.diferenca)}.`;
   resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
-  ['apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
+  ['apuro-colaborador', 'apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('apuro-aviso-ja-apurado').innerHTML = '';
+  document.getElementById('btn-inserir-apuro').textContent = 'Apurar';
+  carregarResumoDia(); // actualiza o saldo por apurar (e quem já apurou hoje) com este apuro incluído
   carregarApurosColaboradores();
 }
 
@@ -689,7 +852,7 @@ async function carregarApurosColaboradores() {
   const r = await chamarApi({ acao: 'listarApurosColaborador', filtros });
   if (!r.ok) { corpo.innerHTML = '<tr><td colspan="11">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
   corpo.innerHTML = r.apuros.length ? r.apuros.map(a => `<tr${a.destacar ? ' style="background:#fdecea"' : ''}>
-    <td>${a.atualizadoEm || ''}</td><td>${a.colaborador}</td><td>${a.loja}</td><td>${a.de} a ${a.ate}</td>
+    <td>${a.atualizadoEm || ''}</td><td>${a.colaborador}</td><td>${a.loja}</td><td>${a.de}</td>
     <td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td><td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td>
     <td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
     <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td>
