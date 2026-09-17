@@ -82,6 +82,8 @@
   .filtros > div { flex: 1; min-width: 140px; }
   .filtros .form-input, .filtros select { margin-bottom: 0; }
   .campo-busca { max-width: 260px; }
+  .linha-filtros-coluna th { padding: .3rem .35rem; background: var(--off-white); }
+  .linha-filtros-coluna input { width: 100%; box-sizing: border-box; font-size: .72rem; padding: .3rem .4rem; font-weight: 400; }
   [hidden] { display: none !important; }
   .abas { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
   .aba-btn { background: var(--white); border: 2px solid var(--gray-light); color: var(--text-muted); border-radius: 10px; padding: .6rem 1.1rem; font-family: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; }
@@ -182,7 +184,7 @@
     <div class="cartao">
       <h2>Folha de Caixa — movimentos por loja</h2>
       <div class="filtros">
-        <div><label class="form-label">Loja</label><select id="folha-loja"></select></div>
+        <div><label class="form-label">Loja</label><select id="folha-loja"><option value="">-- Escolhe a loja --</option></select></div>
         <div><label class="form-label">De</label><input type="date" class="form-input" id="folha-de"></div>
         <div><label class="form-label">Até</label><input type="date" class="form-input" id="folha-ate"></div>
         <div><button class="btn" onclick="carregarFolhaCaixa()">Atualizar</button></div>
@@ -403,12 +405,28 @@
       <div class="resumo-grelha" id="resumo-reconciliacao"></div>
 
       <input type="text" class="form-input campo-busca" id="busca-linhas" placeholder="Filtrar por Nº Documento, Refª SAP ou descrição…" oninput="filtrarLinhasReconciliacao()">
+      <p class="rodape-nota" style="margin:.4rem 0 0">Cada coluna tem também o seu próprio filtro (linha por baixo do título) — combinam-se todos entre si.</p>
       <div class="tabela-scroll">
         <table>
-          <thead><tr>
-            <th>Nº Documento</th><th>Loja</th><th>Data/Hora</th><th>Tipo</th><th>Refª SAP</th><th>Descrição</th>
-            <th>Total C/IVA</th><th>Comissão</th><th>Origem</th><th>Valor líq. Vodafone</th><th>Estado</th>
-          </tr></thead>
+          <thead>
+            <tr>
+              <th>Nº Documento</th><th>Loja</th><th>Data/Hora</th><th>Tipo</th><th>Refª SAP</th><th>Descrição</th>
+              <th>Total C/IVA</th><th>Comissão</th><th>Origem</th><th>Valor líq. Vodafone</th><th>Estado</th>
+            </tr>
+            <tr class="linha-filtros-coluna">
+              <th><input type="text" class="form-input" id="colf-ndocumento" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-loja" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-data" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-tipo" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-refsap" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-descricao" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-total" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-comissao" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-origem" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-valorliq" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+              <th><input type="text" class="form-input" id="colf-estado" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
+            </tr>
+          </thead>
           <tbody id="corpo-reconciliacao"><tr><td colspan="11">Carrega os filtros e clica em "Atualizar".</td></tr></tbody>
         </table>
       </div>
@@ -525,12 +543,20 @@ async function entrar() {
   if (!username || !password) { erroEl.textContent = 'Preenche utilizador e password.'; erroEl.hidden = false; return; }
   const btn = document.getElementById('btn-entrar');
   btn.disabled = true; btn.textContent = 'A entrar…';
-  const r = await chamarApi({ acao: 'listarImportacoes', username, password, limite: 1 });
+  const r = await chamarApi({ acao: 'sessaoAtual', username, password });
   btn.disabled = false; btn.textContent = 'Entrar';
   if (!r.ok) { erroEl.textContent = r.erro || 'Credenciais inválidas ou sem permissão para o Controlo de Caixa.'; erroEl.hidden = false; return; }
-  SESSAO = { username, password };
+  SESSAO = { username, password, nome: r.nome, role: r.role };
   sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO));
   await entrarNoPainel();
+}
+
+// Mesma regra de lib/auth.js (ehMasterOuCoordenador) — só para
+// mostrar/esconder secções na UI; a permissão a sério é sempre validada no
+// servidor, nunca só aqui.
+function ehMasterOuCoordenador() {
+  const r = String((SESSAO && SESSAO.role) || '').toLowerCase();
+  return r === 'master' || r === 'coordenador_lojas' || r === 'coordenador';
 }
 
 function sair() {
@@ -546,7 +572,19 @@ async function entrarNoPainel() {
   document.getElementById('tela-login').hidden = true;
   document.getElementById('tela-principal').hidden = false;
   document.getElementById('topo-user').hidden = false;
-  document.getElementById('nome-utilizador').textContent = SESSAO.username;
+  // Uma sessão restaurada do sessionStorage (guardada antes de existir
+  // SESSAO.role) ainda não tem role — completa-se aqui, silenciosamente,
+  // com a mesma leitura leve do login (sessaoAtual), só desta vez.
+  if (!SESSAO.role) {
+    const r = await chamarApi({ acao: 'sessaoAtual' });
+    if (r.ok) { SESSAO.nome = r.nome; SESSAO.role = r.role; sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO)); }
+  }
+  document.getElementById('nome-utilizador').textContent = SESSAO.nome || SESSAO.username;
+  // Reconciliação GSV é só para Master/Coordenador (pedido do Ricardo,
+  // 2026-09-17) — a acção já recusa no servidor; isto é só para não mostrar
+  // a tab a quem não pode usá-la.
+  const btnReconciliacao = document.querySelector('.aba-btn[data-aba="reconciliacao"]');
+  if (btnReconciliacao) btnReconciliacao.hidden = !ehMasterOuCoordenador();
   popularSelectsLojas();
   await Promise.all([carregarClassificacao(), carregarHistorico()]);
 }
@@ -554,11 +592,11 @@ async function entrarNoPainel() {
 function popularSelectsLojas() {
   const selects = ['folha-loja', 'diverso-loja', 'diverso-filtro-loja', 'arqueio-loja', 'arqueio-filtro-loja',
     'relatorio-loja', 'cd-loja'];
-  // "cd-loja" tem 1 opção de propósito (placeholder "Escolhe a loja", valor
-  // "") — pedido do Ricardo: nunca entrar já numa loja quando se abre esta
-  // tab, é preciso escolher explicitamente. Por isso entra aqui, tal como
-  // os selects "Todas as lojas".
-  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'cd-loja'];
+  // "cd-loja" e "folha-loja" têm 1 opção de propósito (placeholder "Escolhe
+  // a loja", valor "") — pedido do Ricardo: nunca entrar já numa loja ao
+  // abrir estas tabs, é preciso escolher explicitamente. Por isso entram
+  // aqui, tal como os selects "Todas as lojas".
+  const comTodas = ['diverso-filtro-loja', 'arqueio-filtro-loja', 'cd-loja', 'folha-loja'];
   selects.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel || sel.options.length > (comTodas.includes(id) ? 1 : 0)) return;
@@ -573,8 +611,12 @@ function mudarAba(nome) {
   document.querySelectorAll('.aba-btn').forEach(el => el.classList.remove('ativa'));
   document.getElementById('aba-' + nome).hidden = false;
   document.querySelector('.aba-btn[data-aba="' + nome + '"]').classList.add('ativa');
-  if (nome === 'reconciliacao' && !ULTIMA_RECONCILIACAO) carregarReconciliacao();
-  if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); carregarFolhaCaixa(); }
+  // Pedido do Ricardo (2026-09-17): nenhuma destas tabs pode processar uma
+  // loja ou puxar um relatório sozinha ao abrir — só quando se clica no
+  // botão "Atualizar"/"Pesquisar" de cada uma. "Saldo de numerário por loja"
+  // (carregarSaldos) fica de fora desta regra: é 1 única leitura que já
+  // mostra as 5 lojas de uma vez (não "adivinha" nenhuma loja).
+  if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); }
   if (nome === 'diverso' && !ABAS_CARREGADAS.has('diverso')) { ABAS_CARREGADAS.add('diverso'); carregarDiversos(); }
   if (nome === 'arqueio' && !ABAS_CARREGADAS.has('arqueio')) { ABAS_CARREGADAS.add('arqueio'); atualizarSaldoTeoricoArqueio(); carregarArqueios(); }
   if (nome === 'conferenciacaixa' && !ABAS_CARREGADAS.has('conferenciacaixa')) {
@@ -694,7 +736,7 @@ async function carregarResumoDia() {
       <thead><tr><th>Colaborador</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th><th>Confere</th><th></th></tr></thead>
       <tbody>${r.apuros.map(a => `<tr${a.confere ? '' : ' style="background:#fdecea"'}>
         <td>${a.colaborador}</td><td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
-        <td>${formatarEuro(a.diferenca)}</td><td>${a.confere ? '✅' : '⚠️'}</td>
+        <td>${formatarEuro(a.diferenca)}</td><td>${a.confere ? '✅ Confere' : '<strong style="color:#b3000a">❌ Apurado com ERRO</strong>'}</td>
         <td><button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="apagarApuro('${a.colaborador.replace(/'/g, "\\'")}')">🗑 Apagar</button></td>
       </tr>`).join('')}</tbody>
     </table></div>` : '<p class="rodape-nota">Ainda ninguém apurou hoje nesta loja.</p>'}
@@ -859,9 +901,9 @@ async function confirmarGravarApuro() {
 
   const classe = r.confere ? 'alerta-ok' : 'alerta-erro';
   const texto = r.confere
-    ? `Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
-    : `NÃO CONFERE — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}, diferença ${formatarEuro(r.diferenca)}.`;
-  resultadoEl.innerHTML = `<div class="alerta ${classe}">${texto}</div>`;
+    ? `✅ Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
+    : `❌ APURADO COM ERRO — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}, diferença ${formatarEuro(r.diferenca)}.`;
+  resultadoEl.innerHTML = `<div class="alerta ${classe}" style="${r.confere ? '' : 'font-weight:700'}">${texto}</div>`;
   ['apuro-colaborador', 'apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('apuro-aviso-ja-apurado').innerHTML = '';
   document.getElementById('btn-inserir-apuro').textContent = 'Apurar';
@@ -991,39 +1033,67 @@ async function carregarReconciliacao() {
   }
 
   document.getElementById('busca-linhas').value = '';
+  ['colf-ndocumento', 'colf-loja', 'colf-data', 'colf-tipo', 'colf-refsap', 'colf-descricao',
+    'colf-total', 'colf-comissao', 'colf-origem', 'colf-valorliq', 'colf-estado'].forEach(id => { document.getElementById(id).value = ''; });
   renderLinhasReconciliacao(r.linhas);
-  document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(r.linhas.length, 500)} de ${r.linhas.length} linha(s)${r.linhas.length > 500 ? ' — usa os filtros de data/loja ou a busca para reduzir.' : ''}.`;
+  document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(r.linhas.length, 500)} de ${r.linhas.length} linha(s)${r.linhas.length > 500 ? ' — usa os filtros de data/loja/coluna ou a busca para reduzir.' : ''}.`;
+}
+
+// Texto simples do estado (usado para mostrar E para filtrar — só uma
+// fonte da verdade, para o filtro da coluna "Estado" bater sempre certo com
+// o que a badge mostra).
+function estadoLinhaTexto(l) {
+  if (l.tipo === 'Devoluções') return 'Devolução';
+  if (l.ambiguo) return 'Ambíguo';
+  if (l.origemComissao === 'confirmada') return 'Confirmada';
+  if (l.comissao !== null) return 'Estimada';
+  return 'Por classificar';
+}
+function estadoLinhaBadge(l) {
+  const classe = { Devolução: '', Ambíguo: 'badge-ambiguo', Confirmada: 'badge-ok', Estimada: 'badge-estimado', 'Por classificar': 'badge-atipico' };
+  const texto = estadoLinhaTexto(l);
+  const estilo = texto === 'Devolução' ? ' style="background:var(--gray-light);color:var(--text-muted)"' : '';
+  return `<span class="badge ${classe[texto]}"${estilo}>${texto}</span>`;
 }
 
 function renderLinhasReconciliacao(linhas) {
   const corpo = document.getElementById('corpo-reconciliacao');
   if (!linhas.length) { corpo.innerHTML = '<tr><td colspan="11">Sem linhas para os filtros escolhidos.</td></tr>'; return; }
-  corpo.innerHTML = linhas.slice(0, 500).map(l => {
-    let estadoBadge;
-    if (l.tipo === 'Devoluções') estadoBadge = '<span class="badge" style="background:var(--gray-light);color:var(--text-muted)">Devolução</span>';
-    else if (l.ambiguo) estadoBadge = '<span class="badge badge-ambiguo">Ambíguo</span>';
-    else if (l.origemComissao === 'confirmada') estadoBadge = '<span class="badge badge-ok">Confirmada</span>';
-    else if (l.comissao !== null) estadoBadge = '<span class="badge badge-estimado">Estimada</span>';
-    else estadoBadge = '<span class="badge badge-atipico">Por classificar</span>';
-    return `<tr>
+  corpo.innerHTML = linhas.slice(0, 500).map(l => `<tr>
       <td>${l.nDocumento}</td><td>${l.loja || ''}</td><td>${l.dataHora || ''}</td><td>${l.tipo || ''}</td>
       <td>${l.refSAP || ''}</td><td>${l.descricaoSAP || ''}</td>
       <td>${formatarEuro(l.totalCIVA)}</td><td>${l.comissao !== null ? formatarEuro(l.comissao) : '—'}</td>
       <td>${l.origemComissao || '—'}</td><td>${l.valorLiquidoVodafone !== null ? formatarEuro(l.valorLiquidoVodafone) : '—'}</td>
-      <td>${estadoBadge}</td>
-    </tr>`;
-  }).join('');
+      <td>${estadoLinhaBadge(l)}</td>
+    </tr>`).join('');
 }
 
+// Pedido do Ricardo: filtro por coluna, além da busca livre já existente —
+// tudo em memória, sobre os dados já carregados (0 leituras novas).
 function filtrarLinhasReconciliacao() {
   if (!ULTIMA_RECONCILIACAO) return;
   const termo = document.getElementById('busca-linhas').value.trim().toLowerCase();
-  if (!termo) { renderLinhasReconciliacao(ULTIMA_RECONCILIACAO.linhas); return; }
-  const filtradas = ULTIMA_RECONCILIACAO.linhas.filter(l =>
-    String(l.nDocumento).toLowerCase().includes(termo) ||
-    String(l.refSAP).toLowerCase().includes(termo) ||
-    String(l.descricaoSAP).toLowerCase().includes(termo));
+  const colunas = [
+    { id: 'colf-ndocumento', valor: l => l.nDocumento },
+    { id: 'colf-loja', valor: l => l.loja },
+    { id: 'colf-data', valor: l => l.dataHora },
+    { id: 'colf-tipo', valor: l => l.tipo },
+    { id: 'colf-refsap', valor: l => l.refSAP },
+    { id: 'colf-descricao', valor: l => l.descricaoSAP },
+    { id: 'colf-total', valor: l => formatarEuro(l.totalCIVA) },
+    { id: 'colf-comissao', valor: l => (l.comissao !== null ? formatarEuro(l.comissao) : '') },
+    { id: 'colf-origem', valor: l => l.origemComissao },
+    { id: 'colf-valorliq', valor: l => (l.valorLiquidoVodafone !== null ? formatarEuro(l.valorLiquidoVodafone) : '') },
+    { id: 'colf-estado', valor: l => estadoLinhaTexto(l) },
+  ].map(c => ({ ...c, termo: document.getElementById(c.id).value.trim().toLowerCase() }))
+   .filter(c => c.termo);
+
+  const filtradas = ULTIMA_RECONCILIACAO.linhas.filter(l => {
+    if (termo && !(String(l.nDocumento).toLowerCase().includes(termo) || String(l.refSAP).toLowerCase().includes(termo) || String(l.descricaoSAP).toLowerCase().includes(termo))) return false;
+    return colunas.every(c => String(c.valor(l) || '').toLowerCase().includes(c.termo));
+  });
   renderLinhasReconciliacao(filtradas);
+  document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(filtradas.length, 500)} de ${filtradas.length} linha(s)${filtradas.length > 500 ? ' — refina os filtros para reduzir.' : ''}.`;
 }
 
 // ═══ Folha de Caixa ═══
