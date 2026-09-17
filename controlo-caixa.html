@@ -850,13 +850,24 @@ function mostrarResumoColaboradores() {
   const linhas = filtro ? ULTIMO_RESUMO_COLABORADORES.filter(l => l.colaborador.toLowerCase().includes(filtro)) : ULTIMO_RESUMO_COLABORADORES;
   corpo.innerHTML = linhas.length ? linhas.map((l) => {
     const indice = ULTIMO_RESUMO_COLABORADORES.indexOf(l);
-    const jaApurou = CD_RESUMO_DIA && CD_RESUMO_DIA.apuros.some(a => a.colaborador === l.colaborador);
+    // Pedido do Ricardo (2026-09-17): um apuro já feito mas que NÃO confere
+    // (diferença entre apurado e documentos) não pode aparecer igual a um
+    // apuro certo — tinha sempre "✓ Já apurado" a cinza, mesmo com erro.
+    // Reaproveita o campo `confere` já devolvido em CD_RESUMO_DIA.apuros
+    // (o mesmo usado em verificarJaApuradoHoje) — sem leitura extra.
+    const apuroExistente = CD_RESUMO_DIA && CD_RESUMO_DIA.apuros.find(a => a.colaborador === l.colaborador);
+    let estado;
+    if (!apuroExistente) {
+      estado = `<button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="preencherApuro(${indice})">Apurar</button>`;
+    } else if (apuroExistente.confere) {
+      estado = '<span class="rodape-nota">✓ Já apurado</span>';
+    } else {
+      estado = '<span class="rodape-nota" style="color:#b3000a">✖ Apurado com erro</span>';
+    }
     return `<tr>
       <td>${l.colaborador}</td><td>${formatarEuro(l.gsv)}</td><td>${formatarEuro(l.carregamentos)}</td>
       <td>${formatarEuro(l.total)}</td><td>${formatarEuro(l.numerario)}</td><td>${formatarEuro(l.atm)}</td>
-      <td>${jaApurou
-        ? '<span class="rodape-nota">✓ Já apurado</span>'
-        : `<button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="preencherApuro(${indice})">Apurar</button>`}</td>
+      <td>${estado}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="7">Sem movimentos para esta loja/dia.</td></tr>';
 }
