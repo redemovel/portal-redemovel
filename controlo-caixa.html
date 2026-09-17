@@ -354,6 +354,21 @@
       <div id="relatorio-status"></div>
     </div>
 
+    <!-- ── Caixa Mês (Fase 3b, 2026-09-17) — fecho mensal por loja: vistos
+         diários (bancários), vistos mensais (Carregamentos/GSV), fechar/
+         reabrir o mês, e depósito em trânsito. Usa a mesma loja escolhida
+         acima ("relatorio-loja"); o mês é independente do período De/Até do
+         relatório impresso. ── -->
+    <div class="cartao no-print">
+      <h2>📅 Caixa Mês</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Fecho mensal por loja: confirma, dia a dia, que o Multibanco, VISA, Depósitos bancários e Transferências recebidas entraram na conta (contra o extracto do banco), dá visto aos totais do mês de Carregamentos e de GSV, e só depois fecha o mês. Uma vez fechado, apagar ou corrigir um apuro desse mês fica bloqueado até um Master o reabrir.</p>
+      <div class="filtros">
+        <div><label class="form-label">Mês</label><input type="month" class="form-input" id="cm-mes"></div>
+        <div><button class="btn" onclick="carregarCaixaMes()">🔍 Ver mês</button></div>
+      </div>
+      <div id="cm-resultado"></div>
+    </div>
+
     <div id="relatorio-imprimivel" hidden>
       <div class="cartao">
         <div class="relatorio-cabecalho">
@@ -663,6 +678,9 @@ function mudarAba(nome) {
     ABAS_CARREGADAS.add('relatorio');
     if (!document.getElementById('relatorio-de').value) document.getElementById('relatorio-de').value = primeiroDiaMesISO();
     if (!document.getElementById('relatorio-ate').value) document.getElementById('relatorio-ate').value = hojeISO();
+    // Só pré-preenche o mês do Caixa Mês (nenhuma leitura) — "🔍 Ver mês" é
+    // que pesquisa, mesma regra do resto da página.
+    if (!document.getElementById('cm-mes').value) document.getElementById('cm-mes').value = mesAtualISO();
   }
   if (nome === 'colaboradores' && !ABAS_CARREGADAS.has('colaboradores')) { ABAS_CARREGADAS.add('colaboradores'); carregarColaboradoresGSV(); }
 }
@@ -674,6 +692,10 @@ function hojeISO() {
 function primeiroDiaMesISO() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+}
+function mesAtualISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
 // ═══ Importação ═══
@@ -1051,6 +1073,165 @@ async function gerarRelatorio() {
   statusEl.innerHTML = '';
   imprimivelEl.hidden = false;
   btnImprimir.hidden = false;
+}
+
+// ═══ Caixa Mês (Fase 3b, 2026-09-17) ═══
+let CM_ESTADO = null; // último resultado de estadoCaixaMes — reaproveitado pelos botões (marcar visto, fechar, ...) sem repetir a leitura
+
+async function carregarCaixaMes() {
+  const resultadoEl = document.getElementById('cm-resultado');
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  if (!loja) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe uma loja.</div>'; return; }
+  if (!mes) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe o mês.</div>'; return; }
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A carregar…</div>';
+  const r = await chamarApi({ acao: 'estadoCaixaMes', loja, mes });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o Caixa Mês.') + '</div>'; CM_ESTADO = null; return; }
+  CM_ESTADO = r;
+  mostrarCaixaMes();
+}
+
+function mostrarCaixaMes() {
+  const resultadoEl = document.getElementById('cm-resultado');
+  if (!CM_ESTADO) return;
+  const e = CM_ESTADO;
+  const podeGerir = ehMasterOuCoordenador();
+  const podeReabrir = ehMaster();
+
+  const linhasDias = e.dias.length ? e.dias.map(d => `<tr>
+    <td>${d.dia}</td><td>${formatarEuro(d.totalMB)}</td><td>${formatarEuro(d.totalVISA)}</td>
+    <td>${formatarEuro(d.totalDepositos)}</td><td>${formatarEuro(d.totalTransferencias)}</td>
+    <td>${d.visto
+      ? `✅ Visto (${d.visto.vistoPor || ''})` + (podeGerir && !e.trancado ? ` · <a href="#" onclick="desfazerVistoDiarioCM('${d.dia}');return false">desfazer</a>` : '')
+      : (podeGerir && !e.trancado ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="marcarVistoDiarioCM('${d.dia}')">Dar visto</button>` : '⏳ Por dar visto')}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Sem movimentos (Multibanco/VISA/Depósitos/Transferências) neste mês.</td></tr>';
+
+  const linhaVistoMensal = (tipo, rotulo) => {
+    const v = e.vistosMensais[tipo];
+    return `<div class="resumo-item">
+      <div class="valor">${v ? formatarEuro(v.totalMes) : '—'}</div>
+      <div class="rotulo">${rotulo}${v ? ` · ✅ visto (${v.vistoPor || ''})` : ''}</div>
+      ${!v && podeGerir && !e.trancado ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem;margin-top:.4rem" onclick="marcarVistoMensalCM('${tipo}')">Dar visto</button>` : ''}
+      ${v && podeGerir && !e.trancado ? `<div class="rodape-nota"><a href="#" onclick="desfazerVistoMensalCM('${tipo}');return false">desfazer</a></div>` : ''}
+    </div>`;
+  };
+
+  let fechoHtml;
+  if (e.trancado && e.fecho) {
+    const f = e.fecho;
+    const classe = f.status === 'CONFORME' ? 'alerta-ok' : 'alerta-erro';
+    let transitoHtml = '';
+    if (f.depositoEmTransitoValor !== '' && f.depositoEmTransitoValor !== null && f.depositoEmTransitoValor !== undefined) {
+      transitoHtml = `<div class="alerta alerta-aviso" style="margin-top:.6rem">
+        💶 Depósito em trânsito: ${formatarEuro(f.depositoEmTransitoValor)}, previsto para ${f.depositoEmTransitoData}${f.depositoEmTransitoObs ? ' — ' + f.depositoEmTransitoObs : ''}.
+        ${f.depositoEmTransitoReconciliado
+          ? ' ✅ Já confirmado como recebido.'
+          : (podeGerir ? ` <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="confirmarDepositoTransitoCM()">✔ Confirmar que o depósito já entrou</button>` : ' Ainda por confirmar.')}
+      </div>`;
+    }
+    fechoHtml = `
+      <div class="conferencia-badge ${classe}" style="margin-top:1rem">${f.status === 'CONFORME' ? '✅ CONFORME' : '⚠️ NÃO CONFERE'} — mês fechado por ${f.fechadoPor || ''}</div>
+      <p class="rodape-nota">Saldo de numerário no fecho: ${formatarEuro(f.saldoNumerarioFecho)}.</p>
+      ${transitoHtml}
+      ${podeReabrir ? `<button class="btn btn-secundario" style="margin-top:.6rem" onclick="reabrirMesCM()">🔓 Reabrir mês</button>` : '<p class="rodape-nota">Só um Master pode reabrir este mês.</p>'}
+    `;
+  } else {
+    const saldo = e.saldoNumerarioAtual;
+    const temSaldoPorDepositar = Math.abs(saldo) > 0.01;
+    fechoHtml = `
+      <p class="rodape-nota" style="margin-top:1rem">Saldo de numerário actual por depositar: <strong>${formatarEuro(saldo)}</strong>.</p>
+      ${temSaldoPorDepositar ? `
+        <div class="alerta alerta-aviso">
+          O saldo não está em zero — normal para o(s) último(s) dia(s) do mês, cujo depósito só é feito já no mês seguinte.
+          Se for esse o caso, marca aqui como <strong>depósito em trânsito</strong> para o mês fechar CONFORME na mesma;
+          se não marcares nada, o mês fecha como <strong>NÃO CONFERE</strong>.
+          <div class="filtros" style="margin-top:.6rem">
+            <div><label class="form-label">Valor em trânsito (€)</label><input type="number" class="form-input" id="cm-transito-valor" step="0.01" value="${saldo}"></div>
+            <div><label class="form-label">Data prevista do depósito</label><input type="date" class="form-input" id="cm-transito-data"></div>
+            <div><label class="form-label">Observações</label><input type="text" class="form-input" id="cm-transito-obs" placeholder="Opcional"></div>
+          </div>
+        </div>` : ''}
+      ${podeGerir ? `<button class="btn" style="margin-top:.6rem" ${e.podeFechar ? '' : 'disabled title="Faltam vistos por dar"'} onclick="fecharMesCM()">🔒 Fechar mês</button>` : ''}
+      ${!e.podeFechar ? '<p class="rodape-nota">Só dá para fechar depois de todos os dias e os 2 vistos mensais (Carregamentos e GSV) estarem com visto.</p>' : ''}
+    `;
+  }
+
+  resultadoEl.innerHTML = `
+    <h3 style="margin-top:1.25rem">Vistos diários (Multibanco, VISA, Depósitos bancários, Transferências)</h3>
+    <div class="tabela-scroll">
+      <table>
+        <thead><tr><th>Dia</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transferências</th><th>Visto</th></tr></thead>
+        <tbody>${linhasDias}</tbody>
+      </table>
+    </div>
+    <h3>Vistos mensais</h3>
+    <div class="resumo-grelha">
+      ${linhaVistoMensal('carregamentos', 'Total do mês — Carregamentos/Pag. Fatura')}
+      ${linhaVistoMensal('gsv', 'Total do mês — GSV')}
+    </div>
+    <h3>Fecho do mês</h3>
+    ${fechoHtml}
+  `;
+}
+
+async function marcarVistoDiarioCM(dia) {
+  const loja = document.getElementById('relatorio-loja').value;
+  const r = await chamarApi({ acao: 'marcarVistoDiarioCaixaMes', loja, dia });
+  if (!r.ok) { alert(r.erro || 'Erro ao dar visto.'); return; }
+  carregarCaixaMes();
+}
+async function desfazerVistoDiarioCM(dia) {
+  const loja = document.getElementById('relatorio-loja').value;
+  const r = await chamarApi({ acao: 'desfazerVistoDiarioCaixaMes', loja, dia });
+  if (!r.ok) { alert(r.erro || 'Erro ao desfazer o visto.'); return; }
+  carregarCaixaMes();
+}
+async function marcarVistoMensalCM(tipo) {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  const r = await chamarApi({ acao: 'marcarVistoMensalCaixaMes', loja, mes, tipo });
+  if (!r.ok) { alert(r.erro || 'Erro ao dar visto.'); return; }
+  carregarCaixaMes();
+}
+async function desfazerVistoMensalCM(tipo) {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  const r = await chamarApi({ acao: 'desfazerVistoMensalCaixaMes', loja, mes, tipo });
+  if (!r.ok) { alert(r.erro || 'Erro ao desfazer o visto.'); return; }
+  carregarCaixaMes();
+}
+async function fecharMesCM() {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  const elValor = document.getElementById('cm-transito-valor');
+  const elData = document.getElementById('cm-transito-data');
+  let depositoEmTransito;
+  if (elData && elData.value) {
+    depositoEmTransito = {
+      valor: elValor ? elValor.value : '',
+      dataPrevista: elData.value,
+      observacoes: document.getElementById('cm-transito-obs') ? document.getElementById('cm-transito-obs').value : '',
+    };
+  }
+  if (!confirm(`Fechar o mês ${mes} de ${loja}? Depois de fechado, apagar ou corrigir apuros desse mês fica bloqueado até um Master reabrir.`)) return;
+  const r = await chamarApi({ acao: 'fecharCaixaMes', loja, mes, depositoEmTransito });
+  if (!r.ok) { alert(r.erro || 'Erro ao fechar o mês.'); return; }
+  carregarCaixaMes();
+}
+async function reabrirMesCM() {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  if (!confirm(`Reabrir o mês ${mes} de ${loja}? Volta a ser possível corrigir/apagar apuros desse mês.`)) return;
+  const r = await chamarApi({ acao: 'reabrirCaixaMes', loja, mes });
+  if (!r.ok) { alert(r.erro || 'Erro ao reabrir o mês.'); return; }
+  carregarCaixaMes();
+}
+async function confirmarDepositoTransitoCM() {
+  const loja = document.getElementById('relatorio-loja').value;
+  const mes = document.getElementById('cm-mes').value;
+  const r = await chamarApi({ acao: 'marcarDepositoTransitoReconciliado', loja, mes });
+  if (!r.ok) { alert(r.erro || 'Erro ao confirmar.'); return; }
+  carregarCaixaMes();
 }
 
 // ═══ Reconciliação GSV ═══
