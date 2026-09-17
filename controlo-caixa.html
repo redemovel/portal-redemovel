@@ -1110,13 +1110,31 @@ function mostrarCaixaMes() {
     return '⏳ Por dar visto';
   };
 
+  // Pedido do Ricardo (2026-09-17, depois de ver a 1ª versão): "quero dar o
+  // visto um a um dos movimentos" — cada uma das 4 colunas tem o seu
+  // próprio botão, em vez de um único "Visto" para o dia inteiro. Sem nada
+  // a confirmar (valor a zero nesse dia), mostra só o valor, sem botão.
+  const linhaCelulaDiaria = (dia, tipo, valor, vd) => {
+    if (Math.abs(valor) <= 0.01) return formatarEuro(valor);
+    const acoes = [];
+    if (vd.visto && vd.vistoValido) {
+      acoes.push('✅');
+      if (podeGerir && !e.trancado) acoes.push(`<a href="#" onclick="desfazerVistoDiarioCM('${dia}','${tipo}');return false">desfazer</a>`);
+    } else if (podeGerir && !e.trancado) {
+      acoes.push(`<button class="btn btn-secundario" style="padding:.25rem .5rem;font-size:.68rem" onclick="marcarVistoDiarioCM('${dia}','${tipo}')">${vd.visto ? '⚠️ Dar novo visto' : 'Dar visto'}</button>`);
+    } else {
+      acoes.push(vd.visto ? '⚠️ desactualizado' : '⏳');
+    }
+    return `${formatarEuro(valor)}<br>${acoes.join(' ')}`;
+  };
+
   const linhasDias = e.dias.length ? e.dias.map(d => `<tr>
-    <td>${d.dia}</td><td>${formatarEuro(d.totalMB)}</td><td>${formatarEuro(d.totalVISA)}</td>
-    <td>${formatarEuro(d.totalDepositos)}</td><td>${formatarEuro(d.totalTransferencias)}</td>
-    <td>${estadoVisto(!!d.visto, d.vistoValido, d.visto && d.visto.vistoPor)}
-      ${d.visto && d.vistoValido && podeGerir && !e.trancado ? ` · <a href="#" onclick="desfazerVistoDiarioCM('${d.dia}');return false">desfazer</a>` : ''}
-      ${(!d.visto || !d.vistoValido) && podeGerir && !e.trancado ? ` <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="marcarVistoDiarioCM('${d.dia}')">${d.visto ? 'Dar novo visto' : 'Dar visto'}</button>` : ''}</td>
-  </tr>`).join('') : '<tr><td colspan="6">Sem Multibanco/VISA apurado nem Depósitos/Transferências registados neste mês (nada por confirmar ainda — os totais do GSV/Carregamentos importados são os "Vistos mensais", abaixo).</td></tr>';
+    <td>${d.dia}</td>
+    <td>${linhaCelulaDiaria(d.dia, 'multibanco', d.totalMB, d.vistos.multibanco)}</td>
+    <td>${linhaCelulaDiaria(d.dia, 'visa', d.totalVISA, d.vistos.visa)}</td>
+    <td>${linhaCelulaDiaria(d.dia, 'depositos', d.totalDepositos, d.vistos.depositos)}</td>
+    <td>${linhaCelulaDiaria(d.dia, 'transferencias', d.totalTransferencias, d.vistos.transferencias)}</td>
+  </tr>`).join('') : '<tr><td colspan="5">Sem Multibanco/VISA apurado nem Depósitos/Transferências registados neste mês (nada por confirmar ainda — os totais do GSV/Carregamentos importados são os "Vistos mensais", abaixo).</td></tr>';
 
   const linhaVistoMensal = (tipo, rotulo) => {
     const v = e.vistosMensais[tipo];
@@ -1174,7 +1192,7 @@ function mostrarCaixaMes() {
     <h3 style="margin-top:1.25rem">Vistos diários (Multibanco, VISA, Depósitos bancários, Transferências)</h3>
     <div class="tabela-scroll">
       <table>
-        <thead><tr><th>Dia</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transferências</th><th>Visto</th></tr></thead>
+        <thead><tr><th>Dia</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transferências</th></tr></thead>
         <tbody>${linhasDias}</tbody>
       </table>
     </div>
@@ -1188,15 +1206,15 @@ function mostrarCaixaMes() {
   `;
 }
 
-async function marcarVistoDiarioCM(dia) {
+async function marcarVistoDiarioCM(dia, tipo) {
   const loja = document.getElementById('relatorio-loja').value;
-  const r = await chamarApi({ acao: 'marcarVistoDiarioCaixaMes', loja, dia });
+  const r = await chamarApi({ acao: 'marcarVistoDiarioCaixaMes', loja, dia, tipo });
   if (!r.ok) { alert(r.erro || 'Erro ao dar visto.'); return; }
   carregarCaixaMes();
 }
-async function desfazerVistoDiarioCM(dia) {
+async function desfazerVistoDiarioCM(dia, tipo) {
   const loja = document.getElementById('relatorio-loja').value;
-  const r = await chamarApi({ acao: 'desfazerVistoDiarioCaixaMes', loja, dia });
+  const r = await chamarApi({ acao: 'desfazerVistoDiarioCaixaMes', loja, dia, tipo });
   if (!r.ok) { alert(r.erro || 'Erro ao desfazer o visto.'); return; }
   carregarCaixaMes();
 }
