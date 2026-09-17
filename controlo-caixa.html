@@ -1125,7 +1125,7 @@ function mostrarCaixaMes() {
     } else {
       acoes.push(vd.visto ? '⚠️ desactualizado' : '⏳');
     }
-    return `${formatarEuro(valor)}<br>${acoes.join(' ')}`;
+    return `<span style="display:inline-flex;align-items:center;gap:.5rem;white-space:nowrap">${formatarEuro(valor)}<span>${acoes.join(' ')}</span></span>`;
   };
 
   const linhasDias = e.dias.length ? e.dias.map(d => `<tr>
