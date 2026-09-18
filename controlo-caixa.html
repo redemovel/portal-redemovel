@@ -141,6 +141,7 @@
     <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
     <button class="aba-btn" data-aba="historico" onclick="mudarAba('historico')">🕒 Histórico de importações</button>
     <button class="aba-btn" data-aba="colaboradores" onclick="mudarAba('colaboradores')">👤 Colaboradores</button>
+    <button class="aba-btn" data-aba="contacorrente" onclick="mudarAba('contacorrente')" hidden>💰 Conta Corrente Vodafone</button>
   </div>
 
   <!-- ── Importar ── -->
@@ -521,6 +522,34 @@
     </div>
   </div>
 
+  <!-- ── Conta Corrente Vodafone (Fase 3+4, 2026-09-18) — ingestão das
+       referências de pagamento por e-mail, reconciliação diária estimada, e
+       geração do ficheiro PSM para o Millennium BCP. Só Master (pedido do
+       Ricardo, especificação secção 8: "gestão da conta corrente central...
+       exportação BCP" é só do Master). ── -->
+  <div class="aba-conteudo" id="aba-contacorrente" hidden>
+    <div class="cartao">
+      <h2>💰 Conta Corrente Vodafone — referências por pagar</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Referências de Carregamentos/Faturas (Entidade 11470) e GSV/Stock Vodafone (Entidade 11814) recebidas por e-mail da Vodafone. A coluna "Reconciliação" é só uma estimativa — para GSV fica sujeita à comissão real do mês, que só chega confirmada no ficheiro "1ª Comissão" — o valor pago é sempre o Montante que a própria referência trouxe, nunca um valor calculado aqui.</p>
+      <button class="btn btn-secundario" onclick="carregarReferenciasPendentes()">🔄 Atualizar lista</button>
+      <div id="cc-resultado" style="margin-top:1rem"></div>
+    </div>
+
+    <div class="cartao">
+      <h3>Colar e-mail manualmente</h3>
+      <p class="rodape-nota" style="margin-bottom:.6rem">Só é preciso enquanto a ingestão automática não estiver ligada, ou se um e-mail em concreto falhar — cola aqui o texto do e-mail da Vodafone (Carregamentos ou GSV) tal como chegou.</p>
+      <textarea class="form-input" id="cc-email-colado" rows="6" style="width:100%;font-family:monospace;font-size:.78rem;box-sizing:border-box"></textarea>
+      <button class="btn btn-secundario" style="margin-top:.6rem" onclick="importarEmailColado()">➕ Processar texto colado</button>
+      <div id="cc-status-colado" style="margin-top:.6rem"></div>
+    </div>
+
+    <div class="cartao">
+      <h3>🧾 Conta corrente — pagamentos confirmados</h3>
+      <button class="btn btn-secundario" onclick="carregarContaCorrente()">🔄 Atualizar</button>
+      <div id="cc-conta-corrente" style="margin-top:1rem"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -627,6 +656,9 @@ async function entrarNoPainel() {
   // recusa no servidor, isto é só para não mostrar a quem não pode usar.
   const cartaoReset = document.getElementById('cartao-reset-testes');
   if (cartaoReset) cartaoReset.hidden = !ehMaster();
+  // Conta Corrente Vodafone — só Master (especificação, secção 8).
+  const btnContaCorrente = document.querySelector('.aba-btn[data-aba="contacorrente"]');
+  if (btnContaCorrente) btnContaCorrente.hidden = !ehMaster();
   popularSelectsLojas();
   await Promise.all([carregarClassificacao(), carregarHistorico()]);
 }
@@ -678,6 +710,11 @@ function mudarAba(nome) {
     if (!document.getElementById('cm-mes').value) document.getElementById('cm-mes').value = mesAtualISO();
   }
   if (nome === 'colaboradores' && !ABAS_CARREGADAS.has('colaboradores')) { ABAS_CARREGADAS.add('colaboradores'); carregarColaboradoresGSV(); }
+  if (nome === 'contacorrente' && !ABAS_CARREGADAS.has('contacorrente')) {
+    ABAS_CARREGADAS.add('contacorrente');
+    carregarReferenciasPendentes();
+    carregarContaCorrente();
+  }
 }
 
 function hojeISO() {
@@ -1632,6 +1669,140 @@ async function guardarCodigosGSV(username) {
 function formatarEuro(v) {
   if (v === null || v === undefined) return '—';
   return Number(v).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+}
+
+// ═══ Conta Corrente Vodafone (Fase 3+4, 2026-09-18) ═══
+let CC_PENDENTES = [];
+
+async function carregarReferenciasPendentes() {
+  const el = document.getElementById('cc-resultado');
+  el.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A carregar…</div>';
+  const r = await chamarApi({ acao: 'listarReferenciasPendentes', comReconciliacao: true });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
+  CC_PENDENTES = r.referencias;
+  mostrarReferenciasPendentes();
+}
+
+function rotuloTipoRef(r) { return (r.tipo === 'gsv' ? 'GSV' : 'Carregamentos') + ' (' + r.entidade + ')'; }
+
+function badgeReconciliacao(ref) {
+  const rec = ref.reconciliacao;
+  if (!rec) return '';
+  if (rec.confere === null || rec.confere === undefined) {
+    const nota = ref.tipo === 'gsv' && rec.linhasSemClassificacao ? ` — ${rec.linhasSemClassificacao} linha(s) por classificar` : '';
+    return `<span class="rodape-nota">⏳ a confirmar${nota}</span>`;
+  }
+  if (rec.confere) return `<span style="color:var(--teal-dark)">✅ confere (${formatarEuro(rec.valorCalculado)})</span>`;
+  return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)})</span>`;
+}
+
+function mostrarReferenciasPendentes() {
+  const el = document.getElementById('cc-resultado');
+  if (!CC_PENDENTES.length) { el.innerHTML = '<p class="rodape-nota">Sem referências pendentes — a lista enche-se sozinha à medida que a ingestão de e-mail (ou a colagem manual, abaixo) for gravando novas referências.</p>'; return; }
+
+  const pendentes = CC_PENDENTES.filter(r => r.estado === 'pendente');
+  const incluidas = CC_PENDENTES.filter(r => r.estado === 'incluida_ficheiro');
+  let html = '';
+
+  if (pendentes.length) {
+    html += `<h3>Por incluir num ficheiro (${pendentes.length})</h3>
+    <div class="filtros">
+      <div><label class="form-label">Data para pagamento</label><input type="date" class="form-input" id="cc-data-pagamento" value="${hojeISO()}"></div>
+      <div><button class="btn" onclick="gerarFicheiroPSMSelecionadas()">📄 Gerar ficheiro PSM com as selecionadas</button></div>
+    </div>
+    <div class="tabela-scroll"><table>
+      <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('.cc-check').forEach(el=>el.checked=this.checked)"></th><th>Data limite</th><th>Tipo</th><th>Ref MB</th><th>Data ref.</th><th>Montante</th><th>Reconciliação (estimativa)</th></tr></thead>
+      <tbody>${pendentes.map(r => `<tr>
+        <td><input type="checkbox" class="cc-check" value="${r.refMB}"></td>
+        <td>${r.dataLimitePagamento}</td><td>${rotuloTipoRef(r)}</td><td>${r.refMB}</td>
+        <td>${r.dataReferencia}</td><td>${formatarEuro(r.montante)}</td><td>${badgeReconciliacao(r)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  } else {
+    html += '<p class="rodape-nota">Sem referências por incluir num ficheiro.</p>';
+  }
+
+  if (incluidas.length) {
+    html += `<h3 style="margin-top:1.5rem">Incluídas num ficheiro, a aguardar confirmação (${incluidas.length})</h3>
+    <p class="rodape-nota" style="margin-bottom:.6rem">Já saíram num ficheiro PSM gerado — depois de completares o upload no NetBanco Empresas, marca aqui as que ficaram mesmo pagas.</p>
+    <div class="tabela-scroll"><table>
+      <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('.cc-check-confirmar').forEach(el=>el.checked=this.checked)"></th><th>Data limite</th><th>Tipo</th><th>Ref MB</th><th>Data ref.</th><th>Montante</th><th></th></tr></thead>
+      <tbody>${incluidas.map(r => `<tr>
+        <td><input type="checkbox" class="cc-check-confirmar" value="${r.refMB}"></td>
+        <td>${r.dataLimitePagamento}</td><td>${rotuloTipoRef(r)}</td><td>${r.refMB}</td>
+        <td>${r.dataReferencia}</td><td>${formatarEuro(r.montante)}</td>
+        <td><a href="#" onclick="baixarFicheiroPSM('${r.ficheiroId}');return false">🔽 voltar a transferir o ficheiro</a></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <button class="btn" style="margin-top:.6rem" onclick="confirmarPagamentoSelecionadas()">✔ Confirmar pagamento das seleccionadas</button>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function baixarTexto(nomeFicheiro, conteudo) {
+  const blob = new Blob([conteudo], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeFicheiro;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function gerarFicheiroPSMSelecionadas() {
+  const refMBs = [...document.querySelectorAll('.cc-check:checked')].map(el => el.value);
+  if (!refMBs.length) { alert('Escolhe pelo menos uma referência.'); return; }
+  const dataParaPagamento = document.getElementById('cc-data-pagamento').value;
+  if (!dataParaPagamento) { alert('Indica a data para pagamento.'); return; }
+  if (!confirm(`Gerar ficheiro PSM com ${refMBs.length} referência(s) para pagamento em ${dataParaPagamento}?\n\nAs referências passam a "incluídas num ficheiro" — o pagamento só fica registado na conta corrente depois de o confirmares à parte, já depois de completares o upload no home banking.`)) return;
+  const r = await chamarApi({ acao: 'gerarFicheiroPSM', refMBs, dataParaPagamento });
+  if (!r.ok) { alert(r.erro || 'Erro ao gerar o ficheiro.'); return; }
+  r.ficheiros.forEach(f => baixarTexto(f.nomeSugerido, f.conteudo));
+  const totalRegistos = r.ficheiros.reduce((s, f) => s + f.nRegistos, 0);
+  const totalImportancia = r.ficheiros.reduce((s, f) => s + f.importanciaTotal, 0);
+  alert(`${r.ficheiros.length} ficheiro(s) gerado(s) e transferido(s) — ${totalRegistos} referência(s), total ${formatarEuro(totalImportancia)}.\n\nFalta: fazer o upload no NetBanco Empresas (Pagamentos > Serviços Multibanco > Pag. Serviços Lote) e, só depois de confirmado lá, "Confirmar pagamento" aqui.`);
+  carregarReferenciasPendentes();
+}
+
+async function baixarFicheiroPSM(ficheiroId) {
+  const r = await chamarApi({ acao: 'obterFicheiroPSM', id: ficheiroId });
+  if (!r.ok) { alert(r.erro || 'Ficheiro não encontrado.'); return; }
+  baixarTexto(`PSM_${r.ficheiro.dataParaPagamento}_${ficheiroId.slice(4, 13)}.txt`, r.ficheiro.conteudo);
+}
+
+async function confirmarPagamentoSelecionadas() {
+  const refMBs = [...document.querySelectorAll('.cc-check-confirmar:checked')].map(el => el.value);
+  if (!refMBs.length) { alert('Escolhe pelo menos uma referência.'); return; }
+  if (!confirm(`Confirmar que ${refMBs.length} referência(s) foram mesmo pagas no home banking?\n\nIsto grava o pagamento na conta corrente — não há botão para desfazer.`)) return;
+  const r = await chamarApi({ acao: 'confirmarPagamentoReferencias', refMBs });
+  if (!r.ok) { alert(r.erro || 'Erro ao confirmar.'); return; }
+  carregarReferenciasPendentes();
+  carregarContaCorrente();
+}
+
+async function importarEmailColado() {
+  const statusEl = document.getElementById('cc-status-colado');
+  const corpoEmail = document.getElementById('cc-email-colado').value;
+  if (!corpoEmail.trim()) { statusEl.innerHTML = '<div class="alerta alerta-erro">Cola o texto do e-mail primeiro.</div>'; return; }
+  statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A processar…</div>';
+  const r = await chamarApi({ acao: 'importarReferenciaManual', corpoEmail });
+  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro.') + (r.avisos && r.avisos.length ? '<br>' + r.avisos.join('<br>') : '') + '</div>'; return; }
+  statusEl.innerHTML = `<div class="alerta alerta-ok">${r.novas} referência(s) nova(s), ${r.jaExistiam} já existia(m).${r.avisos && r.avisos.length ? '<br><span style="font-size:.78rem">' + r.avisos.join('<br>') + '</span>' : ''}</div>`;
+  document.getElementById('cc-email-colado').value = '';
+  carregarReferenciasPendentes();
+}
+
+async function carregarContaCorrente() {
+  const el = document.getElementById('cc-conta-corrente');
+  el.innerHTML = '<span class="spinner"></span> A carregar…';
+  const r = await chamarApi({ acao: 'listarContaCorrenteVodafone', filtros: {} });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro.') + '</div>'; return; }
+  if (!r.pagamentos.length) { el.innerHTML = '<p class="rodape-nota">Sem pagamentos confirmados ainda.</p>'; return; }
+  el.innerHTML = `<div class="resumo-item" style="max-width:260px"><div class="valor">${formatarEuro(r.totalPago)}</div><div class="rotulo">Total pago (lista abaixo)</div></div>
+  <div class="tabela-scroll" style="margin-top:1rem"><table>
+    <thead><tr><th>Pago em</th><th>Tipo</th><th>Ref MB</th><th>Data ref.</th><th>Montante</th><th>Por</th></tr></thead>
+    <tbody>${r.pagamentos.map(p => `<tr><td>${p.pagoEm}</td><td>${p.tipo === 'gsv' ? 'GSV' : 'Carregamentos'}</td><td>${p.refMB}</td><td>${p.dataReferencia}</td><td>${formatarEuro(p.montante)}</td><td>${p.pagoPor}</td></tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
 // ═══ Arranque ═══
