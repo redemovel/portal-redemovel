@@ -1711,13 +1711,15 @@ function mostrarReferenciasPendentes() {
       <div><button class="btn" onclick="gerarFicheiroPSMSelecionadas()">📄 Gerar ficheiro PSM com as selecionadas</button></div>
     </div>
     <div class="tabela-scroll"><table>
-      <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('.cc-check').forEach(el=>el.checked=this.checked)"></th><th>Data limite</th><th>Tipo</th><th>Ref MB</th><th>Data ref.</th><th>Montante</th><th>Reconciliação (estimativa)</th></tr></thead>
+      <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('.cc-check').forEach(el=>el.checked=this.checked)"></th><th>Data limite</th><th>Tipo</th><th>Ref MB</th><th>Data ref.</th><th>Montante</th><th>Reconciliação (estimativa)</th><th></th></tr></thead>
       <tbody>${pendentes.map(r => `<tr>
         <td><input type="checkbox" class="cc-check" value="${r.refMB}"></td>
         <td>${r.dataLimitePagamento}</td><td>${rotuloTipoRef(r)}</td><td>${r.refMB}</td>
         <td>${r.dataReferencia}</td><td>${formatarEuro(r.montante)}</td><td>${badgeReconciliacao(r)}</td>
+        <td><button class="btn btn-secundario" style="padding:.25rem .6rem;font-size:.72rem" onclick="apagarReferenciaPendenteUI('${r.refMB}')">🗑 Apagar</button></td>
       </tr>`).join('')}</tbody>
-    </table></div>`;
+    </table></div>
+    <p class="rodape-nota">Usa "🗑 Apagar" para uma referência gravada com dados errados (ex.: um valor mal interpretado) — só funciona enquanto ainda estiver "por incluir num ficheiro". Depois de apagar, volta a colar/receber o e-mail para a gravar de novo, já corrigida.</p>`;
   } else {
     html += '<p class="rodape-nota">Sem referências por incluir num ficheiro.</p>';
   }
@@ -1738,6 +1740,13 @@ function mostrarReferenciasPendentes() {
   }
 
   el.innerHTML = html;
+}
+
+async function apagarReferenciaPendenteUI(refMB) {
+  if (!confirm(`Apagar a referência ${refMB}? Só faz sentido se os dados estiverem errados (ex.: valor mal interpretado) — não é para uso normal.`)) return;
+  const r = await chamarApi({ acao: 'apagarReferenciaPendente', refMB });
+  if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
+  await carregarReferenciasPendentes();
 }
 
 function baixarTexto(nomeFicheiro, conteudo) {
