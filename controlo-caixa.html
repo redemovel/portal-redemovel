@@ -1685,15 +1685,41 @@ async function carregarReferenciasPendentes() {
 
 function rotuloTipoRef(r) { return (r.tipo === 'gsv' ? 'GSV' : 'Carregamentos') + ' (' + r.entidade + ')'; }
 
+// Pedido do Ricardo (2026-09-18): queria ver logo a diferença (não só o
+// valor calculado) quando "não confere", e conseguir identificar quais
+// movimentos GSV concretos ainda faltam classificar quando "a confirmar" —
+// em vez de só um número, um "▸ N linha(s) por classificar" expansível com
+// os dados de cada linha (Nº Documento, loja, colaborador, Refª SAP,
+// descrição, Total C/IVA), para ele poder ir ver do que se trata.
+function linhaDiferenca(diferenca) {
+  if (diferenca === null || diferenca === undefined) return '';
+  const sinal = diferenca > 0 ? '+' : '';
+  return ` — diferença ${sinal}${formatarEuro(diferenca)}`;
+}
+
 function badgeReconciliacao(ref) {
   const rec = ref.reconciliacao;
   if (!rec) return '';
   if (rec.confere === null || rec.confere === undefined) {
-    const nota = ref.tipo === 'gsv' && rec.linhasSemClassificacao ? ` — ${rec.linhasSemClassificacao} linha(s) por classificar` : '';
-    return `<span class="rodape-nota">⏳ a confirmar${nota}</span>`;
+    if (ref.tipo === 'gsv' && rec.linhasSemClassificacao) {
+      const linhas = rec.linhasPorClassificarDetalhe || [];
+      const corpo = linhas.map(l => `<tr>
+        <td>${l.nDocumento || '—'}</td><td>${l.loja || '—'}</td><td>${l.colaborador || '—'}</td>
+        <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
+      </tr>`).join('');
+      return `<details class="relatorio-detalhe" style="margin:0;border:none;padding:0">
+        <summary style="padding:.15rem 0;font-size:.78rem;color:var(--text-muted)">⏳ a confirmar — ${rec.linhasSemClassificacao} linha(s) por classificar</summary>
+        <div class="tabela-scroll"><table style="margin:.4rem 0 .2rem">
+          <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th></tr></thead>
+          <tbody>${corpo || '<tr><td colspan="6">—</td></tr>'}</tbody>
+        </table></div>
+        <p class="rodape-nota">Ficam por classificar até a próxima importação da "1ª Comissão" cobrir estes documentos — nada a fazer aqui manualmente.</p>
+      </details>`;
+    }
+    return `<span class="rodape-nota">⏳ a confirmar</span>`;
   }
   if (rec.confere) return `<span style="color:var(--teal-dark)">✅ confere (${formatarEuro(rec.valorCalculado)})</span>`;
-  return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)})</span>`;
+  return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)}${linhaDiferenca(rec.diferenca)})</span>`;
 }
 
 function mostrarReferenciasPendentes() {
