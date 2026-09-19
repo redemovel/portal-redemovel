@@ -449,12 +449,20 @@
   <div class="aba-conteudo" id="aba-classificacao" hidden>
     <div class="cartao">
       <h2>Classificação automática de produtos (Refª SAP → categoria/margem)</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Aprendida a partir das comissões confirmadas — sem necessidade de classificação manual. <button class="btn btn-secundario" style="padding:.3rem .7rem;font-size:.75rem" onclick="carregarClassificacao()">Atualizar</button></p>
-      <h3>✅ Confirmadas</h3>
+      <p class="rodape-nota" style="margin-bottom:1rem">Aprendida a partir das comissões confirmadas — sem necessidade de classificação manual, na maioria dos casos. <button class="btn btn-secundario" style="padding:.3rem .7rem;font-size:.75rem" onclick="carregarClassificacao()">Atualizar</button></p>
+      <h3>✅ Confirmadas (comissão real da Vodafone)</h3>
       <div class="tabela-scroll">
         <table>
           <thead><tr><th>Refª SAP</th><th>Categoria</th><th>Percentagem</th><th>Observações</th><th>Exemplo</th></tr></thead>
           <tbody id="corpo-confirmadas"><tr><td colspan="5">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+      <h3>✏️ Definidas manualmente</h3>
+      <p class="rodape-nota" style="margin-bottom:.6rem">Percentagem definida pelo Ricardo (ver "Definir/corrigir uma Refª SAP" abaixo, ou "✏️ Corrigir" a partir de um documento na Conta Corrente Vodafone) — uma comissão real confirmada pela Vodafone sobrepõe-se sempre a isto assim que chegar.</p>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Refª SAP</th><th>Categoria</th><th>Percentagem</th><th>Definido por</th><th>Quando</th><th>Motivo</th></tr></thead>
+          <tbody id="corpo-manuais"><tr><td colspan="6">A carregar…</td></tr></tbody>
         </table>
       </div>
       <h3>⚠️ Atípicas (percentagem fora do conhecido — normalmente CAP em artigo caro)</h3>
@@ -464,6 +472,47 @@
           <tbody id="corpo-atipicas"><tr><td colspan="3">A carregar…</td></tr></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="cartao" id="cartao-alterar-categoria">
+      <h2>📐 Alterar a percentagem de uma categoria inteira</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Para quando a Vodafone renegoceia a margem de uma categoria (ex.: Telemóveis passa de 7,5% para 6%) — actualiza de uma vez todas as Refªs SAP já conhecidas dessa categoria, e garante que mesmo um produto novo dessa categoria já nasce com a percentagem certa, sem esperar por uma comissão confirmada. Só Master.</p>
+      <div class="filtros">
+        <div>
+          <label class="form-label">Categoria</label>
+          <select class="form-input" id="categoria-alterar-chave"><option value="">A carregar…</option></select>
+        </div>
+        <div>
+          <label class="form-label">Percentagem nova (%)</label>
+          <input type="number" class="form-input" id="categoria-alterar-percentagem" placeholder="ex.: 6" step="0.01" min="0" max="100">
+        </div>
+      </div>
+      <label class="form-label" for="categoria-alterar-motivo">Motivo (obrigatório — fica registado para auditoria)</label>
+      <input type="text" class="form-input" id="categoria-alterar-motivo" placeholder="ex.: Vodafone comunicou nova margem a partir de outubro/2026">
+      <button class="btn" style="margin-top:.6rem" onclick="alterarPercentagemCategoriaUI()">Aplicar a toda a categoria</button>
+      <div id="resultado-categoria-alterar" style="margin-top:1rem"></div>
+      <div class="tabela-scroll" style="margin-top:1rem">
+        <table>
+          <thead><tr><th>Categoria</th><th>Percentagem original</th><th>Percentagem actual</th><th>Alterado por</th><th>Quando</th><th>Motivo</th></tr></thead>
+          <tbody id="corpo-overrides-categoria"><tr><td colspan="6">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cartao" id="cartao-refsap-manual">
+      <h2>🏷 Definir/corrigir a percentagem de uma Refª SAP</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Para uma Refª SAP atípica ou nova, sem esperar pela "1ª Comissão" mensal. Só Master.</p>
+      <div class="filtros">
+        <div><label class="form-label">Refª SAP</label><input type="text" class="form-input" id="refsap-manual-codigo" placeholder="ex.: 108027492"></div>
+        <div>
+          <label class="form-label">Percentagem (%)</label>
+          <input type="number" class="form-input" id="refsap-manual-percentagem" placeholder="ex.: 7.5" step="0.01" min="0" max="100">
+        </div>
+      </div>
+      <label class="form-label" for="refsap-manual-motivo">Motivo (obrigatório)</label>
+      <input type="text" class="form-input" id="refsap-manual-motivo" placeholder="ex.: confirmado por telefone com a Vodafone">
+      <button class="btn" style="margin-top:.6rem" onclick="definirPercentagemManualUI()">Definir</button>
+      <div id="resultado-refsap-manual" style="margin-top:1rem"></div>
     </div>
   </div>
 
@@ -659,6 +708,13 @@ async function entrarNoPainel() {
   // Conta Corrente Vodafone — só Master (especificação, secção 8).
   const btnContaCorrente = document.querySelector('.aba-btn[data-aba="contacorrente"]');
   if (btnContaCorrente) btnContaCorrente.hidden = !ehMaster();
+  // Correcção manual de comissões e alteração de percentagem por categoria
+  // (pedido do Ricardo, 2026-09-19) — só Master; a acção já recusa no
+  // servidor, isto é só para não mostrar a quem não pode usar.
+  const cartaoAlterarCategoria = document.getElementById('cartao-alterar-categoria');
+  if (cartaoAlterarCategoria) cartaoAlterarCategoria.hidden = !ehMaster();
+  const cartaoRefSapManual = document.getElementById('cartao-refsap-manual');
+  if (cartaoRefSapManual) cartaoRefSapManual.hidden = !ehMaster();
   popularSelectsLojas();
   await Promise.all([carregarClassificacao(), carregarHistorico()]);
 }
@@ -1572,23 +1628,102 @@ async function carregarArqueios() {
 }
 
 // ═══ Classificação ═══
+// Pedido do Ricardo (2026-09-19): além das "Confirmadas"/"Atípicas" já
+// existentes, mostrar também as classificações "✏️ Definidas manualmente"
+// e as alterações de percentagem por categoria (`caixaOverridesCategoria`),
+// e alimentar o <select> do cartão "Alterar a percentagem de uma categoria
+// inteira" com a lista fixa de categorias (lib/margem.js). Substitui
+// `relatorioClassificacao` por `listarClassificacoesGSV`, que devolve tudo
+// isto numa só chamada.
 async function carregarClassificacao() {
   const corpoConf = document.getElementById('corpo-confirmadas');
+  const corpoManuais = document.getElementById('corpo-manuais');
   const corpoAtip = document.getElementById('corpo-atipicas');
+  const corpoOverrides = document.getElementById('corpo-overrides-categoria');
+  const selectCategoria = document.getElementById('categoria-alterar-chave');
   corpoConf.innerHTML = '<tr><td colspan="5"><span class="spinner"></span>A carregar…</td></tr>';
+  corpoManuais.innerHTML = '<tr><td colspan="6"><span class="spinner"></span>A carregar…</td></tr>';
   corpoAtip.innerHTML = '<tr><td colspan="3"><span class="spinner"></span>A carregar…</td></tr>';
+  corpoOverrides.innerHTML = '<tr><td colspan="6"><span class="spinner"></span>A carregar…</td></tr>';
 
-  const r = await chamarApi({ acao: 'relatorioClassificacao' });
-  if (!r.ok) { corpoConf.innerHTML = corpoAtip.innerHTML = '<tr><td colspan="5">' + (r.erro || 'Erro ao carregar.') + '</td></tr>'; return; }
+  const r = await chamarApi({ acao: 'listarClassificacoesGSV' });
+  if (!r.ok) {
+    corpoConf.innerHTML = corpoManuais.innerHTML = corpoAtip.innerHTML = corpoOverrides.innerHTML =
+      '<tr><td colspan="6">' + (r.erro || 'Erro ao carregar.') + '</td></tr>';
+    return;
+  }
 
   corpoConf.innerHTML = r.confirmadas.length ? r.confirmadas.map(c => `<tr>
     <td>${c.id}</td><td>${c.categoriaNome || '—'}</td><td>${(c.percentagem * 100).toFixed(1)}%</td>
     <td>${c.nObservacoes || 0}</td><td>${c.descricaoExemplo || ''}</td>
   </tr>`).join('') : '<tr><td colspan="5">Nenhuma classificação confirmada ainda.</td></tr>';
 
+  corpoManuais.innerHTML = r.manuais.length ? r.manuais.map(c => `<tr>
+    <td>${c.id}</td><td>${c.categoriaNome || '—'}</td><td>${(c.percentagem * 100).toFixed(1)}%</td>
+    <td>${c.definidoManualmentePor || '—'}</td><td>${c.definidoManualmenteEm || '—'}</td><td>${c.motivoManual || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Nenhuma percentagem definida manualmente.</td></tr>';
+
   corpoAtip.innerHTML = r.atipicas.length ? r.atipicas.map(c => `<tr>
     <td>${c.id}</td><td>${c.descricaoExemplo || ''}</td><td>${c.ultimoRacioObservado !== undefined ? (c.ultimoRacioObservado * 100).toFixed(2) + '%' : '—'}</td>
   </tr>`).join('') : '<tr><td colspan="3">Nenhuma referência atípica.</td></tr>';
+
+  corpoOverrides.innerHTML = r.overrides.length ? r.overrides.map(o => `<tr>
+    <td>${o.categoriaNome || o.categoriaChave}</td><td>${(o.percentagemOriginal * 100).toFixed(1)}%</td>
+    <td>${(o.percentagemAtual * 100).toFixed(1)}%</td><td>${o.alteradoPor || '—'}</td>
+    <td>${o.alteradoEm || '—'}</td><td>${o.motivo || ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Nenhuma categoria alterada.</td></tr>';
+
+  if (selectCategoria) {
+    const categorias = (r.categorias || []).slice().sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+    selectCategoria.innerHTML = '<option value="">Escolhe a categoria…</option>' +
+      categorias.map(c => `<option value="${c.chave}">${c.nome} (actual: ${(c.percentagem * 100).toFixed(1)}%)</option>`).join('');
+  }
+}
+
+// Alterar a percentagem de uma categoria inteira (ex.: Vodafone renegoceia
+// a margem de "Telemóveis") — actualiza de imediato todas as Refªs SAP já
+// conhecidas dessa categoria, e garante que uma Refª SAP nova também nasce
+// já com o valor certo (ver alterarPercentagemCategoria em lib/classificacao.js).
+async function alterarPercentagemCategoriaUI() {
+  const resultadoEl = document.getElementById('resultado-categoria-alterar');
+  const categoriaChave = document.getElementById('categoria-alterar-chave').value;
+  const percentagemInput = document.getElementById('categoria-alterar-percentagem').value;
+  const motivo = document.getElementById('categoria-alterar-motivo').value;
+  if (!categoriaChave) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a categoria.</div>'; return; }
+  if (percentagemInput === '' || !Number.isFinite(Number(percentagemInput))) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica a percentagem nova.</div>'; return; }
+  if (!motivo.trim()) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um motivo (fica registado para auditoria).</div>'; return; }
+  if (!confirm(`Alterar a percentagem desta categoria para ${percentagemInput}%? Isto actualiza de imediato todas as Refªs SAP já conhecidas dessa categoria.`)) return;
+
+  resultadoEl.innerHTML = '<span class="spinner"></span> A aplicar…';
+  const r = await chamarApi({ acao: 'alterarPercentagemCategoria', categoriaChave, novaPercentagem: Number(percentagemInput) / 100, motivo: motivo.trim() });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao alterar.') + '</div>'; return; }
+
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">✅ Categoria actualizada de ${(r.percentagemAnterior * 100).toFixed(1)}% para ${(r.percentagemNova * 100).toFixed(1)}% — ${r.refsSAPAtualizadas} Refª(s) SAP já conhecida(s) actualizada(s).</div>`;
+  document.getElementById('categoria-alterar-percentagem').value = '';
+  document.getElementById('categoria-alterar-motivo').value = '';
+  carregarClassificacao();
+}
+
+// Definir/corrigir a percentagem de uma Refª SAP à mão — para uma Refª SAP
+// atípica ou nova, sem esperar pela "1ª Comissão" mensal.
+async function definirPercentagemManualUI() {
+  const resultadoEl = document.getElementById('resultado-refsap-manual');
+  const refSAP = document.getElementById('refsap-manual-codigo').value.trim();
+  const percentagemInput = document.getElementById('refsap-manual-percentagem').value;
+  const motivo = document.getElementById('refsap-manual-motivo').value;
+  if (!refSAP) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica a Refª SAP.</div>'; return; }
+  if (percentagemInput === '' || !Number.isFinite(Number(percentagemInput))) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica a percentagem.</div>'; return; }
+  if (!motivo.trim()) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um motivo.</div>'; return; }
+
+  resultadoEl.innerHTML = '<span class="spinner"></span> A gravar…';
+  const r = await chamarApi({ acao: 'definirPercentagemManualRefSAP', refSAP, percentagem: Number(percentagemInput) / 100, motivo: motivo.trim() });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
+
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">✅ Refª SAP ${r.refSAP} definida para ${(r.percentagem * 100).toFixed(1)}%.</div>`;
+  document.getElementById('refsap-manual-codigo').value = '';
+  document.getElementById('refsap-manual-percentagem').value = '';
+  document.getElementById('refsap-manual-motivo').value = '';
+  carregarClassificacao();
 }
 
 // ═══ Histórico ═══
@@ -1697,6 +1832,59 @@ function linhaDiferenca(diferenca) {
   return ` — diferença ${sinal}${formatarEuro(diferenca)}`;
 }
 
+// Linhas excluídas da margem (não comissionáveis — ex.: adiantamento de
+// reserva, custo administrativo, ver lib/margem.js REFS_SAP_EXCLUIR_DA_MARGEM)
+// — nunca contam como "por classificar" nem entram no valor calculado; só
+// aqui para dar visibilidade de que já foram vistas e propositadamente
+// ignoradas (pedido do Ricardo, 2026-09-19).
+function detalheLinhasExcluidas(rec) {
+  if (!rec || !rec.linhasExcluidas) return '';
+  const linhas = rec.linhasExcluidasDetalhe || [];
+  const corpo = linhas.map(l => `<tr>
+    <td>${l.nDocumento || '—'}</td><td>${l.loja || '—'}</td><td>${l.colaborador || '—'}</td>
+    <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
+  </tr>`).join('');
+  return `<details class="relatorio-detalhe" style="margin:.3rem 0 0;border:none;padding:0">
+    <summary style="padding:.15rem 0;font-size:.74rem;color:var(--text-muted)">💤 ${rec.linhasExcluidas} linha(s) excluída(s) da margem (não comissionável)</summary>
+    <div class="tabela-scroll"><table style="margin:.3rem 0 .1rem">
+      <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th></tr></thead>
+      <tbody>${corpo || '<tr><td colspan="6">—</td></tr>'}</tbody>
+    </table></div>
+  </details>`;
+}
+
+// Linha "✏️ Corrigir" por documento GSV por classificar (pedido do Ricardo,
+// 2026-09-19): permite corrigir a comissão de UM documento (e, opcionalmente,
+// "ensinar" a percentagem à Refª SAP para os próximos) sem esperar pela "1ª
+// Comissão" mensal. Só visível para Master — a acção já recusa no servidor.
+function linhaCorrigir(l) {
+  if (!ehMaster()) return '';
+  const idJs = String(l.id).replace(/'/g, "\\'");
+  return `<td><button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="mostrarFormCorrigir('${idJs}')">✏️ Corrigir</button></td>`;
+}
+
+function formCorrigir(l) {
+  if (!ehMaster()) return '';
+  const idJs = String(l.id).replace(/'/g, "\\'");
+  const refSapJs = String(l.refSAP || '').replace(/'/g, "\\'");
+  return `<tr id="linha-form-corrigir-${l.id}" hidden>
+    <td colspan="7">
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;padding:.4rem 0">
+        <div><label class="form-label" style="font-size:.68rem">Comissão real (€)</label>
+          <input type="number" step="0.01" min="0" max="${l.totalCIVA || ''}" class="form-input" style="font-size:.75rem;padding:.3rem;width:8rem" id="corrigir-valor-${l.id}"></div>
+        <div style="flex:1;min-width:160px"><label class="form-label" style="font-size:.68rem">Motivo (obrigatório)</label>
+          <input type="text" class="form-input" style="font-size:.75rem;padding:.3rem" id="corrigir-motivo-${l.id}"></div>
+        <label style="font-size:.72rem;display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.4rem">
+          <input type="checkbox" id="corrigir-ensinar-${l.id}"> aplicar também à Refª SAP ${l.refSAP || ''} para o futuro
+        </label>
+        <button class="btn" style="padding:.3rem .6rem;font-size:.72rem" onclick="confirmarCorrecaoDocumento('${idJs}', '${refSapJs}')">Confirmar</button>
+        <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="document.getElementById('linha-form-corrigir-${l.id}').hidden=true">Cancelar</button>
+      </div>
+      <div id="resultado-corrigir-${l.id}"></div>
+    </td>
+  </tr>`;
+}
+
 function badgeReconciliacao(ref) {
   const rec = ref.reconciliacao;
   if (!rec) return '';
@@ -1706,20 +1894,55 @@ function badgeReconciliacao(ref) {
       const corpo = linhas.map(l => `<tr>
         <td>${l.nDocumento || '—'}</td><td>${l.loja || '—'}</td><td>${l.colaborador || '—'}</td>
         <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
-      </tr>`).join('');
+        ${linhaCorrigir(l)}
+      </tr>${formCorrigir(l)}`).join('');
       return `<details class="relatorio-detalhe" style="margin:0;border:none;padding:0">
         <summary style="padding:.15rem 0;font-size:.78rem;color:var(--text-muted)">⏳ a confirmar — ${rec.linhasSemClassificacao} linha(s) por classificar</summary>
         <div class="tabela-scroll"><table style="margin:.4rem 0 .2rem">
-          <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th></tr></thead>
-          <tbody>${corpo || '<tr><td colspan="6">—</td></tr>'}</tbody>
+          <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th>${ehMaster() ? '<th></th>' : ''}</tr></thead>
+          <tbody>${corpo || '<tr><td colspan="7">—</td></tr>'}</tbody>
         </table></div>
-        <p class="rodape-nota">Ficam por classificar até a próxima importação da "1ª Comissão" cobrir estes documentos — nada a fazer aqui manualmente.</p>
+        <p class="rodape-nota">Ficam por classificar até a próxima importação da "1ª Comissão" cobrir estes documentos, ou até corrigires manualmente acima.</p>
+        ${detalheLinhasExcluidas(rec)}
       </details>`;
     }
-    return `<span class="rodape-nota">⏳ a confirmar</span>`;
+    return `<span class="rodape-nota">⏳ a confirmar</span>${detalheLinhasExcluidas(rec)}`;
   }
-  if (rec.confere) return `<span style="color:var(--teal-dark)">✅ confere (${formatarEuro(rec.valorCalculado)})</span>`;
-  return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)}${linhaDiferenca(rec.diferenca)})</span>`;
+  if (rec.confere) return `<span style="color:var(--teal-dark)">✅ confere (${formatarEuro(rec.valorCalculado)})</span>${detalheLinhasExcluidas(rec)}`;
+  return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)}${linhaDiferenca(rec.diferenca)})</span>${detalheLinhasExcluidas(rec)}`;
+}
+
+// Corrigir a comissão de UM documento GSV — por documento só, ou também
+// "ensinando" a regra à Refª SAP (checkbox "aplicar também...") para os
+// próximos documentos do mesmo produto, sem esperar pela "1ª Comissão"
+// mensal (pedido do Ricardo, 2026-09-19).
+function mostrarFormCorrigir(id) {
+  const linha = document.getElementById('linha-form-corrigir-' + id);
+  if (linha) linha.hidden = !linha.hidden;
+}
+
+async function confirmarCorrecaoDocumento(id, refSAP) {
+  const resultadoEl = document.getElementById('resultado-corrigir-' + id);
+  const valorEl = document.getElementById('corrigir-valor-' + id);
+  const motivoEl = document.getElementById('corrigir-motivo-' + id);
+  const ensinarEl = document.getElementById('corrigir-ensinar-' + id);
+  const comissaoValor = valorEl.value;
+  const motivo = motivoEl.value;
+  if (comissaoValor === '' || Number(comissaoValor) < 0 || !Number.isFinite(Number(comissaoValor))) {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor da comissão real.</div>'; return;
+  }
+  if (!motivo.trim()) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um motivo (fica registado para auditoria).</div>'; return; }
+
+  resultadoEl.innerHTML = '<span class="spinner"></span> A gravar…';
+  const ensinarRegra = ensinarEl.checked;
+  const r = await chamarApi({ acao: 'corrigirComissaoDocumentoGSV', docId: id, comissaoValor: Number(comissaoValor), motivo: motivo.trim(), ensinarRegra });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao corrigir.') + '</div>'; return; }
+
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">✅ Corrigido.${r.regraEnsinada && r.regraEnsinada.ok ? ` Refª SAP ${refSAP} passa a usar ${(r.regraEnsinada.percentagem * 100).toFixed(1)}% automaticamente.` : ''}</div>`;
+  // A reconciliação mudou (a linha corrigida deixa de contar como "por
+  // classificar") — recarrega a lista para reflectir isso já no ecrã.
+  await carregarReferenciasPendentes();
+  if (ensinarRegra) carregarClassificacao();
 }
 
 function mostrarReferenciasPendentes() {
