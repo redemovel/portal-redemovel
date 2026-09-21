@@ -825,6 +825,13 @@ async function entrarNoPainel() {
   const cartaoRefSapManual = document.getElementById('cartao-refsap-manual');
   if (cartaoRefSapManual) cartaoRefSapManual.hidden = !ehMaster();
   popularSelectsLojas();
+  // Bug real (2026-09-21): desde que "📒 Folha de Caixa" passou a ser o
+  // separador activo por omissão (antes era "📥 Importar ficheiros", que
+  // não carrega nada), ficava preso em "A carregar…" para sempre — o
+  // carregamento só dispara dentro de mudarAba(), chamado quando se CLICA
+  // num separador, e ninguém clica no que já está activo ao entrar.
+  // Chamar aqui garante o mesmo arranque de sempre.
+  mudarAba('folha');
   // Classificação/Histórico deixaram de carregar sempre para toda a gente
   // (2026-09-21) — agora vivem dentro de "Gestão" e só carregam quando
   // Master/Coordenador abre o respectivo sub-separador (mudarSubAbaGestao).
@@ -1023,6 +1030,7 @@ async function analisarTipologiaUI() {
     <div class="resumo-item"><div class="valor">${r.total}</div><div class="rotulo">Documentos</div></div>
     <div class="resumo-item"><div class="valor">${r.confirmados.length}</div><div class="rotulo">Confirmados</div></div>
     <div class="resumo-item"><div class="valor">${r.divergentes.length}</div><div class="rotulo">Divergentes</div></div>
+    <div class="resumo-item"><div class="valor">${r.semMargem.length}</div><div class="rotulo">Sem margem (normal)</div></div>
     <div class="resumo-item"><div class="valor">${r.naoSuportados.length}</div><div class="rotulo">Não suportados</div></div>
   `;
   if (!r.resultados.length) { corpo.innerHTML = '<tr><td colspan="7">Sem documentos GSV neste período.</td></tr>'; return; }
@@ -1032,6 +1040,9 @@ async function analisarTipologiaUI() {
 function linhaTipologia(r) {
   if (!r.ok) return `<tr><td>${r.erro || 'Erro'}</td><td colspan="6"></td></tr>`;
   const aproximada = r.tabelaAproximada ? ' <span title="A única tabela disponível é de depois da venda — usada como aproximação.">⚠ tabela aproximada</span>' : '';
+  if (r.cenario === 'sem_margem') {
+    return `<tr><td>${r.nDocumento}</td><td colspan="4"><span class="badge badge-ok">Sem margem (normal)</span> ${r.motivo}</td><td colspan="2"></td></tr>`;
+  }
   if (r.cenario === 'nao_suportado') {
     return `<tr><td>${r.nDocumento}</td><td colspan="4"><span class="badge badge-ambiguo">Não suportado</span> ${r.motivo}</td><td colspan="2"></td></tr>`;
   }
