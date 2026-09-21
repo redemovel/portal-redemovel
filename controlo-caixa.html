@@ -78,6 +78,12 @@
   details.relatorio-detalhe summary::before { content: '▸ '; }
   details.relatorio-detalhe[open] summary::before { content: '▾ '; }
   details.relatorio-detalhe table { margin-bottom: .9rem; }
+  /* Modal "🧾 Ver documento" (2026-09-19) — reaproveitado na Conta Corrente
+     Vodafone (Master) e no Caixa Dia/Orientação (qualquer papel). */
+  .modal-fundo { display: none; position: fixed; inset: 0; background: rgba(10,30,30,0.55); z-index: 100; align-items: flex-start; justify-content: center; padding: 3vh 1rem; overflow-y: auto; }
+  .modal-fundo.aberto { display: flex; }
+  .modal-caixa { background: var(--white); border-radius: 14px; padding: 1.5rem; max-width: 760px; width: 100%; box-shadow: 0 10px 40px rgba(0,20,20,0.3); }
+  .modal-caixa h2 { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .filtros { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
   .filtros > div { flex: 1; min-width: 140px; }
   .filtros .form-input, .filtros select { margin-bottom: 0; }
@@ -88,6 +94,16 @@
   .abas { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
   .aba-btn { background: var(--white); border: 2px solid var(--gray-light); color: var(--text-muted); border-radius: 10px; padding: .6rem 1.1rem; font-family: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; }
   .aba-btn.ativa { background: var(--teal); border-color: var(--teal); color: var(--white); }
+  /* Sub-separadores dentro de "🔐 Gestão" (2026-09-21) — classe própria
+     (não reaproveita .aba-btn) de propósito: o mudarAba() do separador de
+     topo limpa ".aba-btn.ativa" sempre que se muda de separador principal
+     (Folha/Diverso/Arqueio/Caixa Dia/Gestão); se os botões de Gestão
+     também fossem ".aba-btn", perdiam o destaque "ativo" sempre que se
+     saísse e voltasse a Gestão, mesmo sem mudar de sub-separador. */
+  .sub-abas { margin-bottom: 1.25rem; }
+  .sub-aba-btn { background: var(--white); border: 2px solid var(--gray-light); color: var(--text-muted); border-radius: 10px; padding: .5rem .9rem; font-family: inherit; font-weight: 700; font-size: .78rem; cursor: pointer; }
+  .sub-aba-btn.ativa { background: var(--teal-dark); border-color: var(--teal-dark); color: var(--white); }
+  .gestao-secao { margin-top: 0; }
   .rodape-nota { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
   .relatorio-cabecalho { margin-bottom: 1rem; }
   @media print {
@@ -131,52 +147,21 @@
 <div class="wrap" id="tela-principal" hidden>
 
   <div class="abas">
-    <button class="aba-btn ativa" data-aba="importar" onclick="mudarAba('importar')">📥 Importar ficheiros</button>
-    <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
+    <button class="aba-btn ativa" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
     <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
     <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
     <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Caixa Dia</button>
-    <button class="aba-btn" data-aba="relatorio" onclick="mudarAba('relatorio')">🖨 Relatório contabilidade</button>
-    <button class="aba-btn" data-aba="reconciliacao" onclick="mudarAba('reconciliacao')">🔗 Reconciliação GSV</button>
-    <button class="aba-btn" data-aba="classificacao" onclick="mudarAba('classificacao')">🏷 Classificação de produtos</button>
-    <button class="aba-btn" data-aba="historico" onclick="mudarAba('historico')">🕒 Histórico de importações</button>
-    <button class="aba-btn" data-aba="colaboradores" onclick="mudarAba('colaboradores')">👤 Colaboradores</button>
-    <button class="aba-btn" data-aba="contacorrente" onclick="mudarAba('contacorrente')" hidden>💰 Conta Corrente Vodafone</button>
-  </div>
-
-  <!-- ── Importar ── -->
-  <div class="aba-conteudo" id="aba-importar">
-    <div class="cartao">
-      <h2>Importar ficheiros Vodafone</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os três ficheiros em qualquer ordem.</p>
-      <div class="grelha-import">
-        <div class="caixa-ficheiro">
-          <h4>Relatório de cobranças (CSV)</h4>
-          <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
-          <input type="file" id="ficheiro-cobrancas" accept=".csv">
-          <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
-          <div id="resultado-cobrancas"></div>
-        </div>
-        <div class="caixa-ficheiro">
-          <h4>Invoice GSV (.xls)</h4>
-          <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
-          <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
-          <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
-          <div id="resultado-gsv"></div>
-        </div>
-        <div class="caixa-ficheiro">
-          <h4>Comissões mensais (.xls)</h4>
-          <p>1st_Comissions — ciclo 15→14, reconcilia automaticamente com o GSV.</p>
-          <input type="file" id="ficheiro-comissoes" accept=".xls,.xlsx">
-          <button class="btn" style="width:100%" onclick="importarFicheiro('comissoes')">Importar</button>
-          <div id="resultado-comissoes"></div>
-        </div>
-      </div>
-    </div>
+    <!-- "🔐 Gestão" (2026-09-21) — reúne tudo o que não é trabalho do dia-a-
+         dia de loja (importações, classificação/margens, relatórios,
+         conta corrente Vodafone, tabela comercial, etc.); só visível a
+         Master/Coordenador (ver entrarNoPainel) e reforçado no servidor
+         (lib/router.js, ACCOES_GESTAO) — pedido do Ricardo: "para ter a
+         certeza que não há informação visivel a quem não deve estar". -->
+    <button class="aba-btn" data-aba="gestao" onclick="mudarAba('gestao')" hidden>🔐 Gestão</button>
   </div>
 
   <!-- ── Folha de Caixa ── -->
-  <div class="aba-conteudo" id="aba-folha" hidden>
+  <div class="aba-conteudo" id="aba-folha">
     <div class="cartao">
       <h2>💳 Saldo de numerário por loja</h2>
       <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado na Folha de Caixa mas não altera este saldo.</p>
@@ -340,8 +325,117 @@
     </div>
   </div>
 
-  <!-- ── Relatório contabilidade ── -->
-  <div class="aba-conteudo" id="aba-relatorio" hidden>
+  <!-- ══════════════════════════════════════════════════════════════════
+       🔐 GESTÃO (2026-09-21) — separador único para tudo o que não é o
+       trabalho diário de loja: importações Vodafone, tabela comercial,
+       tipologia de venda, Caixa Mês/relatório contabilidade, Reconciliação
+       GSV, Classificação de produtos, Histórico de importações,
+       Colaboradores (códigos GSV), Conta Corrente Vodafone. Só visível a
+       Master/Coordenador (ver entrarNoPainel) e reforçado no servidor
+       (lib/router.js, ACCOES_GESTAO). Pedido do Ricardo: "para ter a
+       certeza que não há informação visivel a quem não deve estar".
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="aba-conteudo" id="aba-gestao" hidden>
+    <div class="alerta alerta-aviso no-print" style="margin-bottom:1rem">🔐 Área de Gestão — visível apenas a Master e Coordenador.</div>
+    <div class="abas sub-abas">
+      <button class="sub-aba-btn ativa" data-subaba="importar" onclick="mudarSubAbaGestao('importar')">📥 Importar ficheiros</button>
+      <button class="sub-aba-btn" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
+      <button class="sub-aba-btn" data-subaba="tipologia" onclick="mudarSubAbaGestao('tipologia')">🧮 Tipologia de venda</button>
+      <button class="sub-aba-btn" data-subaba="relatorio" onclick="mudarSubAbaGestao('relatorio')">📅 Caixa Mês</button>
+      <button class="sub-aba-btn" data-subaba="reconciliacao" onclick="mudarSubAbaGestao('reconciliacao')">🔗 Reconciliação GSV</button>
+      <button class="sub-aba-btn" data-subaba="classificacao" onclick="mudarSubAbaGestao('classificacao')">🏷 Classificação</button>
+      <button class="sub-aba-btn" data-subaba="historico" onclick="mudarSubAbaGestao('historico')">🕒 Histórico</button>
+      <button class="sub-aba-btn" data-subaba="colaboradores" onclick="mudarSubAbaGestao('colaboradores')">👤 Colaboradores</button>
+      <button class="sub-aba-btn" data-subaba="contacorrente" onclick="mudarSubAbaGestao('contacorrente')" hidden>💰 Conta Corrente Vodafone</button>
+    </div>
+
+    <!-- ── Importar ── -->
+    <div class="gestao-secao" id="aba-importar">
+      <div class="cartao">
+        <h2>Importar ficheiros Vodafone</h2>
+        <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os três ficheiros em qualquer ordem.</p>
+        <div class="grelha-import">
+          <div class="caixa-ficheiro">
+            <h4>Relatório de cobranças (CSV)</h4>
+            <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
+            <input type="file" id="ficheiro-cobrancas" accept=".csv">
+            <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
+            <div id="resultado-cobrancas"></div>
+          </div>
+          <div class="caixa-ficheiro">
+            <h4>Invoice GSV (.xls)</h4>
+            <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
+            <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
+            <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
+            <div id="resultado-gsv"></div>
+          </div>
+          <div class="caixa-ficheiro">
+            <h4>Comissões mensais (.xls)</h4>
+            <p>1st_Comissions — ciclo 15→14, reconcilia automaticamente com o GSV.</p>
+            <input type="file" id="ficheiro-comissoes" accept=".xls,.xlsx">
+            <button class="btn" style="width:100%" onclick="importarFicheiro('comissoes')">Importar</button>
+            <div id="resultado-comissoes"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tabela Comercial (2026-09-21) — tabela de preços/comissões
+         Vodafone (PVP/Clube Viva, à vista/prestações), versionada pela sua
+         própria data de vigência. O ficheiro tem várias folhas (All-in, TV
+         NET VOZ, Acessórios Univ., Outros Acess. Phase Out, Internet
+         Móvel) — só a folha "Equip. e Acess. Proteção" é lida (é a que tem
+         os preços/tectos por Refª SAP); as outras ficam ignoradas por
+         agora. Ver lib/tabelaComercial.js. ── -->
+    <div class="gestao-secao" id="aba-tabelacomercial" hidden>
+      <div class="cartao">
+        <h2>📊 Tabela Comercial Vodafone</h2>
+        <p class="rodape-nota" style="margin-bottom:1rem">Importa o ficheiro .xls que a Vodafone envia (ex.: "Tabela-EquipamentosServicos_LVI.xls") sempre que sai uma versão nova — a data de vigência é lida automaticamente do próprio ficheiro, não precisas de a indicar. Este ficheiro tem várias folhas; só é lida a folha <strong>"Equip. e Acess. Proteção"</strong> (preços PVP/Clube Viva e tectos de comissão por Refª SAP) — as restantes folhas (All-in, TV NET VOZ, Acessórios Univ., etc.) ainda não são usadas.</p>
+        <div class="caixa-ficheiro" style="max-width:420px">
+          <h4>Tabela comercial (.xls)</h4>
+          <input type="file" id="ficheiro-tabelacomercial" accept=".xls,.xlsx">
+          <button class="btn" style="width:100%" onclick="importarTabelaComercialUI()">Importar</button>
+          <div id="resultado-tabelacomercial"></div>
+        </div>
+      </div>
+      <div class="cartao">
+        <h3>Versões importadas</h3>
+        <div class="tabela-scroll">
+          <table>
+            <thead><tr><th>Vigência</th><th>Refªs SAP</th><th>Custos Administrativos</th><th>Ficheiro / importado por</th></tr></thead>
+            <tbody id="corpo-versoes-tabelacomercial"><tr><td colspan="4">A carregar…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tipologia de venda (2026-09-21) — protótipo em validação: cruza
+         cada documento GSV do período com a tabela comercial vigente na
+         data da venda para identificar PVP/Clube Viva, à vista/prestações,
+         e o tecto de comissão aplicável — ou marca "divergente" quando
+         nenhum cenário bate com o valor facturado (para pedir justificação/
+         correcção à Vodafone). Ver lib/tipologiaVenda.js. ── -->
+    <div class="gestao-secao" id="aba-tipologia" hidden>
+      <div class="cartao">
+        <h2>🧮 Tipologia de venda — PVP/Clube Viva, à vista/prestações</h2>
+        <p class="rodape-nota" style="margin-bottom:1rem">Para cada documento GSV do período, soma a linha do produto + Custos Administrativos (quando existe) e testa contra a tabela comercial vigente na data da venda. Precisa de pelo menos uma versão da Tabela Comercial já importada. Ainda em validação — não é usado (por agora) na reconciliação diária nem no fecho de mês.</p>
+        <div class="filtros">
+          <div><label class="form-label">De</label><input type="date" class="form-input" id="tip-de"></div>
+          <div><label class="form-label">Até</label><input type="date" class="form-input" id="tip-ate"></div>
+          <div><button class="btn" onclick="analisarTipologiaUI()">Analisar</button></div>
+        </div>
+        <div class="resumo-grelha" id="resumo-tipologia"></div>
+        <div class="tabela-scroll">
+          <table>
+            <thead><tr><th>Nº Documento</th><th>Refª SAP / Produto</th><th>Data</th><th>Facturado</th><th>Cenário</th><th>Tecto S/IVA</th><th>Nota</th></tr></thead>
+            <tbody id="corpo-tipologia"><tr><td colspan="7">Escolhe o período e clica em "Analisar".</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Relatório contabilidade ── -->
+    <div class="gestao-secao" id="aba-relatorio" hidden>
     <!-- ── Caixa Mês (Fase 3b, 2026-09-17; fundido com o antigo "Gerar
          relatório entre datas" em 2026-09-17 a pedido do Ricardo — eram
          duas coisas a fazer praticamente o mesmo trabalho na mesma tab,
@@ -403,7 +497,7 @@
   </div>
 
   <!-- ── Reconciliação GSV ── -->
-  <div class="aba-conteudo" id="aba-reconciliacao" hidden>
+    <div class="gestao-secao" id="aba-reconciliacao" hidden>
     <div class="cartao">
       <h2>Reconciliação GSV — cobrado vs. comissão vs. valor líquido</h2>
       <div class="filtros">
@@ -446,7 +540,7 @@
   </div>
 
   <!-- ── Classificação ── -->
-  <div class="aba-conteudo" id="aba-classificacao" hidden>
+    <div class="gestao-secao" id="aba-classificacao" hidden>
     <div class="cartao">
       <h2>Classificação automática de produtos (Refª SAP → categoria/margem)</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">Aprendida a partir das comissões confirmadas — sem necessidade de classificação manual, na maioria dos casos. <button class="btn btn-secundario" style="padding:.3rem .7rem;font-size:.75rem" onclick="carregarClassificacao()">Atualizar</button></p>
@@ -517,7 +611,7 @@
   </div>
 
   <!-- ── Histórico ── -->
-  <div class="aba-conteudo" id="aba-historico" hidden>
+    <div class="gestao-secao" id="aba-historico" hidden>
     <div class="cartao">
       <h2>Histórico de importações</h2>
       <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarHistorico()">Atualizar</button>
@@ -553,13 +647,13 @@
   </div>
 
   <!-- ── Colaboradores (códigos VDF/GSV) ── -->
-  <div class="aba-conteudo" id="aba-colaboradores" hidden>
+    <div class="gestao-secao" id="aba-colaboradores" hidden>
     <div class="cartao">
       <h2>👤 Colaboradores — códigos VDF/GSV e nomes alternativos</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
       <p class="rodape-nota" style="margin-bottom:1rem">O ficheiro de Cobranças, esse, já traz um nome legível — mas às vezes com uma grafia diferente da pessoa (ex.: "Ana Lopes" em vez do nome completo "Ana Filipa Calhau Lopes"), o que faz aparecer a mesma pessoa duas vezes. Escreve aqui essas outras grafias, em "Nomes alternativos", para ficarem sempre associadas ao colaborador certo.</p>
       <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve os valores e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga o que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
-      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), a forma mais simples enquanto ainda estás em testes é associar tudo aqui primeiro e só depois usar o "⚠️ Reset de testes" (tab "🕒 Histórico de importações") e reimportar os ficheiros Vodafone de novo.</p>
+      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), a forma mais simples enquanto ainda estás em testes é associar tudo aqui primeiro e só depois usar o "⚠️ Reset de testes" (🔐 Gestão → 🕒 Histórico) e reimportar os ficheiros Vodafone de novo.</p>
       <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">🔄 Recarregar lista</button>
       <div class="tabela-scroll">
         <table>
@@ -571,12 +665,13 @@
     </div>
   </div>
 
-  <!-- ── Conta Corrente Vodafone (Fase 3+4, 2026-09-18) — ingestão das
-       referências de pagamento por e-mail, reconciliação diária estimada, e
-       geração do ficheiro PSM para o Millennium BCP. Só Master (pedido do
-       Ricardo, especificação secção 8: "gestão da conta corrente central...
-       exportação BCP" é só do Master). ── -->
-  <div class="aba-conteudo" id="aba-contacorrente" hidden>
+    <!-- ── Conta Corrente Vodafone (Fase 3+4, 2026-09-18) — ingestão das
+         referências de pagamento por e-mail, reconciliação diária estimada, e
+         geração do ficheiro PSM para o Millennium BCP. Dentro de "Gestão",
+         mas com uma restrição AINDA mais apertada (só Master, não
+         Coordenador — pedido do Ricardo, especificação secção 8: "gestão
+         da conta corrente central... exportação BCP" é só do Master). ── -->
+    <div class="gestao-secao" id="aba-contacorrente" hidden>
     <div class="cartao">
       <h2>💰 Conta Corrente Vodafone — referências por pagar</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">Referências de Carregamentos/Faturas (Entidade 11470) e GSV/Stock Vodafone (Entidade 11814) recebidas por e-mail da Vodafone. A coluna "Reconciliação" é só uma estimativa — para GSV fica sujeita à comissão real do mês, que só chega confirmada no ficheiro "1ª Comissão" — o valor pago é sempre o Montante que a própria referência trouxe, nunca um valor calculado aqui.</p>
@@ -598,7 +693,19 @@
       <div id="cc-conta-corrente" style="margin-top:1rem"></div>
     </div>
   </div>
+  <!-- ── fim "🔐 Gestão" ── -->
+  </div>
 
+</div>
+
+<!-- ── Modal "🧾 Ver documento" (2026-09-19) ── -->
+<div class="modal-fundo" id="modal-documento" onclick="if(event.target===this) fecharModalDocumento()">
+  <div class="modal-caixa">
+    <h2><span id="modal-documento-titulo">Documento</span>
+      <button class="btn btn-secundario" style="padding:.3rem .7rem;font-size:.8rem" onclick="fecharModalDocumento()">✕ Fechar</button>
+    </h2>
+    <div id="modal-documento-corpo"><span class="spinner"></span> A carregar…</div>
+  </div>
 </div>
 
 <script>
@@ -696,18 +803,20 @@ async function entrarNoPainel() {
     if (r.ok) { SESSAO.nome = r.nome; SESSAO.role = r.role; sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO)); }
   }
   document.getElementById('nome-utilizador').textContent = SESSAO.nome || SESSAO.username;
-  // Reconciliação GSV é só para Master/Coordenador (pedido do Ricardo,
-  // 2026-09-17) — a acção já recusa no servidor; isto é só para não mostrar
-  // a tab a quem não pode usá-la.
-  const btnReconciliacao = document.querySelector('.aba-btn[data-aba="reconciliacao"]');
-  if (btnReconciliacao) btnReconciliacao.hidden = !ehMasterOuCoordenador();
+  // "🔐 Gestão" (2026-09-21) — só Master/Coordenador vêem sequer o
+  // separador; a barreira a sério é sempre no servidor (lib/router.js,
+  // ACCOES_GESTAO), isto é só para não mostrar a quem não pode usar.
+  const btnGestao = document.querySelector('.aba-btn[data-aba="gestao"]');
+  if (btnGestao) btnGestao.hidden = !ehMasterOuCoordenador();
+  // Dentro de Gestão, a Conta Corrente Vodafone continua com uma
+  // restrição AINDA mais apertada — só Master, não Coordenador
+  // (especificação, secção 8).
+  const subBtnContaCorrente = document.querySelector('.sub-aba-btn[data-subaba="contacorrente"]');
+  if (subBtnContaCorrente) subBtnContaCorrente.hidden = !ehMaster();
   // Reset de testes — só Master (pedido do Ricardo, 2026-09-17); a acção já
   // recusa no servidor, isto é só para não mostrar a quem não pode usar.
   const cartaoReset = document.getElementById('cartao-reset-testes');
   if (cartaoReset) cartaoReset.hidden = !ehMaster();
-  // Conta Corrente Vodafone — só Master (especificação, secção 8).
-  const btnContaCorrente = document.querySelector('.aba-btn[data-aba="contacorrente"]');
-  if (btnContaCorrente) btnContaCorrente.hidden = !ehMaster();
   // Correcção manual de comissões e alteração de percentagem por categoria
   // (pedido do Ricardo, 2026-09-19) — só Master; a acção já recusa no
   // servidor, isto é só para não mostrar a quem não pode usar.
@@ -716,7 +825,9 @@ async function entrarNoPainel() {
   const cartaoRefSapManual = document.getElementById('cartao-refsap-manual');
   if (cartaoRefSapManual) cartaoRefSapManual.hidden = !ehMaster();
   popularSelectsLojas();
-  await Promise.all([carregarClassificacao(), carregarHistorico()]);
+  // Classificação/Histórico deixaram de carregar sempre para toda a gente
+  // (2026-09-21) — agora vivem dentro de "Gestão" e só carregam quando
+  // Master/Coordenador abre o respectivo sub-separador (mudarSubAbaGestao).
 }
 
 function popularSelectsLojas() {
@@ -757,17 +868,43 @@ function mudarAba(nome) {
     // em "🔍 Pesquisar".
     if (!document.getElementById('cd-dia').value) document.getElementById('cd-dia').value = hojeISO();
   }
-  if (nome === 'relatorio' && !ABAS_CARREGADAS.has('relatorio')) {
-    ABAS_CARREGADAS.add('relatorio');
-    // Só pré-preenche o mês (nenhuma leitura) — "🔍 Ver mês" é que pesquisa
-    // e gera o relatório, mesma regra do resto da página. O período De/Até
-    // do relatório impresso é calculado a partir deste mês (verMesCaixa()),
-    // já não se escolhe à parte.
+}
+
+// ═══ Sub-abas dentro de "🔐 Gestão" (2026-09-21) ═══
+// Mesma mecânica de mudarAba() acima, mas escopada aos elementos
+// ".gestao-secao"/".sub-aba-btn" (não ".aba-conteudo"/".aba-btn") — ver a
+// nota na definição de ".sub-aba-btn" no <style> sobre porque não se
+// reaproveitam as mesmas classes.
+let GESTAO_SUBABAS_CARREGADAS = new Set();
+function mudarSubAbaGestao(nome) {
+  document.querySelectorAll('.gestao-secao').forEach(el => el.hidden = true);
+  document.querySelectorAll('.sub-aba-btn').forEach(el => el.classList.remove('ativa'));
+  document.getElementById('aba-' + nome).hidden = false;
+  document.querySelector('.sub-aba-btn[data-subaba="' + nome + '"]').classList.add('ativa');
+  // Mesma regra do resto da página: nada é processado/pesquisado sozinho
+  // ao abrir um sub-separador, só o essencial vem pré-preenchido.
+  if (nome === 'tabelacomercial' && !GESTAO_SUBABAS_CARREGADAS.has('tabelacomercial')) {
+    GESTAO_SUBABAS_CARREGADAS.add('tabelacomercial');
+    carregarVersoesTabelaComercial();
+  }
+  if (nome === 'relatorio' && !GESTAO_SUBABAS_CARREGADAS.has('relatorio')) {
+    GESTAO_SUBABAS_CARREGADAS.add('relatorio');
     if (!document.getElementById('cm-mes').value) document.getElementById('cm-mes').value = mesAtualISO();
   }
-  if (nome === 'colaboradores' && !ABAS_CARREGADAS.has('colaboradores')) { ABAS_CARREGADAS.add('colaboradores'); carregarColaboradoresGSV(); }
-  if (nome === 'contacorrente' && !ABAS_CARREGADAS.has('contacorrente')) {
-    ABAS_CARREGADAS.add('contacorrente');
+  if (nome === 'classificacao' && !GESTAO_SUBABAS_CARREGADAS.has('classificacao')) {
+    GESTAO_SUBABAS_CARREGADAS.add('classificacao');
+    carregarClassificacao();
+  }
+  if (nome === 'historico' && !GESTAO_SUBABAS_CARREGADAS.has('historico')) {
+    GESTAO_SUBABAS_CARREGADAS.add('historico');
+    carregarHistorico();
+  }
+  if (nome === 'colaboradores' && !GESTAO_SUBABAS_CARREGADAS.has('colaboradores')) {
+    GESTAO_SUBABAS_CARREGADAS.add('colaboradores');
+    carregarColaboradoresGSV();
+  }
+  if (nome === 'contacorrente' && !GESTAO_SUBABAS_CARREGADAS.has('contacorrente')) {
+    GESTAO_SUBABAS_CARREGADAS.add('contacorrente');
     carregarReferenciasPendentes();
     carregarContaCorrente();
   }
@@ -805,7 +942,7 @@ async function importarFicheiro(tipo) {
       // Ricardo, 2026-09-17); refresca o histórico para o mostrar.
       let htmlErro = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao importar.') + '</div>';
       if (r.colaboradoresNaoReconhecidos && r.colaboradoresNaoReconhecidos.length) {
-        htmlErro += '<div class="alerta alerta-erro">Vai a "👤 Colaboradores" e associa: <strong>' + r.colaboradoresNaoReconhecidos.map(c => `"${c}"`).join(', ') + '</strong> — depois volta a escolher e importar este mesmo ficheiro.</div>';
+        htmlErro += '<div class="alerta alerta-erro">Vai a "🔐 Gestão → 👤 Colaboradores" e associa: <strong>' + r.colaboradoresNaoReconhecidos.map(c => `"${c}"`).join(', ') + '</strong> — depois volta a escolher e importar este mesmo ficheiro.</div>';
       }
       resultadoEl.innerHTML = htmlErro;
       carregarHistorico();
@@ -829,6 +966,97 @@ async function importarFicheiro(tipo) {
   } catch (err) {
     resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (err.message || 'Erro inesperado.') + '</div>';
   }
+}
+
+// ═══ Tabela Comercial Vodafone (2026-09-21) ═══
+async function importarTabelaComercialUI() {
+  const inputEl = document.getElementById('ficheiro-tabelacomercial');
+  const resultadoEl = document.getElementById('resultado-tabelacomercial');
+  const ficheiro = inputEl.files && inputEl.files[0];
+  if (!ficheiro) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Escolhe o ficheiro da tabela primeiro.</div>'; return; }
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A importar…</div>';
+  try {
+    const conteudoBase64 = await lerFicheiroBase64(ficheiro);
+    const r = await chamarApi({ acao: 'importarTabelaComercial', conteudoBase64, nomeFicheiro: ficheiro.name });
+    if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao importar.') + '</div>'; return; }
+    let html = `<div class="alerta alerta-ok">Tabela importada — vigência ${r.dataVersao}, ${r.nRefs} Refªs SAP, Custos Administrativos ${formatarEuro(r.custosAdministrativosCIVA)}.</div>`;
+    if (r.avisos && r.avisos.length) {
+      html += `<div class="alerta alerta-aviso">${r.avisos.length} aviso(s):<br>${r.avisos.slice(0, 10).map(a => '• ' + a).join('<br>')}${r.avisos.length > 10 ? '<br>…' : ''}</div>`;
+    }
+    resultadoEl.innerHTML = html;
+    inputEl.value = '';
+    carregarVersoesTabelaComercial();
+  } catch (err) {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (err.message || 'Erro inesperado.') + '</div>';
+  }
+}
+
+async function carregarVersoesTabelaComercial() {
+  const corpo = document.getElementById('corpo-versoes-tabelacomercial');
+  const r = await chamarApi({ acao: 'listarVersoesTabelaComercial' });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="4">Erro: ' + (r.erro || '') + '</td></tr>'; return; }
+  if (!r.versoes.length) { corpo.innerHTML = '<tr><td colspan="4">Nenhuma tabela importada ainda.</td></tr>'; return; }
+  corpo.innerHTML = r.versoes.map(v => `<tr>
+    <td>${v.dataVersao}</td><td>${v.nRefs}</td><td>${formatarEuro(v.custosAdministrativosCIVA)}</td>
+    <td>${v.ficheiroNome || '—'} · ${v.importadoPor || '—'}</td>
+  </tr>`).join('');
+}
+
+// ═══ Tipologia de venda (2026-09-21, protótipo em validação) ═══
+const CENARIO_ROTULO = {
+  pvp_vista: 'PVP à vista', cv_vista: 'Clube Viva à vista',
+  pvp_prestacoes: 'PVP a prestações', cv_prestacoes: 'Clube Viva a prestações',
+};
+
+async function analisarTipologiaUI() {
+  const de = document.getElementById('tip-de').value;
+  const ate = document.getElementById('tip-ate').value;
+  const corpo = document.getElementById('corpo-tipologia');
+  const resumo = document.getElementById('resumo-tipologia');
+  if (!de || !ate) { corpo.innerHTML = '<tr><td colspan="7">Escolhe o período (De/Até).</td></tr>'; return; }
+  corpo.innerHTML = '<tr><td colspan="7"><span class="spinner"></span>A analisar…</td></tr>';
+  resumo.innerHTML = '';
+  const r = await chamarApi({ acao: 'analisarTipologiaPeriodoGSV', dataInicio: de, dataFim: ate });
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="7">Erro: ' + (r.erro || '') + '</td></tr>'; return; }
+  resumo.innerHTML = `
+    <div class="resumo-item"><div class="valor">${r.total}</div><div class="rotulo">Documentos</div></div>
+    <div class="resumo-item"><div class="valor">${r.confirmados.length}</div><div class="rotulo">Confirmados</div></div>
+    <div class="resumo-item"><div class="valor">${r.divergentes.length}</div><div class="rotulo">Divergentes</div></div>
+    <div class="resumo-item"><div class="valor">${r.naoSuportados.length}</div><div class="rotulo">Não suportados</div></div>
+  `;
+  if (!r.resultados.length) { corpo.innerHTML = '<tr><td colspan="7">Sem documentos GSV neste período.</td></tr>'; return; }
+  corpo.innerHTML = r.resultados.map(linhaTipologia).join('');
+}
+
+function linhaTipologia(r) {
+  if (!r.ok) return `<tr><td>${r.erro || 'Erro'}</td><td colspan="6"></td></tr>`;
+  const aproximada = r.tabelaAproximada ? ' <span title="A única tabela disponível é de depois da venda — usada como aproximação.">⚠ tabela aproximada</span>' : '';
+  if (r.cenario === 'nao_suportado') {
+    return `<tr><td>${r.nDocumento}</td><td colspan="4"><span class="badge badge-ambiguo">Não suportado</span> ${r.motivo}</td><td colspan="2"></td></tr>`;
+  }
+  if (r.cenario === 'divergente') {
+    const pista = r.maisProximo
+      ? `mais próximo: ${CENARIO_ROTULO[r.maisProximo.cenario] || r.maisProximo.cenario} (${formatarEuro(r.maisProximo.valor)}, dif. ${formatarEuro(r.maisProximo.diferenca)})`
+      : (r.motivo || '');
+    return `<tr>
+      <td>${r.nDocumento}</td>
+      <td>${r.refSAP}${r.nomeProduto ? ' — ' + r.nomeProduto : ''}</td>
+      <td>${r.dataVenda}</td>
+      <td>${formatarEuro(r.valorFaturadoCIVA)}</td>
+      <td colspan="2"><span class="badge badge-ambiguo">Divergente</span> ${pista}</td>
+      <td>${aproximada}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td>${r.nDocumento}</td>
+    <td>${r.refSAP} — ${r.nomeProduto || ''}</td>
+    <td>${r.dataVenda}</td>
+    <td>${formatarEuro(r.valorFaturadoCIVA)}</td>
+    <td><span class="badge badge-ok">${CENARIO_ROTULO[r.cenario] || r.cenario}</span></td>
+    <td>${formatarEuro(r.comissaoCapadaSIVA)}</td>
+    <td>${aproximada}</td>
+  </tr>`;
 }
 
 // ═══ Caixa Dia (Conferência de Caixa por Colaborador, Fase 3a) ═══
@@ -974,10 +1202,14 @@ function mostrarResumoColaboradores() {
     } else {
       estado = '<span class="rodape-nota" style="color:#b3000a">✖ Apurado com erro</span>';
     }
+    const colabJs = l.colaborador.replace(/'/g, "\\'");
     return `<tr>
       <td>${l.colaborador}</td><td>${formatarEuro(l.gsv)}</td><td>${formatarEuro(l.carregamentos)}</td>
       <td>${formatarEuro(l.total)}</td><td>${formatarEuro(l.numerario)}</td><td>${formatarEuro(l.atm)}</td>
-      <td>${estado}</td>
+      <td style="display:flex;gap:.3rem;flex-wrap:wrap">
+        <button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="abrirModalLinhasColaboradorDia('${colabJs}')">🧾 Documentos</button>
+        ${estado}
+      </td>
     </tr>`;
   }).join('') : '<tr><td colspan="7">Sem movimentos para esta loja/dia.</td></tr>';
 }
@@ -1843,12 +2075,13 @@ function detalheLinhasExcluidas(rec) {
   const corpo = linhas.map(l => `<tr>
     <td>${l.nDocumento || '—'}</td><td>${l.loja || '—'}</td><td>${l.colaborador || '—'}</td>
     <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
+    <td><button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${String(l.nDocumento || '').replace(/'/g, "\\'")}')">🧾 Ver documento</button></td>
   </tr>`).join('');
   return `<details class="relatorio-detalhe" style="margin:.3rem 0 0;border:none;padding:0">
     <summary style="padding:.15rem 0;font-size:.74rem;color:var(--text-muted)">💤 ${rec.linhasExcluidas} linha(s) excluída(s) da margem (não comissionável)</summary>
     <div class="tabela-scroll"><table style="margin:.3rem 0 .1rem">
-      <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th></tr></thead>
-      <tbody>${corpo || '<tr><td colspan="6">—</td></tr>'}</tbody>
+      <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th><th></th></tr></thead>
+      <tbody>${corpo || '<tr><td colspan="7">—</td></tr>'}</tbody>
     </table></div>
   </details>`;
 }
@@ -1858,9 +2091,11 @@ function detalheLinhasExcluidas(rec) {
 // "ensinar" a percentagem à Refª SAP para os próximos) sem esperar pela "1ª
 // Comissão" mensal. Só visível para Master — a acção já recusa no servidor.
 function linhaCorrigir(l) {
-  if (!ehMaster()) return '';
+  const nDocJs = String(l.nDocumento || '').replace(/'/g, "\\'");
+  const botaoVer = `<button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${nDocJs}')">🧾 Ver documento</button>`;
+  if (!ehMaster()) return `<td>${botaoVer}</td>`;
   const idJs = String(l.id).replace(/'/g, "\\'");
-  return `<td><button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="mostrarFormCorrigir('${idJs}')">✏️ Corrigir</button></td>`;
+  return `<td style="display:flex;gap:.3rem;flex-wrap:wrap">${botaoVer}<button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="mostrarFormCorrigir('${idJs}')">✏️ Corrigir</button></td>`;
 }
 
 function formCorrigir(l) {
@@ -1943,6 +2178,88 @@ async function confirmarCorrecaoDocumento(id, refSAP) {
   // classificar") — recarrega a lista para reflectir isso já no ecrã.
   await carregarReferenciasPendentes();
   if (ensinarRegra) carregarClassificacao();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Modal "🧾 Ver documento" (pedido do Ricardo, 2026-09-19, depois de mostrar
+// o ecrã de Faturação do sistema antigo — onde um documento pode ter mais
+// do que uma linha, ex.: um IPHONE + uma linha de Custos Administrativos, e
+// dava para ver o IMEI, desconto e preço S/IVA de cada uma). Usado em dois
+// sítios: (1) Conta Corrente Vodafone, por Nº Documento — só Master, porque
+// é aí que a tab já está; (2) Caixa Dia/Orientação, por colaborador+dia —
+// qualquer papel, porque é a mesma loja/dia que o próprio já vê agregado.
+// ═══════════════════════════════════════════════════════════════════════════
+function fecharModalDocumento() {
+  document.getElementById('modal-documento').classList.remove('aberto');
+}
+
+function linhasDocumentoParaTabela(linhas, mostrarNDocumento) {
+  if (!linhas.length) return '<p class="rodape-nota">Sem linhas.</p>';
+  return `<div class="tabela-scroll"><table style="margin:0">
+    <thead><tr>${mostrarNDocumento ? '<th>Nº Doc.</th>' : ''}<th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th><th>Preço S/IVA</th><th>Desconto</th><th>IMEI/MSISDN</th><th>Método pagamento</th></tr></thead>
+    <tbody>${linhas.map(l => `<tr>
+      ${mostrarNDocumento ? `<td>${l.nDocumento || '—'}</td>` : ''}
+      <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
+      <td>${l.precoSIVA !== undefined && l.precoSIVA !== null && l.precoSIVA !== '' ? formatarEuro(l.precoSIVA) : '—'}</td>
+      <td>${l.desconto ? formatarEuro(l.desconto) : '—'}</td><td>${l.imei && l.imei !== '-' ? l.imei : '—'}</td>
+      <td>${l.metodoPagamento || '—'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+async function abrirModalDocumento(nDocumento) {
+  const modal = document.getElementById('modal-documento');
+  const titulo = document.getElementById('modal-documento-titulo');
+  const corpo = document.getElementById('modal-documento-corpo');
+  titulo.textContent = `Documento ${nDocumento}`;
+  corpo.innerHTML = '<span class="spinner"></span> A carregar…';
+  modal.classList.add('aberto');
+
+  const r = await chamarApi({ acao: 'listarLinhasDocumentoGSV', nDocumento });
+  if (!r.ok) { corpo.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o documento.') + '</div>'; return; }
+  if (!r.linhas.length) { corpo.innerHTML = '<p class="rodape-nota">Nenhuma linha encontrada para este documento.</p>'; return; }
+
+  const primeira = r.linhas[0];
+  const total = r.linhas.reduce((s, l) => s + (Number(l.totalCIVA) || 0), 0);
+  corpo.innerHTML = `
+    <p class="rodape-nota" style="margin-bottom:.75rem">${primeira.loja || '—'} · ${primeira.colaborador || '—'} · ${primeira.dataHora || '—'}${primeira.tipo === 'Devoluções' ? ' · <strong style="color:#b3000a">Devolução</strong>' : ''}</p>
+    ${linhasDocumentoParaTabela(r.linhas)}
+    <p class="rodape-nota" style="margin-top:.75rem"><strong>Total do documento: ${formatarEuro(total)}</strong> (${r.linhas.length} linha(s))</p>
+  `;
+}
+
+// Caixa Dia/Orientação — "🧾 Documentos" por colaborador: mostra as linhas
+// GSV + Carregamentos desse colaborador nesse dia (loja/dia já escolhidos
+// no topo da página).
+async function abrirModalLinhasColaboradorDia(colaborador) {
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const modal = document.getElementById('modal-documento');
+  const titulo = document.getElementById('modal-documento-titulo');
+  const corpo = document.getElementById('modal-documento-corpo');
+  titulo.textContent = `${colaborador} — ${dia}`;
+  corpo.innerHTML = '<span class="spinner"></span> A carregar…';
+  modal.classList.add('aberto');
+
+  const r = await chamarApi({ acao: 'listarLinhasColaboradorDia', loja, colaborador, dia });
+  if (!r.ok) { corpo.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
+  if (!r.linhas.length) { corpo.innerHTML = '<p class="rodape-nota">Sem movimentos para este colaborador neste dia.</p>'; return; }
+
+  const linhasGSV = r.linhas.filter(l => l.origem === 'gsv');
+  const linhasCobrancas = r.linhas.filter(l => l.origem === 'carregamentos');
+  let html = '';
+  if (linhasGSV.length) {
+    html += `<h3 style="margin-top:0">GSV (equipamento/acessórios/serviços)</h3>${linhasDocumentoParaTabela(linhasGSV, true)}`;
+  }
+  if (linhasCobrancas.length) {
+    html += `<h3>Carregamentos</h3><div class="tabela-scroll"><table style="margin:0">
+      <thead><tr><th>Nº Fatura/Voucher</th><th>Tipo</th><th>Método pagamento</th><th>Montante</th></tr></thead>
+      <tbody>${linhasCobrancas.map(l => `<tr>
+        <td>${l.nDocumento || '—'}</td><td>${l.tipo || '—'}</td><td>${l.metodoPagamento || '—'}</td><td>${formatarEuro(l.montante)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+  corpo.innerHTML = html;
 }
 
 function mostrarReferenciasPendentes() {
