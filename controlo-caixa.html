@@ -408,8 +408,8 @@
         <h3>Versões importadas</h3>
         <div class="tabela-scroll">
           <table>
-            <thead><tr><th>Vigência</th><th>Refªs SAP</th><th>Custos Administrativos</th><th>Ficheiro / importado por</th></tr></thead>
-            <tbody id="corpo-versoes-tabelacomercial"><tr><td colspan="4">A carregar…</td></tr></tbody>
+            <thead><tr><th>Vigência</th><th>Refªs SAP</th><th>Custos Administrativos</th><th>Ficheiro / importado por</th><th>Ações</th></tr></thead>
+            <tbody id="corpo-versoes-tabelacomercial"><tr><td colspan="5">A carregar…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1035,12 +1035,24 @@ async function importarTabelaComercialUI() {
 async function carregarVersoesTabelaComercial() {
   const corpo = document.getElementById('corpo-versoes-tabelacomercial');
   const r = await chamarApi({ acao: 'listarVersoesTabelaComercial' });
-  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="4">Erro: ' + (r.erro || '') + '</td></tr>'; return; }
-  if (!r.versoes.length) { corpo.innerHTML = '<tr><td colspan="4">Nenhuma tabela importada ainda.</td></tr>'; return; }
+  if (!r.ok) { corpo.innerHTML = '<tr><td colspan="5">Erro: ' + (r.erro || '') + '</td></tr>'; return; }
+  if (!r.versoes.length) { corpo.innerHTML = '<tr><td colspan="5">Nenhuma tabela importada ainda.</td></tr>'; return; }
   corpo.innerHTML = r.versoes.map(v => `<tr>
     <td>${v.dataVersao}</td><td>${v.nRefs}</td><td>${formatarEuro(v.custosAdministrativosCIVA)}</td>
     <td>${v.ficheiroNome || '—'} · ${v.importadoPor || '—'}</td>
+    <td>${ehMaster() ? `<button class="btn btn-secundario" style="padding:.25rem .6rem;font-size:.72rem" onclick="apagarVersaoTabelaComercialUI('${v.dataVersao}')">🗑 Apagar</button>` : '—'}</td>
   </tr>`).join('');
+}
+
+// Apagar uma versão inteira (2026-09-23) — só Master, é destrutivo. Pedido
+// do Ricardo depois de testar a correcção dos avisos da importação: tentou
+// reimportar o mesmo ficheiro corrigido para a mesma vigência e foi
+// bloqueado por já existir ("apaga-a primeiro"); perguntou "como apago?".
+async function apagarVersaoTabelaComercialUI(dataVersao) {
+  if (!confirm(`Apagar TODA a tabela comercial com vigência ${dataVersao} (todas as Refªs SAP dessa versão)?\n\nUsa isto só quando o ficheiro importado tinha um erro e precisas de reimportar a mesma vigência — não é para uso normal.`)) return;
+  const r = await chamarApi({ acao: 'apagarVersaoTabelaComercial', dataVersao });
+  if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
+  await carregarVersoesTabelaComercial();
 }
 
 // ═══ Tipologia de venda (2026-09-21, protótipo em validação) ═══
