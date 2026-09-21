@@ -151,9 +151,17 @@
     <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
     <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
     <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Caixa Dia</button>
+    <!-- "📥 Importar" (2026-09-21) — correcção do Ricardo depois de testar a
+         reorganização em "Gestão": "Importação de Relatório de cobranças
+         (CSV) e Invoice GSV (.xls), PODEM E DEVEM SER EFECTUADOS PELOAS
+         ASSISTENTES DE LOJA. Portanto, disponível a todos" — não é uma
+         função de gestão, é trabalho do dia-a-dia da loja, por isso fica
+         fora de "Gestão" e visível a todos os papéis (tal como o resto
+         desta barra). -->
+    <button class="aba-btn" data-aba="importar" onclick="mudarAba('importar')">📥 Importar</button>
     <!-- "🔐 Gestão" (2026-09-21) — reúne tudo o que não é trabalho do dia-a-
-         dia de loja (importações, classificação/margens, relatórios,
-         conta corrente Vodafone, tabela comercial, etc.); só visível a
+         dia de loja (classificação/margens, relatórios, conta corrente
+         Vodafone, tabela comercial, comissões mensais, etc.); só visível a
          Master/Coordenador (ver entrarNoPainel) e reforçado no servidor
          (lib/router.js, ACCOES_GESTAO) — pedido do Ricardo: "para ter a
          certeza que não há informação visivel a quem não deve estar". -->
@@ -325,6 +333,34 @@
     </div>
   </div>
 
+  <!-- ── Importar ficheiros Vodafone (2026-09-21) — Relatório de cobranças
+       e Invoice GSV: trabalho do dia-a-dia da loja, aberto a todos os
+       papéis (ver nota junto ao botão desta tab). "Comissões mensais"
+       (relatório da Vodafone para reconciliação) fica dentro de "🔐 Gestão"
+       → "🔗 Reconciliação GSV" — esse sim é trabalho de gestão. ── -->
+  <div class="aba-conteudo" id="aba-importar" hidden>
+    <div class="cartao">
+      <h2>Importar ficheiros Vodafone</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os dois ficheiros em qualquer ordem.</p>
+      <div class="grelha-import">
+        <div class="caixa-ficheiro">
+          <h4>Relatório de cobranças (CSV)</h4>
+          <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
+          <input type="file" id="ficheiro-cobrancas" accept=".csv">
+          <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
+          <div id="resultado-cobrancas"></div>
+        </div>
+        <div class="caixa-ficheiro">
+          <h4>Invoice GSV (.xls)</h4>
+          <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
+          <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
+          <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
+          <div id="resultado-gsv"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════════════════════════════════════════════════════════
        🔐 GESTÃO (2026-09-21) — separador único para tudo o que não é o
        trabalho diário de loja: importações Vodafone, tabela comercial,
@@ -338,8 +374,7 @@
   <div class="aba-conteudo" id="aba-gestao" hidden>
     <div class="alerta alerta-aviso no-print" style="margin-bottom:1rem">🔐 Área de Gestão — visível apenas a Master e Coordenador.</div>
     <div class="abas sub-abas">
-      <button class="sub-aba-btn ativa" data-subaba="importar" onclick="mudarSubAbaGestao('importar')">📥 Importar ficheiros</button>
-      <button class="sub-aba-btn" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
+      <button class="sub-aba-btn ativa" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
       <button class="sub-aba-btn" data-subaba="tipologia" onclick="mudarSubAbaGestao('tipologia')">🧮 Tipologia de venda</button>
       <button class="sub-aba-btn" data-subaba="relatorio" onclick="mudarSubAbaGestao('relatorio')">📅 Caixa Mês</button>
       <button class="sub-aba-btn" data-subaba="reconciliacao" onclick="mudarSubAbaGestao('reconciliacao')">🔗 Reconciliação GSV</button>
@@ -349,48 +384,19 @@
       <button class="sub-aba-btn" data-subaba="contacorrente" onclick="mudarSubAbaGestao('contacorrente')" hidden>💰 Conta Corrente Vodafone</button>
     </div>
 
-    <!-- ── Importar ── -->
-    <div class="gestao-secao" id="aba-importar">
-      <div class="cartao">
-        <h2>Importar ficheiros Vodafone</h2>
-        <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os três ficheiros em qualquer ordem.</p>
-        <div class="grelha-import">
-          <div class="caixa-ficheiro">
-            <h4>Relatório de cobranças (CSV)</h4>
-            <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
-            <input type="file" id="ficheiro-cobrancas" accept=".csv">
-            <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
-            <div id="resultado-cobrancas"></div>
-          </div>
-          <div class="caixa-ficheiro">
-            <h4>Invoice GSV (.xls)</h4>
-            <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
-            <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
-            <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
-            <div id="resultado-gsv"></div>
-          </div>
-          <div class="caixa-ficheiro">
-            <h4>Comissões mensais (.xls)</h4>
-            <p>1st_Comissions — ciclo 15→14, reconcilia automaticamente com o GSV.</p>
-            <input type="file" id="ficheiro-comissoes" accept=".xls,.xlsx">
-            <button class="btn" style="width:100%" onclick="importarFicheiro('comissoes')">Importar</button>
-            <div id="resultado-comissoes"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ── Tabela Comercial (2026-09-21) — tabela de preços/comissões
          Vodafone (PVP/Clube Viva, à vista/prestações), versionada pela sua
-         própria data de vigência. O ficheiro tem várias folhas (All-in, TV
-         NET VOZ, Acessórios Univ., Outros Acess. Phase Out, Internet
-         Móvel) — só a folha "Equip. e Acess. Proteção" é lida (é a que tem
-         os preços/tectos por Refª SAP); as outras ficam ignoradas por
-         agora. Ver lib/tabelaComercial.js. ── -->
-    <div class="gestao-secao" id="aba-tabelacomercial" hidden>
+         própria data de vigência. O ficheiro tem várias folhas — por agora
+         são lidas "Equip. e Acess. Proteção" (preços/tectos por Refª SAP,
+         com Clube Viva e prestações) e "Acessórios Univ." (carregadores,
+         cabos, capas — só à vista). As restantes (All-in, TV NET VOZ,
+         Outros Acess. Phase Out, Internet Móvel) ainda não têm um
+         mapeamento de colunas fiável — ver o README para o detalhe de
+         porquê cada uma ficou de fora. Ver lib/tabelaComercial.js. ── -->
+    <div class="gestao-secao" id="aba-tabelacomercial">
       <div class="cartao">
         <h2>📊 Tabela Comercial Vodafone</h2>
-        <p class="rodape-nota" style="margin-bottom:1rem">Importa o ficheiro .xls que a Vodafone envia (ex.: "Tabela-EquipamentosServicos_LVI.xls") sempre que sai uma versão nova — a data de vigência é lida automaticamente do próprio ficheiro, não precisas de a indicar. Este ficheiro tem várias folhas; só é lida a folha <strong>"Equip. e Acess. Proteção"</strong> (preços PVP/Clube Viva e tectos de comissão por Refª SAP) — as restantes folhas (All-in, TV NET VOZ, Acessórios Univ., etc.) ainda não são usadas.</p>
+        <p class="rodape-nota" style="margin-bottom:1rem">Importa o ficheiro .xls que a Vodafone envia (ex.: "Tabela-EquipamentosServicos_LVI.xls") sempre que sai uma versão nova — a data de vigência é lida automaticamente do próprio ficheiro, não precisas de a indicar. Este ficheiro tem várias folhas; por agora são lidas <strong>"Equip. e Acess. Proteção"</strong> (telemóveis/tablets — PVP, Clube Viva e prestações) e <strong>"Acessórios Univ."</strong> (carregadores, cabos, capas — só à vista) — as restantes folhas (All-in, TV NET VOZ, Outros Acess. Phase Out, Internet Móvel) ainda não são usadas.</p>
         <div class="caixa-ficheiro" style="max-width:420px">
           <h4>Tabela comercial (.xls)</h4>
           <input type="file" id="ficheiro-tabelacomercial" accept=".xls,.xlsx">
@@ -498,6 +504,16 @@
 
   <!-- ── Reconciliação GSV ── -->
     <div class="gestao-secao" id="aba-reconciliacao" hidden>
+    <div class="cartao">
+      <h2>Comissões mensais Vodafone</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">1st_Comissions — ciclo 15→14. Ao contrário do Relatório de cobranças e do Invoice GSV (ver tab "📥 Importar", aberta a todos), este é o ficheiro que a Vodafone envia para reconciliação — fica em Gestão. Reconcilia automaticamente com o GSV já importado.</p>
+      <div class="caixa-ficheiro" style="max-width:420px">
+        <h4>Comissões mensais (.xls)</h4>
+        <input type="file" id="ficheiro-comissoes" accept=".xls,.xlsx">
+        <button class="btn" style="width:100%" onclick="importarFicheiro('comissoes')">Importar</button>
+        <div id="resultado-comissoes"></div>
+      </div>
+    </div>
     <div class="cartao">
       <h2>Reconciliação GSV — cobrado vs. comissão vs. valor líquido</h2>
       <div class="filtros">
@@ -874,6 +890,17 @@ function mudarAba(nome) {
     // leitura); a loja fica por escolher e nada é pesquisado até se clicar
     // em "🔍 Pesquisar".
     if (!document.getElementById('cd-dia').value) document.getElementById('cd-dia').value = hojeISO();
+  }
+  // "🔐 Gestão" abre sempre no sub-separador "📊 Tabela Comercial" (agora o
+  // 1º/activo por omissão, desde que "📥 Importar ficheiros" saiu daqui —
+  // ver nota 2026-09-21 junto ao botão). Mesmo bug de fundo da Folha de
+  // Caixa: o carregamento de cada sub-aba só dispara dentro de
+  // mudarSubAbaGestao(), chamado ao CLICAR num sub-separador — e ninguém
+  // clica no que já está activo ao abrir "Gestão" pela 1ª vez. Chamar aqui
+  // garante que "Versões importadas" não fica preso em "A carregar…".
+  if (nome === 'gestao' && !GESTAO_SUBABAS_CARREGADAS.has('tabelacomercial')) {
+    GESTAO_SUBABAS_CARREGADAS.add('tabelacomercial');
+    carregarVersoesTabelaComercial();
   }
 }
 
