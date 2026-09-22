@@ -2288,7 +2288,14 @@ async function abrirModalDocumento(nDocumento) {
   if (!r.linhas.length) { corpo.innerHTML = '<p class="rodape-nota">Nenhuma linha encontrada para este documento.</p>'; return; }
 
   const primeira = r.linhas[0];
-  const total = r.linhas.reduce((s, l) => s + (Number(l.totalCIVA) || 0), 0);
+  // Bug real corrigido (2026-09-24): "Total C/IVA" é o valor da FATURA
+  // INTEIRA, repetido em todas as suas linhas (confirmado pelo Ricardo com
+  // este mesmo documento — 8304865833: a linha "Custos Administrativos"
+  // também mostra 299,90€, não os 30,00€ reais da taxa administrativa) —
+  // por isso o total do documento é o de QUALQUER UMA das linhas, nunca a
+  // soma de todas (isso mostrava 599,80€ em vez de 299,90€ para este
+  // documento de 2 linhas).
+  const total = Number(primeira.totalCIVA) || 0;
   corpo.innerHTML = `
     <p class="rodape-nota" style="margin-bottom:.75rem">${primeira.loja || '—'} · ${primeira.colaborador || '—'} · ${primeira.dataHora || '—'}${primeira.tipo === 'Devoluções' ? ' · <strong style="color:#b3000a">Devolução</strong>' : ''}</p>
     ${linhasDocumentoParaTabela(r.linhas)}
