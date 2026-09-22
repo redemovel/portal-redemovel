@@ -669,7 +669,7 @@
       <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
       <p class="rodape-nota" style="margin-bottom:1rem">O ficheiro de Cobranças, esse, já traz um nome legível — mas às vezes com uma grafia diferente da pessoa (ex.: "Ana Lopes" em vez do nome completo "Ana Filipa Calhau Lopes"), o que faz aparecer a mesma pessoa duas vezes. Escreve aqui essas outras grafias, em "Nomes alternativos", para ficarem sempre associadas ao colaborador certo.</p>
       <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve os valores e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga o que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
-      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), a forma mais simples enquanto ainda estás em testes é associar tudo aqui primeiro e só depois usar o "⚠️ Reset de testes" (🔐 Gestão → 🕒 Histórico) e reimportar os ficheiros Vodafone de novo.</p>
+      <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), associa primeiro aqui o código/alias certo, e depois usa "🔗 Fundir histórico de dois nomes", abaixo, para corrigir os movimentos já existentes sem teres de apagar ou reimportar nada.</p>
       <button class="btn btn-secundario" style="margin-bottom:1rem" onclick="carregarColaboradoresGSV()">🔄 Recarregar lista</button>
       <div class="tabela-scroll">
         <table>
@@ -678,6 +678,23 @@
         </table>
       </div>
       <div id="resultado-colaboradores-gsv"></div>
+    </div>
+
+    <div class="cartao" id="cartao-fundir-colaborador" hidden>
+      <h2>🔗 Fundir histórico de dois nomes</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Quando o mesmo colaborador ficou gravado com duas grafias diferentes (ex.: "Catarina Gomes" e "Catarina Santos Gomes"), associar aqui em cima um código/alias não corrige quem já está importado — só as próximas importações. Esta ação corrige os movimentos GSV, Carregamentos e apuros JÁ gravados com a grafia antiga, passando-os para o nome certo. Só <strong>Master</strong>.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end">
+        <div style="flex:1;min-width:220px">
+          <label class="form-label">Nome antigo (grafia a corrigir)</label>
+          <input type="text" class="form-input" id="fundir-nome-antigo" placeholder="ex.: Catarina Santos Gomes">
+        </div>
+        <div style="flex:1;min-width:220px">
+          <label class="form-label">Nome novo (colaborador certo)</label>
+          <select class="form-input" id="fundir-nome-novo"><option value="">-- Escolhe o colaborador --</option></select>
+        </div>
+        <button class="btn" style="background:#b3000a" onclick="fundirNomeColaboradorUI()">🔗 Fundir</button>
+      </div>
+      <div id="resultado-fundir-colaborador" style="margin-top:1rem"></div>
     </div>
   </div>
 
@@ -2067,6 +2084,50 @@ async function carregarColaboradoresGSV() {
       <span id="status-cod-${c.username}" style="font-size:1rem;vertical-align:middle;margin-left:.3rem"></span>
     </td>
   </tr>`).join('') : '<tr><td colspan="6">Sem colaboradores activos.</td></tr>';
+
+  // "🔗 Fundir histórico de dois nomes" é destrutivo (reescreve movimentos
+  // já gravados) — só visível a Master, mesma regra do resto de "Gestão"
+  // que já é mais apertada que o resto do separador (validado sempre no
+  // servidor também, nunca só escondido aqui).
+  const cartaoFundir = document.getElementById('cartao-fundir-colaborador');
+  if (ehMaster()) {
+    cartaoFundir.hidden = false;
+    const select = document.getElementById('fundir-nome-novo');
+    select.innerHTML = '<option value="">-- Escolhe o colaborador --</option>'
+      + r.colaboradores.map(c => `<option value="${c.nome.replace(/"/g, '&quot;')}">${c.nome}</option>`).join('');
+  } else {
+    cartaoFundir.hidden = true;
+  }
+}
+
+// Corrige o nome de quem já está gravado em movimentos GSV/Cobranças/apuros
+// com uma grafia antiga — ver lib/conferenciaColaborador.js,
+// fundirNomeColaborador. Ao contrário de associar um código/alias (que só
+// afecta importações futuras), isto reescreve mesmo o que já está na
+// Firestore — por isso pede confirmação explícita antes de avançar.
+async function fundirNomeColaboradorUI() {
+  const nomeAntigo = document.getElementById('fundir-nome-antigo').value.trim();
+  const nomeNovo = document.getElementById('fundir-nome-novo').value;
+  const resultadoEl = document.getElementById('resultado-fundir-colaborador');
+  if (!nomeAntigo || !nomeNovo) {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica os dois nomes — o antigo (a grafia a corrigir) e o novo (escolhe da lista).</div>';
+    return;
+  }
+  if (!confirm(`Confirma: todos os movimentos GSV, Carregamentos e apuros gravados como "${nomeAntigo}" vão passar a "${nomeNovo}".\n\nEsta ação não tem "desfazer" automático — confirma que a grafia antiga está mesmo errada.`)) return;
+
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A fundir…</div>';
+  const r = await chamarApi({ acao: 'fundirNomeColaborador', nomeAntigo, nomeNovo });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao fundir.') + '</div>'; return; }
+
+  let html = `<div class="alerta alerta-ok">✅ "${r.nomeAntigo}" fundido com "${r.nomeNovo}": `
+    + `${r.gsvAtualizados} linha(s) GSV, ${r.cobrancasAtualizadas} linha(s) de Carregamentos, `
+    + `${r.apurosMovidos} apuro(s).</div>`;
+  if (r.apurosComConflito && r.apurosComConflito.length) {
+    html += `<div class="alerta alerta-aviso" style="margin-top:.5rem">⚠️ ${r.apurosComConflito.length} apuro(s) NÃO foram fundidos, porque já existia um apuro de "${r.nomeNovo}" no mesmo dia/loja — precisas de decidir manualmente qual manter, em "🧾 Caixa Dia" → "Saldo do dia por apurar":<ul style="margin:.3rem 0 0 1.2rem">`
+      + r.apurosComConflito.map(c => `<li>${c.loja} — ${c.dia}</li>`).join('') + '</ul></div>';
+  }
+  resultadoEl.innerHTML = html;
+  document.getElementById('fundir-nome-antigo').value = '';
 }
 
 async function guardarCodigosGSV(username) {
