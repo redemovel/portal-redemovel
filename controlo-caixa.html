@@ -438,6 +438,13 @@
           </table>
         </div>
       </div>
+
+      <div class="cartao" id="cartao-reclassificar-tabela" hidden>
+        <h2>🔄 Reclassificar "por classificar" pela Tabela Comercial</h2>
+        <p class="rodape-nota" style="margin-bottom:1rem">Preenche a comissão ESTIMADA (nunca a confirmada) das linhas GSV ainda "por classificar" — sem comissão confirmada nem correcção manual — usando a percentagem da própria Refª SAP na Tabela Comercial vigente, quando existir. Não espera pela confirmação mensal da Vodafone, e substitui uma estimativa antiga (por percentagem genérica de categoria) por esta, mais precisa. Só <strong>Master</strong>. A partir de agora, isto já corre automaticamente em cada importação nova de GSV — este botão só serve para aplicar o mesmo cálculo ao que já estava importado antes desta ligação existir.</p>
+        <button class="btn" onclick="reclassificarPorTabelaComercialUI()">🔄 Reclassificar histórico</button>
+        <div id="resultado-reclassificar-tabela" style="margin-top:1rem"></div>
+      </div>
     </div>
 
     <!-- ── Relatório contabilidade ── -->
@@ -863,6 +870,10 @@ async function entrarNoPainel() {
   if (cartaoAlterarCategoria) cartaoAlterarCategoria.hidden = !ehMaster();
   const cartaoRefSapManual = document.getElementById('cartao-refsap-manual');
   if (cartaoRefSapManual) cartaoRefSapManual.hidden = !ehMaster();
+  // Reclassificar "por classificar" pela Tabela Comercial (2026-09-25) —
+  // idem, só Master.
+  const cartaoReclassificar = document.getElementById('cartao-reclassificar-tabela');
+  if (cartaoReclassificar) cartaoReclassificar.hidden = !ehMaster();
   popularSelectsLojas();
   // Bug real (2026-09-21): desde que "📒 Folha de Caixa" passou a ser o
   // separador activo por omissão (antes era "📥 Importar ficheiros", que
@@ -1070,6 +1081,25 @@ async function apagarVersaoTabelaComercialUI(dataVersao) {
   const r = await chamarApi({ acao: 'apagarVersaoTabelaComercial', dataVersao });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
   await carregarVersoesTabelaComercial();
+}
+
+// Reclassificar "por classificar" pela Tabela Comercial (2026-09-25) —
+// pedido do Ricardo: aplica ao histórico já importado o mesmo cálculo que,
+// a partir de agora, já corre automaticamente em cada importação nova de
+// GSV (ver lib/gsv.js e lib/tipologiaVenda.js). Só preenche a ESTIMATIVA —
+// nunca mexe numa comissão já confirmada pela Vodafone.
+async function reclassificarPorTabelaComercialUI() {
+  const resultadoEl = document.getElementById('resultado-reclassificar-tabela');
+  resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A reclassificar…</div>';
+  const r = await chamarApi({ acao: 'reclassificarPorTabelaComercial' });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao reclassificar.') + '</div>'; return; }
+  let html = `<div class="alerta alerta-ok">✅ ${r.documentosAnalisados} documento(s) analisado(s): ${r.reclassificadas} linha(s) passaram a ter uma estimativa pela Tabela Comercial; ${r.semTabela} continuam "por classificar" (Refª SAP ainda não está na Tabela Comercial, ou o documento tem mais do que 1 linha de produto).</div>`;
+  if (r.exemplos && r.exemplos.length) {
+    html += '<div class="tabela-scroll" style="margin-top:.5rem"><table style="margin:0"><thead><tr><th>Nº Documento</th><th>Refª SAP / Produto</th><th>Cenário</th><th>Comissão estimada</th></tr></thead><tbody>'
+      + r.exemplos.map(e => `<tr><td>${e.nDocumento}</td><td>${e.refSAP}${e.nomeProduto ? ' — ' + e.nomeProduto : ''}</td><td>${CENARIO_ROTULO[e.cenario] || e.cenario}</td><td>${formatarEuro(e.comissaoEstimadaCIVA)}</td></tr>`).join('')
+      + '</tbody></table></div>';
+  }
+  resultadoEl.innerHTML = html;
 }
 
 // ═══ Tipologia de venda (2026-09-21, protótipo em validação) ═══
