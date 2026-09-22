@@ -1123,6 +1123,7 @@ async function analisarTipologiaUI() {
     <div class="resumo-item"><div class="valor">${r.confirmados.length}</div><div class="rotulo">Confirmados</div></div>
     <div class="resumo-item"><div class="valor">${r.divergentes.length}</div><div class="rotulo">Divergentes</div></div>
     <div class="resumo-item"><div class="valor">${r.semMargem.length}</div><div class="rotulo">Sem margem (normal)</div></div>
+    <div class="resumo-item"><div class="valor">${(r.multiplosProdutos || []).length}</div><div class="rotulo">Vários produtos</div></div>
     <div class="resumo-item"><div class="valor">${r.naoSuportados.length}</div><div class="rotulo">Não suportados</div></div>
   `;
   if (!r.resultados.length) { corpo.innerHTML = '<tr><td colspan="7">Sem documentos GSV neste período.</td></tr>'; return; }
@@ -1137,6 +1138,13 @@ function linhaTipologia(r) {
   }
   if (r.cenario === 'nao_suportado') {
     return `<tr><td>${r.nDocumento}</td><td colspan="4"><span class="badge badge-ambiguo">Não suportado</span> ${r.motivo}</td><td colspan="2"></td></tr>`;
+  }
+  if (r.cenario === 'multiplos_produtos') {
+    const linhasEstimadas = (r.estimativasPorLinha || [])
+      .map(e => `${e.refSAP}: ${formatarEuro(e.comissaoEstimadaCIVA)} (${(e.percentagemTabelaComercial * 100).toFixed(1)}%)`)
+      .join(', ');
+    const nota = linhasEstimadas ? `estimativa por linha — ${linhasEstimadas}` : (r.motivo || '');
+    return `<tr><td>${r.nDocumento}</td><td colspan="4"><span class="badge badge-ok">Vários produtos</span> ${nota}</td><td colspan="2"></td></tr>`;
   }
   if (r.cenario === 'divergente') {
     const pista = r.maisProximo
