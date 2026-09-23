@@ -147,10 +147,6 @@
 <div class="wrap" id="tela-principal" hidden>
 
   <div class="abas">
-    <button class="aba-btn ativa" data-aba="folha" onclick="mudarAba('folha')">📒 Folha de Caixa</button>
-    <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
-    <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
-    <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Caixa Dia</button>
     <!-- "📥 Importar" (2026-09-21) — correcção do Ricardo depois de testar a
          reorganização em "Gestão": "Importação de Relatório de cobranças
          (CSV) e Invoice GSV (.xls), PODEM E DEVEM SER EFECTUADOS PELOAS
@@ -159,6 +155,15 @@
          fora de "Gestão" e visível a todos os papéis (tal como o resto
          desta barra). -->
     <button class="aba-btn" data-aba="importar" onclick="mudarAba('importar')">📥 Importar</button>
+    <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Caixa Dia</button>
+    <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
+    <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
+    <!-- "📒 Mapa Global" (2026-09-26, renomeado de "Folha de Caixa" a pedido
+         do Ricardo) — continua a ser o separador activo por omissão ao
+         entrar (ver entrarNoPainel/mudarAba('folha')); o id interno
+         "folha" fica igual, só o rótulo mudou, para não obrigar a tocar em
+         mais nada do resto do código. -->
+    <button class="aba-btn ativa" data-aba="folha" onclick="mudarAba('folha')">📒 Mapa Global</button>
     <!-- "🔐 Gestão" (2026-09-21) — reúne tudo o que não é trabalho do dia-a-
          dia de loja (classificação/margens, relatórios, conta corrente
          Vodafone, tabela comercial, comissões mensais, etc.); só visível a
@@ -168,15 +173,15 @@
     <button class="aba-btn" data-aba="gestao" onclick="mudarAba('gestao')" hidden>🔐 Gestão</button>
   </div>
 
-  <!-- ── Folha de Caixa ── -->
+  <!-- ── Mapa Global (id interno "folha", ver nota acima) ── -->
   <div class="aba-conteudo" id="aba-folha">
     <div class="cartao">
       <h2>💳 Saldo de numerário por loja</h2>
-      <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado na Folha de Caixa mas não altera este saldo.</p>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado no Mapa Global mas não altera este saldo.</p>
       <div class="resumo-grelha" id="resumo-saldos"><div class="resumo-item">A carregar…</div></div>
     </div>
     <div class="cartao">
-      <h2>Folha de Caixa — movimentos por loja</h2>
+      <h2>Mapa Global — movimentos por loja</h2>
       <div class="filtros">
         <div><label class="form-label">Loja</label><select id="folha-loja"><option value="">-- Escolhe a loja --</option></select></div>
         <div><label class="form-label">De</label><input type="date" class="form-input" id="folha-de"></div>
@@ -374,14 +379,22 @@
   <div class="aba-conteudo" id="aba-gestao" hidden>
     <div class="alerta alerta-aviso no-print" style="margin-bottom:1rem">🔐 Área de Gestão — visível apenas a Master e Coordenador.</div>
     <div class="abas sub-abas">
-      <button class="sub-aba-btn ativa" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
-      <button class="sub-aba-btn" data-subaba="tipologia" onclick="mudarSubAbaGestao('tipologia')">🧮 Tipologia de venda</button>
+      <!-- Ordem pedida pelo Ricardo (2026-09-26). "Histórico" não foi
+           mencionado no pedido — mantido, colocado no fim, por não ter
+           sido pedida a sua remoção. O sub-separador activo por omissão ao
+           abrir "🔐 Gestão" continua "tabelacomercial" (ver mudarAba,
+           nome==='gestao') e não "contacorrente" apesar de vir primeiro
+           aqui — "Conta Corrente Vodafone"/"Referências Vodafone" só é
+           visível a Master (a seguir), ficar como omissão deixaria um
+           Coordenador a abrir Gestão sem nada carregado. -->
+      <button class="sub-aba-btn" data-subaba="contacorrente" onclick="mudarSubAbaGestao('contacorrente')" hidden>💰 Referências Vodafone</button>
       <button class="sub-aba-btn" data-subaba="relatorio" onclick="mudarSubAbaGestao('relatorio')">📅 Caixa Mês</button>
       <button class="sub-aba-btn" data-subaba="reconciliacao" onclick="mudarSubAbaGestao('reconciliacao')">🔗 Reconciliação GSV</button>
+      <button class="sub-aba-btn ativa" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
+      <button class="sub-aba-btn" data-subaba="tipologia" onclick="mudarSubAbaGestao('tipologia')">🧮 Tipologia de venda</button>
       <button class="sub-aba-btn" data-subaba="classificacao" onclick="mudarSubAbaGestao('classificacao')">🏷 Classificação</button>
-      <button class="sub-aba-btn" data-subaba="historico" onclick="mudarSubAbaGestao('historico')">🕒 Histórico</button>
       <button class="sub-aba-btn" data-subaba="colaboradores" onclick="mudarSubAbaGestao('colaboradores')">👤 Colaboradores</button>
-      <button class="sub-aba-btn" data-subaba="contacorrente" onclick="mudarSubAbaGestao('contacorrente')" hidden>💰 Conta Corrente Vodafone</button>
+      <button class="sub-aba-btn" data-subaba="historico" onclick="mudarSubAbaGestao('historico')">🕒 Histórico</button>
     </div>
 
     <!-- ── Tabela Comercial (2026-09-21) — tabela de preços/comissões
@@ -459,7 +472,7 @@
          precisar de escolher um período à parte. ── -->
     <div class="cartao no-print">
       <h2>📅 Caixa Mês — fecho e relatório para a contabilidade</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">Escolhe a loja e o mês: confirma, dia a dia, que o Multibanco, VISA, Depósitos bancários e Transferências recebidas entraram na conta (contra o extracto do banco), dá visto aos totais do mês de Carregamentos e de GSV, e fecha o mês. O mesmo botão "Ver mês" já prepara a página pronta a imprimir/gravar em PDF (Folha de Caixa, Arqueios e apuros por colaborador do mês) para acompanhar os documentos enviados para a contabilidade. Uma vez fechado, apagar ou corrigir um apuro desse mês fica bloqueado até um Master o reabrir.</p>
+      <p class="rodape-nota" style="margin-bottom:1rem">Escolhe a loja e o mês: confirma, dia a dia, que o Multibanco, VISA, Depósitos bancários e Transferências recebidas entraram na conta (contra o extracto do banco), dá visto aos totais do mês de Carregamentos e de GSV, e fecha o mês. O mesmo botão "Ver mês" já prepara a página pronta a imprimir/gravar em PDF (Mapa Global, Arqueios e apuros por colaborador do mês) para acompanhar os documentos enviados para a contabilidade. Uma vez fechado, apagar ou corrigir um apuro desse mês fica bloqueado até um Master o reabrir.</p>
       <div class="filtros">
         <div><label class="form-label">Loja</label><select id="relatorio-loja"></select></div>
         <div><label class="form-label">Mês</label><input type="month" class="form-input" id="cm-mes"></div>
@@ -487,7 +500,7 @@
           <tbody id="relatorio-corpo-colaboradores"></tbody>
         </table>
 
-        <h3>Resumo de movimentos (Folha de Caixa)</h3>
+        <h3>Resumo de movimentos (Mapa Global)</h3>
         <div class="resumo-grelha" id="relatorio-resumo-folha"></div>
 
         <details class="relatorio-detalhe">
@@ -673,7 +686,7 @@
     <div class="gestao-secao" id="aba-colaboradores" hidden>
     <div class="cartao">
       <h2>👤 Colaboradores — códigos VDF/GSV e nomes alternativos</h2>
-      <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e a Folha de Caixa reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
+      <p class="rodape-nota" style="margin-bottom:1rem">O Invoice GSV da Vodafone identifica cada venda por um código interno (ex.: <code>N_AFLOPES3</code>), não pelo nome. Associa aqui esse(s) código(s) a cada colaborador (a mesma pessoa pode ter mais do que um código ao longo do tempo) para a Conferência de Caixa e o Mapa Global reconhecerem sempre quem é quem. Só o <strong>Master</strong> pode gravar alterações; qualquer papel pode ver esta lista.</p>
       <p class="rodape-nota" style="margin-bottom:1rem">O ficheiro de Cobranças, esse, já traz um nome legível — mas às vezes com uma grafia diferente da pessoa (ex.: "Ana Lopes" em vez do nome completo "Ana Filipa Calhau Lopes"), o que faz aparecer a mesma pessoa duas vezes. Escreve aqui essas outras grafias, em "Nomes alternativos", para ficarem sempre associadas ao colaborador certo.</p>
       <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Escreve os valores e clica em <strong>"Guardar"</strong> em cada linha, uma de cada vez — é isso que grava. O botão "🔄 Recarregar lista" abaixo NÃO grava nada: só volta a ler a lista da Firestore, e por isso apaga o que tenhas escrito mas ainda não tenhas gravado com "Guardar" nessa linha.</p>
       <p class="alerta alerta-aviso" style="margin-bottom:1rem">⚠️ Associar um código ou nome alternativo novo só corrige as importações a partir de agora — não muda o que já está gravado. Se já tens movimentos importados com o nome/código errado (como os "colaboradores duplicados"), associa primeiro aqui o código/alias certo, e depois usa "🔗 Fundir histórico de dois nomes", abaixo, para corrigir os movimentos já existentes sem teres de apagar ou reimportar nada.</p>
@@ -713,7 +726,7 @@
          da conta corrente central... exportação BCP" é só do Master). ── -->
     <div class="gestao-secao" id="aba-contacorrente" hidden>
     <div class="cartao">
-      <h2>💰 Conta Corrente Vodafone — referências por pagar</h2>
+      <h2>💰 Referências Vodafone — referências por pagar</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">Referências de Carregamentos/Faturas (Entidade 11470) e GSV/Stock Vodafone (Entidade 11814) recebidas por e-mail da Vodafone. A coluna "Reconciliação" é só uma estimativa — para GSV fica sujeita à comissão real do mês, que só chega confirmada no ficheiro "1ª Comissão" — o valor pago é sempre o Montante que a própria referência trouxe, nunca um valor calculado aqui.</p>
       <button class="btn btn-secundario" onclick="carregarReferenciasPendentes()">🔄 Atualizar lista</button>
       <div id="cc-resultado" style="margin-top:1rem"></div>
@@ -721,7 +734,12 @@
 
     <div class="cartao">
       <h3>📄 Ficheiros PSM gerados</h3>
-      <p class="rodape-nota" style="margin-bottom:.6rem">Uma linha por ficheiro (não por referência) — é aqui que se vê, sem ambiguidade, quais referências saíram juntas no mesmo ficheiro. Actualiza junto com "🔄 Atualizar lista" acima.</p>
+      <p class="rodape-nota" style="margin-bottom:.6rem">Uma linha por ficheiro (não por referência) — é aqui que se vê, sem ambiguidade, quais referências saíram juntas no mesmo ficheiro. Histórico — não carrega sozinho; escolhe o período (por "Data p/ pagamento") e clica em "Procurar".</p>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:.8rem">
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="psm-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="psm-ate"></div>
+        <button class="btn" onclick="procurarFicheirosPSM()">🔍 Procurar</button>
+      </div>
       <div id="cc-ficheiros-psm"></div>
     </div>
 
@@ -735,7 +753,12 @@
 
     <div class="cartao">
       <h3>🧾 Conta corrente — pagamentos confirmados</h3>
-      <button class="btn btn-secundario" onclick="carregarContaCorrente()">🔄 Atualizar</button>
+      <p class="rodape-nota" style="margin-bottom:.6rem">Histórico — não carrega sozinho; escolhe o período (por "Pago em") e clica em "Procurar".</p>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:.8rem">
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="ccconf-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="ccconf-ate"></div>
+        <button class="btn" onclick="carregarContaCorrente()">🔍 Procurar</button>
+      </div>
       <div id="cc-conta-corrente" style="margin-top:1rem"></div>
     </div>
   </div>
@@ -973,8 +996,12 @@ function mudarSubAbaGestao(nome) {
   }
   if (nome === 'contacorrente' && !GESTAO_SUBABAS_CARREGADAS.has('contacorrente')) {
     GESTAO_SUBABAS_CARREGADAS.add('contacorrente');
+    // "Referências por pagar" continua a carregar ao abrir (é a lista de
+    // trabalho activo, normalmente pequena) — mas "Ficheiros PSM gerados"
+    // e "Pagamentos confirmados" (histórico, pode crescer sem limite) só
+    // carregam quando se clica "🔍 Procurar" com um período escolhido
+    // (pedido do Ricardo, 2026-09-26).
     carregarReferenciasPendentes();
-    carregarContaCorrente();
   }
 }
 
@@ -1448,7 +1475,7 @@ async function gerarRelatorio() {
     chamarApi({ acao: 'listarApurosColaborador', filtros: { loja, limite: 200 } }),
   ]);
 
-  if (!folha.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (folha.erro || 'Erro ao carregar a Folha de Caixa.') + '</div>'; return; }
+  if (!folha.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (folha.erro || 'Erro ao carregar o Mapa Global.') + '</div>'; return; }
 
   document.getElementById('relatorio-titulo-loja').textContent = loja;
   document.getElementById('relatorio-titulo-periodo').textContent = `Período: ${de} a ${ate} · Gerado em ${new Date().toLocaleString('pt-PT')}`;
@@ -2205,16 +2232,35 @@ let CC_FICHEIROS_POR_ID = {};
 async function carregarReferenciasPendentes() {
   const el = document.getElementById('cc-resultado');
   el.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A carregar…</div>';
-  const [r, rFicheiros] = await Promise.all([
-    chamarApi({ acao: 'listarReferenciasPendentes', comReconciliacao: true }),
-    chamarApi({ acao: 'listarFicheirosPSM' }),
-  ]);
+  const r = await chamarApi({ acao: 'listarReferenciasPendentes', comReconciliacao: true });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
   CC_PENDENTES = r.referencias;
+  // Busca só os ficheiros PSM REALMENTE referenciados pelas "incluídas, a
+  // aguardar confirmação" abaixo (normalmente 0-2, por ID concreto) — nunca
+  // a lista histórica inteira, que tem o seu próprio "🔍 Procurar" balizado
+  // por datas mais abaixo (pedido do Ricardo, 2026-09-26: poupar consultas
+  // desnecessárias ao Firestore).
+  const idsFicheiros = [...new Set(CC_PENDENTES.filter(x => x.ficheiroId).map(x => x.ficheiroId))];
   CC_FICHEIROS_POR_ID = {};
-  if (rFicheiros.ok) rFicheiros.ficheiros.forEach(f => { CC_FICHEIROS_POR_ID[f.id] = f; });
+  if (idsFicheiros.length) {
+    const rf = await chamarApi({ acao: 'obterFicheirosPSMPorId', ids: idsFicheiros });
+    if (rf.ok) rf.ficheiros.forEach(f => { CC_FICHEIROS_POR_ID[f.id] = f; });
+  }
   mostrarReferenciasPendentes();
-  mostrarFicheirosPSM(rFicheiros.ok ? rFicheiros.ficheiros : []);
+}
+
+// "📄 Ficheiros PSM gerados" (histórico) — nunca carrega sozinho, só ao
+// clicar "🔍 Procurar" com um período escolhido (pedido do Ricardo,
+// 2026-09-26).
+async function procurarFicheirosPSM() {
+  const de = document.getElementById('psm-de').value;
+  const ate = document.getElementById('psm-ate').value;
+  const el = document.getElementById('cc-ficheiros-psm');
+  if (!de || !ate) { el.innerHTML = '<p class="rodape-nota">Escolhe o período (De/Até).</p>'; return; }
+  el.innerHTML = '<span class="spinner"></span> A procurar…';
+  const r = await chamarApi({ acao: 'listarFicheirosPSM', de, ate });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao procurar.') + '</div>'; return; }
+  mostrarFicheirosPSM(r.ficheiros);
 }
 
 function rotuloTipoRef(r) { return (r.tipo === 'gsv' ? 'GSV' : 'Carregamentos') + ' (' + r.entidade + ')'; }
@@ -2606,10 +2652,16 @@ async function importarEmailColado() {
   carregarReferenciasPendentes();
 }
 
+// "🧾 Conta corrente — pagamentos confirmados" (histórico) — idem: nunca
+// carrega sozinho, só ao clicar "🔍 Procurar" com um período escolhido
+// (pedido do Ricardo, 2026-09-26).
 async function carregarContaCorrente() {
+  const de = document.getElementById('ccconf-de').value;
+  const ate = document.getElementById('ccconf-ate').value;
   const el = document.getElementById('cc-conta-corrente');
-  el.innerHTML = '<span class="spinner"></span> A carregar…';
-  const r = await chamarApi({ acao: 'listarContaCorrenteVodafone', filtros: {} });
+  if (!de || !ate) { el.innerHTML = '<p class="rodape-nota">Escolhe o período (De/Até).</p>'; return; }
+  el.innerHTML = '<span class="spinner"></span> A procurar…';
+  const r = await chamarApi({ acao: 'listarContaCorrenteVodafone', filtros: { de, ate } });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro.') + '</div>'; return; }
   if (!r.pagamentos.length) { el.innerHTML = '<p class="rodape-nota">Sem pagamentos confirmados ainda.</p>'; return; }
   el.innerHTML = `<div class="resumo-item" style="max-width:260px"><div class="valor">${formatarEuro(r.totalPago)}</div><div class="rotulo">Total pago (lista abaixo)</div></div>
