@@ -2574,15 +2574,52 @@ function mostrarFicheirosPSM(ficheiros) {
     <thead><tr><th>Gerado em</th><th>Data p/ pagamento</th><th>Refs.</th><th>Importância total</th><th>Gerado por</th><th></th></tr></thead>
     <tbody>${ficheiros.map(f => {
       const stale = f.dataParaPagamento < hojeISO();
+      const refs = (f.refsIncluidas || []).map(r => String(r));
       return `<tr>
         <td>${String(f.atualizadoEm || '').slice(0, 16)}</td>
         <td>${f.dataParaPagamento}${stale ? ' <span title="Já passou" style="color:var(--vermelho,#c0392b)">⚠</span>' : ''}</td>
-        <td title="${(f.refsIncluidas || []).join(', ')}">${f.nRegistos} (${(f.refsIncluidas || []).join(', ')})</td>
+        <td>
+          <details class="relatorio-detalhe" style="margin:0;border:none;padding:0" data-refs="${refs.join(',')}" ontoggle="onToggleDetalheFicheiroPSM(this)">
+            <summary style="padding:0;font-size:.8rem;color:var(--text-muted)" title="${refs.join(', ')}">${f.nRegistos} referência(s)</summary>
+            <div class="detalhe-refs-psm"></div>
+          </details>
+        </td>
         <td>${formatarEuro(f.importanciaTotal)}</td>
         <td>${f.geradoPor || '—'}</td>
         <td><a href="#" onclick="baixarFicheiroPSM('${f.id}');return false">🔽 Transferir</a></td>
       </tr>`;
     }).join('')}</tbody>
+  </table></div>`;
+}
+
+// Detalhe (entidade, tipo, data, montante, estado) das referências dentro
+// de UM ficheiro PSM — pedido do Ricardo (2026-09-26): a lista só mostrava
+// o nº e os Refs. MB, sem valores. Carregado só ao abrir o <details> (nunca
+// junto com a lista de ficheiros) e só uma vez por abertura — consulta leve
+// por ID concreto (`obterReferenciasPagamentoPorId`), nunca a colecção
+// inteira de referências, em linha com "pesquisar só o que se necessita".
+const ESTADOS_REF_PSM_LABEL = { pendente: '🟡 pendente', incluida_ficheiro: '📄 no ficheiro', paga: '✅ paga' };
+
+async function onToggleDetalheFicheiroPSM(details) {
+  if (!details.open || details.dataset.carregado) return;
+  details.dataset.carregado = '1';
+  const el = details.querySelector('.detalhe-refs-psm');
+  const refMBs = (details.dataset.refs || '').split(',').filter(Boolean);
+  el.innerHTML = '<span class="spinner"></span> a carregar…';
+  const r = await chamarApi({ acao: 'obterReferenciasPagamentoPorId', refMBs });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao obter o detalhe das referências.') + '</div>'; details.dataset.carregado = ''; return; }
+  el.innerHTML = mostrarDetalheReferenciasPSM(r.referencias);
+}
+
+function mostrarDetalheReferenciasPSM(referencias) {
+  if (!referencias.length) return '<p class="rodape-nota">Sem detalhe disponível (referências não encontradas).</p>';
+  return `<div class="tabela-scroll"><table style="margin:.3rem 0 .1rem">
+    <thead><tr><th>Ref. MB</th><th>Entidade</th><th>Tipo</th><th>Data referência</th><th>Montante</th><th>Estado</th></tr></thead>
+    <tbody>${referencias.map(r => `<tr>
+      <td>${r.refMB}</td><td>${r.entidade || '—'}</td><td>${r.tipo || '—'}</td>
+      <td>${r.dataReferencia || '—'}</td><td>${formatarEuro(r.montante)}</td>
+      <td>${ESTADOS_REF_PSM_LABEL[r.estado] || r.estado || '—'}</td>
+    </tr>`).join('')}</tbody>
   </table></div>`;
 }
 
