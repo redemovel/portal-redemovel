@@ -271,7 +271,7 @@
 
   <!-- ── Caixa Dia (Conferência de Caixa por Colaborador, Fase 3a) ── -->
   <div class="aba-conteudo" id="aba-conferenciacaixa" hidden>
-    <div class="cartao">
+    <div class="cartao no-print">
       <h2>Caixa Dia</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">Os fechos são sempre diários: escolhe a loja e o dia e clica em "Pesquisar" — todo o resto desta página (saldo por apurar, saldo em caixa, orientação, apuros) refere-se sempre a essa loja e a esse dia. Nada é carregado antes de pesquisares.</p>
       <div class="filtros">
@@ -282,13 +282,54 @@
     </div>
 
     <div id="cd-resultados" hidden>
-      <div class="cartao">
+      <div class="cartao no-print">
         <h2>Saldo do dia por apurar</h2>
         <p class="rodape-nota" style="margin-bottom:.75rem">Quanto falta apurar hoje, em numerário e em ATM (Multibanco+VISA), para bater certo com os documentos Vodafone do dia. O objectivo é chegar a ZERO nos dois, quando todos os colaboradores já tiverem apurado.</p>
         <div id="cd-resumo-dia"><div class="resumo-item">A carregar…</div></div>
       </div>
 
-      <div class="cartao">
+      <!-- ── Talão do dia (2026-09-24) — pedido do Ricardo: um talão pronto
+           a imprimir/gravar em PDF com os totais do dia, mas só depois de
+           TODOS os colaboradores com movimentos nesse dia/loja terem
+           apurado o seu saldo (nunca antes — senão o talão ficaria com
+           valores por confirmar). Reaproveita CD_RESUMO_DIA e
+           ULTIMO_RESUMO_COLABORADORES, já carregados por pesquisarCaixaDia
+           — nenhuma leitura extra ao Firestore só para isto. ── -->
+      <div class="cartao no-print">
+        <h2>🧾 Talão do dia</h2>
+        <p class="rodape-nota" style="margin-bottom:.75rem">Resumo do dia pronto a imprimir/gravar em PDF — só fica disponível quando todos os colaboradores com movimentos nesta loja/dia já tiverem apurado o seu saldo.</p>
+        <div id="cd-talao-aviso"></div>
+        <button class="btn btn-secundario" id="btn-imprimir-talao-dia" onclick="window.print()" hidden>🖨 Imprimir / Gravar PDF</button>
+      </div>
+
+      <div id="cd-talao-imprimivel" hidden>
+        <div class="cartao">
+          <div class="relatorio-cabecalho">
+            <h2 id="talao-titulo-loja"></h2>
+            <div id="talao-titulo-dia" class="rodape-nota"></div>
+          </div>
+
+          <div class="resumo-grelha resumo-grelha-grande" id="talao-resumo-vendas"></div>
+
+          <h3>Descrição dos movimentos por vendedor já apurados</h3>
+          <table>
+            <thead><tr><th>Colaborador</th><th>ATM Multibanco</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th></tr></thead>
+            <tbody id="talao-corpo-colaboradores"></tbody>
+          </table>
+
+          <h3>Recebimentos</h3>
+          <div class="resumo-grelha resumo-grelha-grande" id="talao-resumo-recebimentos"></div>
+
+          <div class="resumo-item" style="margin-top:1rem">
+            <div class="valor" id="talao-total-dia"></div>
+            <div class="rotulo">TOTAL do dia</div>
+          </div>
+
+          <p class="rodape-nota" id="talao-rodape" style="margin-top:1.5rem"></p>
+        </div>
+      </div>
+
+      <div class="cartao no-print">
         <h2>💳 Saldo em numerário da loja</h2>
         <p class="rodape-nota" style="margin-bottom:.75rem">Dinheiro físico que devia estar na gaveta da loja neste momento. Regista aqui o depósito bancário assim que o dinheiro sai da loja — o saldo é actualizado de imediato.</p>
         <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
@@ -300,7 +341,7 @@
         <div id="cd-resultado-deposito"></div>
       </div>
 
-      <div class="cartao">
+      <div class="cartao no-print">
         <h2>Orientação — o que cada colaborador facturou</h2>
         <p class="rodape-nota" style="margin-bottom:1rem">Quanto foi facturado (GSV + Carregamentos) neste dia, nesta loja, por colaborador, e como se reparte entre Numerário e Cartão/ATM (Multibanco+VISA juntos — a Vodafone não distingue as duas redes). Serve de orientação antes de inserires o que apuraste de verdade, mais abaixo.</p>
         <div class="filtros">
@@ -314,7 +355,7 @@
         </div>
       </div>
 
-      <div class="cartao">
+      <div class="cartao no-print">
         <h2>Inserir apuro real do dia</h2>
         <p class="rodape-nota" style="margin-bottom:1rem">Clica em "Apurar" numa linha da tabela acima para pré-preencher o colaborador, ou escolhe manualmente. Loja e dia são os escolhidos no topo da página. O total apurado (ATM Multibanco + ATM VISA + Numerário + Transferência) é comparado com o total dos documentos desse colaborador nesse dia.</p>
         <div class="filtros">
@@ -1218,10 +1259,19 @@ async function pesquisarCaixaDia() {
   atualizarLojaDiaMostrados();
   document.getElementById('apuro-confirmacao').innerHTML = '';
   document.getElementById('resultado-apuro').innerHTML = '';
+  // Esconde já o talão da pesquisa anterior (se havia) — nunca mostrar
+  // dados de outra loja/dia enquanto a nova pesquisa ainda está a carregar.
+  document.getElementById('cd-talao-aviso').innerHTML = '';
+  document.getElementById('btn-imprimir-talao-dia').hidden = true;
+  document.getElementById('cd-talao-imprimivel').hidden = true;
   // resumoDiaLoja primeiro — a Orientação usa o resultado (CD_RESUMO_DIA)
   // para marcar quem já apurou, sem nenhuma leitura extra.
   await carregarResumoDia();
   await Promise.all([carregarSaldoLojaCaixaDia(), pesquisarResumoColaboradores()]);
+  // Só depois de CD_RESUMO_DIA E ULTIMO_RESUMO_COLABORADORES estarem os dois
+  // actualizados é que dá para saber se falta alguém apurar — ver nota em
+  // atualizarTalaoDia().
+  atualizarTalaoDia();
 }
 
 // Saldo do dia por apurar — pedido do Ricardo: "ir mostrando a soma dos
@@ -1263,13 +1313,88 @@ async function carregarResumoDia() {
   verificarJaApuradoHoje();
 }
 
+// ── Talão do dia (2026-09-24) ────────────────────────────────────────────
+// "Só deixa imprimir depois de todos os colaboradores apurarem os seus
+// saldos" (Ricardo). "Todos os colaboradores" = todos os que TÊM movimentos
+// nesta loja/dia (ULTIMO_RESUMO_COLABORADORES, já carregado pela
+// Orientação) — comparados com quem já tem um apuro registado
+// (CD_RESUMO_DIA.apuros, já carregado pelo "Saldo do dia por apurar").
+// Nenhuma leitura extra ao Firestore: reaproveita os dois resultados que a
+// própria tab já pede sempre que se pesquisa. Chamada sempre que um dos
+// dois muda (pesquisarCaixaDia, gravar um apuro, apagar um apuro).
+function atualizarTalaoDia() {
+  const avisoEl = document.getElementById('cd-talao-aviso');
+  const btn = document.getElementById('btn-imprimir-talao-dia');
+  const imprimivelEl = document.getElementById('cd-talao-imprimivel');
+  btn.hidden = true;
+  imprimivelEl.hidden = true;
+  if (!CD_RESUMO_DIA) { avisoEl.innerHTML = ''; return; }
+
+  const colaboradoresComMovimento = [...new Set(ULTIMO_RESUMO_COLABORADORES.map(l => l.colaborador))];
+  if (!colaboradoresComMovimento.length) {
+    avisoEl.innerHTML = '<p class="rodape-nota">Sem movimentos nesta loja/dia — nada para apurar nem para imprimir.</p>';
+    return;
+  }
+  const apuradosPorNome = new Set(CD_RESUMO_DIA.apuros.map(a => a.colaborador));
+  const faltam = colaboradoresComMovimento.filter(c => !apuradosPorNome.has(c));
+  if (faltam.length) {
+    avisoEl.innerHTML = `<div class="alerta alerta-aviso">⏳ Falta${faltam.length > 1 ? 'm' : ''} apurar: <strong>${faltam.join(', ')}</strong>.</div>`;
+    return;
+  }
+  const comErro = CD_RESUMO_DIA.apuros.filter(a => !a.confere);
+  avisoEl.innerHTML = comErro.length
+    ? `<div class="alerta alerta-erro">⚠️ Todos já apuraram, mas ${comErro.length} apuro(s) têm erro (${comErro.map(a => a.colaborador).join(', ')}) — o talão pode ser impresso, mas confirma esses valores antes de arquivar.</div>`
+    : '<div class="alerta alerta-ok">✅ Todos os colaboradores já apuraram — talão pronto a imprimir.</div>';
+  gerarTalaoDia();
+  btn.hidden = false;
+  imprimivelEl.hidden = false;
+}
+
+function gerarTalaoDia() {
+  const r = CD_RESUMO_DIA;
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  document.getElementById('talao-titulo-loja').textContent = `🧾 Talão do dia — ${loja}`;
+  document.getElementById('talao-titulo-dia').textContent = `Dia: ${dia} · Gerado em ${new Date().toLocaleString('pt-PT')}`;
+
+  const totalVendasCarregamentos = arredEuro(r.totalVendas + r.totalCarregamentos);
+  document.getElementById('talao-resumo-vendas').innerHTML = `
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.totalVendas)}</div><div class="rotulo">Total das vendas</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.totalCarregamentos)}</div><div class="rotulo">Total dos Carregamentos</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(totalVendasCarregamentos)}</div><div class="rotulo">Total</div></div>
+  `;
+
+  document.getElementById('talao-corpo-colaboradores').innerHTML = r.apuros.map(a => `<tr${a.confere ? '' : ' style="background:#fdecea"'}>
+    <td>${a.colaborador}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
+    <td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td><td>${formatarEuro(a.totalApurado)}</td>
+  </tr>`).join('');
+
+  const totAtm = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.atmMultibanco) || 0), 0));
+  const totVisa = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.atmVisa) || 0), 0));
+  const totNumerario = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.numerario) || 0), 0));
+  const totTransferencia = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.transferencia) || 0), 0));
+  const totalDia = arredEuro(totAtm + totVisa + totNumerario + totTransferencia);
+  document.getElementById('talao-resumo-recebimentos').innerHTML = `
+    <div class="resumo-item"><div class="valor">${formatarEuro(totAtm)}</div><div class="rotulo">Totalizador do ATM</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(totVisa)}</div><div class="rotulo">Totalizador do VISA</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(totNumerario)}</div><div class="rotulo">Totalizador Numerário</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(totTransferencia)}</div><div class="rotulo">Totalizador das Transferências</div></div>
+  `;
+  document.getElementById('talao-total-dia').textContent = formatarEuro(totalDia);
+  const diferencaTotal = arredEuro(totalDia - totalVendasCarregamentos);
+  document.getElementById('talao-rodape').innerHTML = Math.abs(diferencaTotal) < 0.005
+    ? 'TOTAL do dia (apurado) confere com o Total das vendas + Carregamentos (documentos).'
+    : `⚠️ TOTAL do dia (apurado) ${formatarEuro(totalDia)} ≠ Total das vendas + Carregamentos (documentos) ${formatarEuro(totalVendasCarregamentos)} — diferença ${formatarEuro(diferencaTotal)}. Confirma os apuros com erro assinalados acima antes de arquivar este talão.`;
+}
+
 async function apagarApuro(colaborador) {
   const loja = document.getElementById('cd-loja').value;
   const dia = document.getElementById('cd-dia').value;
   if (!confirm(`Apagar o apuro de ${colaborador} do dia ${dia}? Só Master/Coordenador conseguem fazer isto — se não tiveres permissão, o servidor recusa.`)) return;
   const r = await chamarApi({ acao: 'apagarApuroColaborador', dados: { loja, colaborador, dia } });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
-  carregarResumoDia();
+  await carregarResumoDia();
+  atualizarTalaoDia();
 }
 
 async function carregarSaldoLojaCaixaDia() {
@@ -1446,6 +1571,7 @@ async function confirmarGravarApuro() {
   // apurado") com este apuro incluído.
   await carregarResumoDia();
   mostrarResumoColaboradores();
+  atualizarTalaoDia();
 }
 
 // ═══ Relatório contabilidade (página pronta a imprimir/gravar em PDF) ═══
@@ -2218,6 +2344,10 @@ async function guardarCodigosGSV(username) {
 function formatarEuro(v) {
   if (v === null || v === undefined) return '—';
   return Number(v).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+}
+
+function arredEuro(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
 }
 
 // ═══ Conta Corrente Vodafone (Fase 3+4, 2026-09-18) ═══
