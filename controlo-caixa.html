@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Controlo de Caixa · Redemóvel</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --teal: #007878; --teal-dark: #005f5f; --white: #ffffff; --off-white: #f5f9f9;
@@ -110,32 +110,37 @@
      do Ricardo, e ajustado de novo em 2026-09-25 para poupar tinta) — folha
      A4 com o resumo do dia. Preto e branco sempre (sem as cores do resto do
      ecrã), mesmo fora de @media print — o que se vê no ecrã antes de
-     imprimir é exactamente o que sai no papel. Tipografia decorativa
-     (Dancing Script) no cabeçalho e nos rótulos dos métodos de recebimento;
-     as letras grandes (título, nome da loja, data, e cada rótulo da lista)
-     são desenhadas como SVG só de contorno (fill branco, stroke preto) por
-     JS — contornoSVG()/aplicarContornoSVG() — em vez de texto preenchido,
-     para gastar muito menos tinta a imprimir letras grandes. Os valores em
+     imprimir é exactamente o que sai no papel. As letras grandes (título,
+     nome da loja, data, e cada rótulo da lista) são desenhadas como SVG só
+     de contorno (fill branco, stroke preto) por JS —
+     contornoSVG()/aplicarContornoSVG() — em vez de texto preenchido, para
+     gastar muito menos tinta a imprimir letras grandes. Os valores em
      euros e as tabelas de detalhe continuam em texto normal (letra
      pequena, pouca tinta de qualquer forma).
-     Tamanhos aumentados (2026-09-25, 2ª correcção): o Ricardo reportou que
-     o contorno saía "quase preenchido" na impressão a sério — a Dancing
-     Script é uma letra script fina, e o traço do contorno (contornoSVG,
-     stroke-width fixo, ~1px) só "come" uma faixa fixa de cada letra; como
-     o traço da própria letra cresce com o tamanho da fonte mas o traço do
-     contorno fica fixo, aumentar bastante o tamanho da letra aumenta a
-     área branca que sobra no meio — sem mudar de tipo de letra nem tocar
-     no JS. Não foi possível confirmar visualmente aqui (ambiente sem
-     acesso à Google Fonts, ver nota mais abaixo) — a confirmar pelo
-     Ricardo na próxima impressão. */
+     Letra trocada para serif do sistema (2026-09-25, 5ª correcção): esta
+     zona chegou a usar 'Dancing Script' (Google Fonts, cursiva) — o
+     Ricardo achou o resultado real "horrível" e pediu para ficar igual à
+     amostra que lhe mandei ("amostra V6"). Essa amostra tinha sido gerada
+     neste ambiente de desenvolvimento, que não consegue aceder ao Google
+     Fonts (ver histórico da conversa) — por isso mostrava sempre a letra
+     de reserva do sistema (confirmado por comparação lado a lado:
+     'Liberation Serif' bold), nunca a Dancing Script real. Como é esse
+     visual (serifada, clássica) que o Ricardo quer mesmo, a solução foi
+     deixar de depender de um Google Font aqui e passar a pedir
+     directamente essa família do sistema — 'Times New Roman' (universal
+     no Windows) com 'Liberation Serif' como equivalente no Linux/Mac,
+     serif como último recurso. Sem pedido de rede nenhum para esta parte,
+     por isso o resultado deixa de poder "não bater certo" com a amostra —
+     é a mesma fonte dos dois lados. O Google Font 'Dancing Script' foi
+     removido do <link> no <head> (deixou de ser usado em lado nenhum). */
   .talao-folha, .talao-folha h2, .talao-folha h3, .talao-folha th, .talao-folha .rodape-nota { color: #000; }
   .talao-folha .rodape-nota { opacity: .7; }
   .talao-folha th { border-bottom: 1px solid #000; }
   .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
-  .talao-titulo-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.2rem; }
+  .talao-titulo-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.2rem; }
   .talao-loja-data { text-align: right; }
-  .talao-loja-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.6rem; line-height: 1.1; }
-  .talao-data-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 1.7rem; line-height: 1.2; }
+  .talao-loja-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.6rem; line-height: 1.1; }
+  .talao-data-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 1.7rem; line-height: 1.2; }
   .talao-separador { border: none; border-top: 2px dashed #000; margin: .5rem 0 1rem; }
   .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 1.1rem; }
   .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: .92rem; }
@@ -144,14 +149,14 @@
   .talao-subtitulo { margin: 0 0 .5rem; font-size: .88rem; font-weight: 700; color: #000 !important; }
   .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .55rem .8rem; font-size: .76rem; margin: 0 0 1.5rem; }
   /* Lista compacta "Multibanco / VISA / Numerário / Transferências /
-     Depósitos", rótulo em Dancing Script + valor alinhado à direita na
-     mesma linha — substitui as letras grandes em contorno + caixa de
+     Depósitos", rótulo em letra serif grande + valor alinhado à direita
+     na mesma linha — substitui as letras grandes em contorno + caixa de
      agrafar da 1ª versão (o Ricardo pediu para simplificar para só esta
      lista, sem reservar espaço de agrafar). */
   .talao-lista-metodos { margin: 0 0 .5rem; }
   .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
-  .talao-lista-metodos .rotulo { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.2rem; line-height: 1; }
+  .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.2rem; line-height: 1; }
   .talao-lista-metodos .valor { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
@@ -1465,8 +1470,8 @@ function formatarDataCurta(diaISO) {
 }
 
 // Uma linha da lista "Multibanco / VISA / Numerário / Transferências /
-// Depósitos" — rótulo em Dancing Script (convertido para contorno depois,
-// por aplicarContornoEmTodos) + valor à direita na mesma linha.
+// Depósitos" — rótulo em letra serif grande (convertido para contorno
+// depois, por aplicarContornoEmTodos) + valor à direita na mesma linha.
 function linhaMetodo(titulo, valor) {
   return `<div class="linha"><div class="rotulo" data-contorno-texto="${escaparXml(titulo)}"></div><div class="valor">${formatarEuro(valor)}</div></div>`;
 }
@@ -1474,17 +1479,18 @@ function linhaMetodo(titulo, valor) {
 // ── Letras grandes só de contorno (poupar tinta) ─────────────────────────
 // Pedido do Ricardo: "quero poupar tinta. Podes fazer as letras grandes
 // apenas com o outline?" — aplica-se ao título, ao nome da loja, à data e
-// a cada rótulo da lista de métodos (tudo o que usa a letra grande
-// Dancing Script no talão). Gera um <svg><text fill="white"
-// stroke="black"> — só a linha exterior da letra recebe tinta, tal como a
-// técnica já usada na 1ª versão do talão (SVG em vez de CSS
-// -webkit-text-stroke, que não imprime de forma consistente em todos os
-// browsers, nomeadamente no Firefox).
+// a cada rótulo da lista de métodos (tudo o que usa a letra grande do
+// talão). Gera um <svg><text fill="white" stroke="black"> — só a linha
+// exterior da letra recebe tinta, tal como a técnica já usada na 1ª
+// versão do talão (SVG em vez de CSS -webkit-text-stroke, que não imprime
+// de forma consistente em todos os browsers, nomeadamente no Firefox).
 function escaparXml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-const FONTE_TALAO_CONTORNO = "'Dancing Script', cursive";
+// Serif do sistema, não Google Font — ver nota junto de ".talao-titulo-
+// script" no <style> sobre porquê (2026-09-25, 5ª correcção do talão).
+const FONTE_TALAO_CONTORNO = "'Times New Roman', 'Liberation Serif', serif";
 
 // Mede o texto com a fonte real (depois de garantidamente carregada) para
 // desenhar um SVG do tamanho certo — sem isto, um SVG com largura a mais
