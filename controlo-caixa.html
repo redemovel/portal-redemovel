@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Controlo de Caixa · Redemóvel</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --teal: #007878; --teal-dark: #005f5f; --white: #ffffff; --off-white: #f5f9f9;
@@ -106,6 +106,47 @@
   .gestao-secao { margin-top: 0; }
   .rodape-nota { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
   .relatorio-cabecalho { margin-bottom: 1rem; }
+  /* Talão do dia (2026-09-25, redesenhado 2026-09-26 a partir de um exemplo
+     do Ricardo, e ajustado de novo em 2026-09-25 para poupar tinta) — folha
+     A4 com o resumo do dia. Preto e branco sempre (sem as cores do resto do
+     ecrã), mesmo fora de @media print — o que se vê no ecrã antes de
+     imprimir é exactamente o que sai no papel. Tipografia decorativa
+     (Dancing Script) no cabeçalho e nos rótulos dos métodos de recebimento;
+     as letras grandes (título, nome da loja, data, e cada rótulo da lista)
+     são desenhadas como SVG só de contorno (fill branco, stroke preto) por
+     JS — contornoSVG()/aplicarContornoSVG() — em vez de texto preenchido,
+     para gastar muito menos tinta a imprimir letras grandes. Os valores em
+     euros e as tabelas de detalhe continuam em texto normal (letra
+     pequena, pouca tinta de qualquer forma). */
+  .talao-folha, .talao-folha h2, .talao-folha h3, .talao-folha th, .talao-folha .rodape-nota { color: #000; }
+  .talao-folha .rodape-nota { opacity: .7; }
+  .talao-folha th { border-bottom: 1px solid #000; }
+  .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .talao-titulo-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 1.9rem; }
+  .talao-loja-data { text-align: right; }
+  .talao-loja-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.3rem; line-height: 1.1; }
+  .talao-data-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 1.5rem; line-height: 1.2; }
+  .talao-separador { border: none; border-top: 2px dashed #000; margin: .6rem 0 1.4rem; }
+  .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 1.1rem; }
+  .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: .92rem; }
+  .talao-tabela-resumo td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.05rem; font-weight: 800; padding-top: .5rem; }
+  .talao-subtitulo { margin: 0 0 .5rem; font-size: .88rem; font-weight: 700; color: #000 !important; }
+  .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .55rem .8rem; font-size: .76rem; margin: 0 0 1.5rem; }
+  /* Lista compacta "Multibanco / VISA / Numerário / Transferências /
+     Depósitos", rótulo em Dancing Script + valor alinhado à direita na
+     mesma linha — substitui as letras grandes em contorno + caixa de
+     agrafar da 1ª versão (o Ricardo pediu para simplificar para só esta
+     lista, sem reservar espaço de agrafar). */
+  .talao-lista-metodos { margin: 0 0 .5rem; }
+  .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .55rem 0; border-bottom: 1px dashed #999; }
+  .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
+  .talao-lista-metodos .rotulo { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 1.8rem; line-height: 1; }
+  .talao-lista-metodos .valor { font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  /* Contentores das letras grandes em contorno — o <svg> gerado por JS
+     fica sempre alinhado como o texto que substitui (esquerda/direita
+     conforme o container). */
+  .talao-titulo-script svg, .talao-loja-script svg, .talao-data-script svg, .talao-lista-metodos .rotulo svg { display: inline-block; vertical-align: middle; }
   @media print {
     .topo, .abas, .no-print { display: none !important; }
     body { background: var(--white); }
@@ -154,16 +195,17 @@
          função de gestão, é trabalho do dia-a-dia da loja, por isso fica
          fora de "Gestão" e visível a todos os papéis (tal como o resto
          desta barra). -->
-    <button class="aba-btn" data-aba="importar" onclick="mudarAba('importar')">📥 Importar</button>
+    <button class="aba-btn ativa" data-aba="importar" onclick="mudarAba('importar')">📥 Importar</button>
     <button class="aba-btn" data-aba="conferenciacaixa" onclick="mudarAba('conferenciacaixa')">🧾 Caixa Dia</button>
     <button class="aba-btn" data-aba="diverso" onclick="mudarAba('diverso')">➕ Movimento diverso</button>
     <button class="aba-btn" data-aba="arqueio" onclick="mudarAba('arqueio')">🧮 Arqueio</button>
     <!-- "📒 Mapa Global" (2026-09-26, renomeado de "Folha de Caixa" a pedido
-         do Ricardo) — continua a ser o separador activo por omissão ao
-         entrar (ver entrarNoPainel/mudarAba('folha')); o id interno
-         "folha" fica igual, só o rótulo mudou, para não obrigar a tocar em
-         mais nada do resto do código. -->
-    <button class="aba-btn ativa" data-aba="folha" onclick="mudarAba('folha')">📒 Mapa Global</button>
+         do Ricardo) — o id interno "folha" fica igual, só o rótulo mudou,
+         para não obrigar a tocar em mais nada do resto do código. Já foi o
+         separador activo por omissão ao entrar; voltou a ser "📥 Importar"
+         (2026-09-25, pedido do Ricardo — ver entrarNoPainel/
+         mudarAba('importar')). -->
+    <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Mapa Global</button>
     <!-- "🔐 Gestão" (2026-09-21) — reúne tudo o que não é trabalho do dia-a-
          dia de loja (classificação/margens, relatórios, conta corrente
          Vodafone, tabela comercial, comissões mensais, etc.); só visível a
@@ -174,7 +216,7 @@
   </div>
 
   <!-- ── Mapa Global (id interno "folha", ver nota acima) ── -->
-  <div class="aba-conteudo" id="aba-folha">
+  <div class="aba-conteudo" id="aba-folha" hidden>
     <div class="cartao">
       <h2>💳 Saldo de numerário por loja</h2>
       <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado no Mapa Global mas não altera este saldo.</p>
@@ -303,29 +345,36 @@
       </div>
 
       <div id="cd-talao-imprimivel" hidden>
-        <div class="cartao">
-          <div class="relatorio-cabecalho">
-            <h2 id="talao-titulo-loja"></h2>
-            <div id="talao-titulo-dia" class="rodape-nota"></div>
+        <div class="cartao talao-folha">
+          <div class="talao-cabecalho-nova">
+            <div class="talao-titulo-script" id="talao-cab-titulo">Talão do dia</div>
+            <div class="talao-loja-data">
+              <div class="talao-loja-script" id="talao-cab-loja"></div>
+              <div class="talao-data-script" id="talao-cab-data"></div>
+              <div class="rodape-nota" id="talao-cab-gerado"></div>
+            </div>
           </div>
+          <hr class="talao-separador">
 
-          <div class="resumo-grelha resumo-grelha-grande" id="talao-resumo-vendas"></div>
+          <table class="talao-tabela-resumo"><tbody id="talao-corpo-resumo"></tbody></table>
 
-          <h3>Descrição dos movimentos por vendedor já apurados</h3>
+          <h3 class="talao-subtitulo">Descrição dos movimentos por vendedor já apurados</h3>
           <table>
             <thead><tr><th>Colaborador</th><th>ATM Multibanco</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th></tr></thead>
             <tbody id="talao-corpo-colaboradores"></tbody>
           </table>
 
-          <h3>Recebimentos</h3>
-          <div class="resumo-grelha resumo-grelha-grande" id="talao-resumo-recebimentos"></div>
+          <h3 class="talao-subtitulo" style="margin-top:1.1rem">Recebimentos</h3>
+          <table class="talao-tabela-resumo"><tbody id="talao-corpo-recebimentos"></tbody></table>
 
-          <div class="resumo-item" style="margin-top:1rem">
-            <div class="valor" id="talao-total-dia"></div>
-            <div class="rotulo">TOTAL do dia</div>
-          </div>
+          <p class="talao-nota-conferencia" id="talao-rodape"></p>
 
-          <p class="rodape-nota" id="talao-rodape" style="margin-top:1.5rem"></p>
+          <!-- Lista "Multibanco / VISA / Numerário / Transferências /
+               Depósitos" — mesmos totais que já estão em "Recebimentos"
+               acima, só que em destaque (rótulo grande) para facilitar
+               conferir de relance contra os talões físicos que se vão
+               arquivar junto desta folha. -->
+          <div class="talao-lista-metodos" id="talao-zonas"></div>
         </div>
       </div>
 
@@ -384,7 +433,7 @@
        papéis (ver nota junto ao botão desta tab). "Comissões mensais"
        (relatório da Vodafone para reconciliação) fica dentro de "🔐 Gestão"
        → "🔗 Reconciliação GSV" — esse sim é trabalho de gestão. ── -->
-  <div class="aba-conteudo" id="aba-importar" hidden>
+  <div class="aba-conteudo" id="aba-importar">
     <div class="cartao">
       <h2>Importar ficheiros Vodafone</h2>
       <p class="rodape-nota" style="margin-bottom:1rem">A importação é incremental — ficheiros já importados não duplicam movimentos. Podes importar os dois ficheiros em qualquer ordem.</p>
@@ -422,12 +471,17 @@
     <div class="abas sub-abas">
       <!-- Ordem pedida pelo Ricardo (2026-09-26). "Histórico" não foi
            mencionado no pedido — mantido, colocado no fim, por não ter
-           sido pedida a sua remoção. O sub-separador activo por omissão ao
-           abrir "🔐 Gestão" continua "tabelacomercial" (ver mudarAba,
-           nome==='gestao') e não "contacorrente" apesar de vir primeiro
-           aqui — "Conta Corrente Vodafone"/"Referências Vodafone" só é
-           visível a Master (a seguir), ficar como omissão deixaria um
-           Coordenador a abrir Gestão sem nada carregado. -->
+           sido pedida a sua remoção. O botão/secção aqui em baixo com
+           class="ativa"/sem "hidden" é só o valor de PARTIDA em HTML
+           ("tabelacomercial") — quem decide mesmo qual fica activo é
+           ativarSubAbaGestao(), chamado em entrarNoPainel() consoante o
+           papel (2026-09-25, pedido do Ricardo: entrar já em "Referências
+           Vodafone" para quem é Master). Fica "tabelacomercial" como
+           omissão em HTML porque é a mais segura para quem não é Master —
+           "Conta Corrente Vodafone"/"Referências Vodafone" só é visível a
+           Master (a seguir); se ficasse como omissão em HTML, um
+           Coordenador que ainda não tivesse a role carregada por instantes
+           veria "Gestão" abrir sem nada carregado. -->
       <button class="sub-aba-btn" data-subaba="contacorrente" onclick="mudarSubAbaGestao('contacorrente')" hidden>💰 Referências Vodafone</button>
       <button class="sub-aba-btn" data-subaba="relatorio" onclick="mudarSubAbaGestao('relatorio')">📅 Caixa Mês</button>
       <button class="sub-aba-btn" data-subaba="reconciliacao" onclick="mudarSubAbaGestao('reconciliacao')">🔗 Reconciliação GSV</button>
@@ -923,6 +977,15 @@ async function entrarNoPainel() {
   // (especificação, secção 8).
   const subBtnContaCorrente = document.querySelector('.sub-aba-btn[data-subaba="contacorrente"]');
   if (subBtnContaCorrente) subBtnContaCorrente.hidden = !ehMaster();
+  // Pedido do Ricardo (2026-09-25): entrar em "🔐 Gestão" já em
+  // "💰 Referências Vodafone" por omissão, para quem é Master — só troca o
+  // estado (qual sub-separador fica marcado/visível), sem processar nada
+  // ainda (a leitura real só dispara em mudarAba quando "Gestão" é mesmo
+  // aberta, tal como o resto da página). Para quem só é Coordenador,
+  // mantém-se "📊 Tabela Comercial" por omissão — "Referências Vodafone" é
+  // só de Master, o botão nem aparece (linha acima), por isso não pode
+  // ser a omissão para um Coordenador.
+  if (ehMaster()) ativarSubAbaGestao('contacorrente');
   // Reset de testes — só Master (pedido do Ricardo, 2026-09-17); a acção já
   // recusa no servidor, isto é só para não mostrar a quem não pode usar.
   const cartaoReset = document.getElementById('cartao-reset-testes');
@@ -939,13 +1002,15 @@ async function entrarNoPainel() {
   const cartaoReclassificar = document.getElementById('cartao-reclassificar-tabela');
   if (cartaoReclassificar) cartaoReclassificar.hidden = !ehMaster();
   popularSelectsLojas();
-  // Bug real (2026-09-21): desde que "📒 Folha de Caixa" passou a ser o
-  // separador activo por omissão (antes era "📥 Importar ficheiros", que
-  // não carrega nada), ficava preso em "A carregar…" para sempre — o
-  // carregamento só dispara dentro de mudarAba(), chamado quando se CLICA
-  // num separador, e ninguém clica no que já está activo ao entrar.
-  // Chamar aqui garante o mesmo arranque de sempre.
-  mudarAba('folha');
+  // Separador activo por omissão ao entrar: "📥 Importar" (voltou a ser o
+  // de origem, pedido do Ricardo 2026-09-25) — não carrega nada sozinho
+  // (ver nota junto ao botão), por isso não tem o mesmo risco de "Bug
+  // real (2026-09-21)" que obrigou a chamar mudarAba('folha') aqui quando
+  // "📒 Mapa Global" foi o activo por omissão por uns tempos (carregamento
+  // só disparava ao CLICAR, e ninguém clica no que já está activo).
+  // Chamar aqui na mesma garante sempre o mesmo arranque, seja qual for o
+  // separador por omissão.
+  mudarAba('importar');
   // Classificação/Histórico deixaram de carregar sempre para toda a gente
   // (2026-09-21) — agora vivem dentro de "Gestão" e só carregam quando
   // Master/Coordenador abre o respectivo sub-separador (mudarSubAbaGestao).
@@ -989,16 +1054,18 @@ function mudarAba(nome) {
     // em "🔍 Pesquisar".
     if (!document.getElementById('cd-dia').value) document.getElementById('cd-dia').value = hojeISO();
   }
-  // "🔐 Gestão" abre sempre no sub-separador "📊 Tabela Comercial" (agora o
-  // 1º/activo por omissão, desde que "📥 Importar ficheiros" saiu daqui —
-  // ver nota 2026-09-21 junto ao botão). Mesmo bug de fundo da Folha de
-  // Caixa: o carregamento de cada sub-aba só dispara dentro de
-  // mudarSubAbaGestao(), chamado ao CLICAR num sub-separador — e ninguém
-  // clica no que já está activo ao abrir "Gestão" pela 1ª vez. Chamar aqui
-  // garante que "Versões importadas" não fica preso em "A carregar…".
-  if (nome === 'gestao' && !GESTAO_SUBABAS_CARREGADAS.has('tabelacomercial')) {
-    GESTAO_SUBABAS_CARREGADAS.add('tabelacomercial');
-    carregarVersoesTabelaComercial();
+  // "🔐 Gestão" abre sempre no sub-separador já marcado como activo — por
+  // omissão "📊 Tabela Comercial", ou "💰 Referências Vodafone" para quem é
+  // Master (ver ativarSubAbaGestao('contacorrente') em entrarNoPainel).
+  // Mesmo bug de fundo da Folha de Caixa: o carregamento de cada sub-aba
+  // só dispara dentro de mudarSubAbaGestao(), chamado ao CLICAR num
+  // sub-separador — e ninguém clica no que já está activo ao abrir
+  // "Gestão" pela 1ª vez. Chamar aqui, para o sub-separador que estiver
+  // mesmo activo (não fixo em "tabelacomercial"), garante que nenhum dos
+  // dois fica preso em "A carregar…", seja qual for o papel do utilizador.
+  if (nome === 'gestao') {
+    const subAtiva = document.querySelector('.sub-aba-btn.ativa');
+    if (subAtiva) mudarSubAbaGestao(subAtiva.dataset.subaba);
   }
 }
 
@@ -1008,11 +1075,23 @@ function mudarAba(nome) {
 // nota na definição de ".sub-aba-btn" no <style> sobre porque não se
 // reaproveitam as mesmas classes.
 let GESTAO_SUBABAS_CARREGADAS = new Set();
-function mudarSubAbaGestao(nome) {
+
+// Só troca qual sub-separador de "Gestão" está marcado/visível — sem
+// processar nada. Extraído de mudarSubAbaGestao() para poder ser chamado
+// à parte logo no arranque (entrarNoPainel), para definir o sub-separador
+// por omissão consoante o papel do utilizador, sem disparar nenhuma
+// leitura antes de "Gestão" ser mesmo aberta (pedido do Ricardo,
+// 2026-09-25: entrar em "Gestão" já com "Referências Vodafone" escolhido
+// para quem é Master).
+function ativarSubAbaGestao(nome) {
   document.querySelectorAll('.gestao-secao').forEach(el => el.hidden = true);
   document.querySelectorAll('.sub-aba-btn').forEach(el => el.classList.remove('ativa'));
   document.getElementById('aba-' + nome).hidden = false;
   document.querySelector('.sub-aba-btn[data-subaba="' + nome + '"]').classList.add('ativa');
+}
+
+function mudarSubAbaGestao(nome) {
+  ativarSubAbaGestao(nome);
   // Mesma regra do resto da página: nada é processado/pesquisado sozinho
   // ao abrir um sub-separador, só o essencial vem pré-preenchido.
   if (nome === 'tabelacomercial' && !GESTAO_SUBABAS_CARREGADAS.has('tabelacomercial')) {
@@ -1322,7 +1401,7 @@ async function carregarResumoDia() {
 // Nenhuma leitura extra ao Firestore: reaproveita os dois resultados que a
 // própria tab já pede sempre que se pesquisa. Chamada sempre que um dos
 // dois muda (pesquisarCaixaDia, gravar um apuro, apagar um apuro).
-function atualizarTalaoDia() {
+async function atualizarTalaoDia() {
   const avisoEl = document.getElementById('cd-talao-aviso');
   const btn = document.getElementById('btn-imprimir-talao-dia');
   const imprimivelEl = document.getElementById('cd-talao-imprimivel');
@@ -1345,27 +1424,106 @@ function atualizarTalaoDia() {
   avisoEl.innerHTML = comErro.length
     ? `<div class="alerta alerta-erro">⚠️ Todos já apuraram, mas ${comErro.length} apuro(s) têm erro (${comErro.map(a => a.colaborador).join(', ')}) — o talão pode ser impresso, mas confirma esses valores antes de arquivar.</div>`
     : '<div class="alerta alerta-ok">✅ Todos os colaboradores já apuraram — talão pronto a imprimir.</div>';
-  gerarTalaoDia();
+  await gerarTalaoDia();
   btn.hidden = false;
   imprimivelEl.hidden = false;
 }
 
-function gerarTalaoDia() {
+// Nome curto da loja para o cabeçalho do talão (ex.: "Redemóvel - Arouca" →
+// "Arouca") — pedido do Ricardo, a partir do exemplo que mandou. O nome
+// canónico completo (lib/lojas.js) é sempre "<rede> - <local>"; mostra-se só
+// o local, a última parte depois do " - ".
+function lojaCurta(nomeCanonico) {
+  const partes = String(nomeCanonico || '').split(' - ');
+  return partes[partes.length - 1] || nomeCanonico;
+}
+
+const MESES_PT_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+// "2026-09-25" → "25/Set/2026" — formato pedido pelo Ricardo para o
+// cabeçalho do talão (o resto do ecrã continua todo em AAAA-MM-DD).
+function formatarDataCurta(diaISO) {
+  const [ano, mes, dia] = String(diaISO || '').split('-').map(Number);
+  if (!ano || !mes || !dia) return diaISO || '';
+  return `${String(dia).padStart(2, '0')}/${MESES_PT_ABREV[mes - 1]}/${ano}`;
+}
+
+// Uma linha da lista "Multibanco / VISA / Numerário / Transferências /
+// Depósitos" — rótulo em Dancing Script (convertido para contorno depois,
+// por aplicarContornoEmTodos) + valor à direita na mesma linha.
+function linhaMetodo(titulo, valor) {
+  return `<div class="linha"><div class="rotulo" data-contorno-texto="${escaparXml(titulo)}"></div><div class="valor">${formatarEuro(valor)}</div></div>`;
+}
+
+// ── Letras grandes só de contorno (poupar tinta) ─────────────────────────
+// Pedido do Ricardo: "quero poupar tinta. Podes fazer as letras grandes
+// apenas com o outline?" — aplica-se ao título, ao nome da loja, à data e
+// a cada rótulo da lista de métodos (tudo o que usa a letra grande
+// Dancing Script no talão). Gera um <svg><text fill="white"
+// stroke="black"> — só a linha exterior da letra recebe tinta, tal como a
+// técnica já usada na 1ª versão do talão (SVG em vez de CSS
+// -webkit-text-stroke, que não imprime de forma consistente em todos os
+// browsers, nomeadamente no Firefox).
+function escaparXml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const FONTE_TALAO_CONTORNO = "'Dancing Script', cursive";
+
+// Mede o texto com a fonte real (depois de garantidamente carregada) para
+// desenhar um SVG do tamanho certo — sem isto, um SVG com largura a mais
+// deixa espaço em branco a mais, e a menos corta a letra.
+async function contornoSVG(texto, fontSizePx, fontWeight) {
+  await document.fonts.ready;
+  const especFonte = `${fontWeight} ${fontSizePx}px ${FONTE_TALAO_CONTORNO}`;
+  try { await document.fonts.load(especFonte); } catch (e) { /* segue com a fonte de reserva, se falhar */ }
+  if (!contornoSVG._canvas) contornoSVG._canvas = document.createElement('canvas');
+  const ctx = contornoSVG._canvas.getContext('2d');
+  ctx.font = especFonte;
+  const largura = Math.max(1, Math.ceil(ctx.measureText(texto).width)) + 8;
+  const altura = Math.ceil(fontSizePx * 1.35);
+  const baseline = Math.round(fontSizePx * 1.02);
+  return `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escaparXml(texto)}"><text x="0" y="${baseline}" font-family="${FONTE_TALAO_CONTORNO}" font-weight="${fontWeight}" font-size="${fontSizePx}" fill="white" stroke="#000" stroke-width="1">${escaparXml(texto)}</text></svg>`;
+}
+
+// Aplica o contorno a um elemento, usando o tamanho/peso de letra já
+// definidos por CSS nesse elemento (para não duplicar o tamanho em dois
+// sítios) — só muda o texto para o desenho em SVG.
+async function aplicarContornoSVG(elemento, texto) {
+  if (!elemento || !texto) return;
+  const estilo = getComputedStyle(elemento);
+  const fontSizePx = parseFloat(estilo.fontSize) || 24;
+  const fontWeight = estilo.fontWeight || '700';
+  elemento.innerHTML = await contornoSVG(texto, fontSizePx, fontWeight);
+}
+
+// Todos os rótulos da lista de métodos (marcados em linhaMetodo com
+// data-contorno-texto) — em paralelo, já que cada um é independente.
+async function aplicarContornoEmTodos(seletor) {
+  const elementos = [...document.querySelectorAll(seletor)];
+  await Promise.all(elementos.map(el => aplicarContornoSVG(el, el.dataset.contornoTexto)));
+}
+
+async function gerarTalaoDia() {
   const r = CD_RESUMO_DIA;
   const loja = document.getElementById('cd-loja').value;
   const dia = document.getElementById('cd-dia').value;
-  document.getElementById('talao-titulo-loja').textContent = `🧾 Talão do dia — ${loja}`;
-  document.getElementById('talao-titulo-dia').textContent = `Dia: ${dia} · Gerado em ${new Date().toLocaleString('pt-PT')}`;
+  await aplicarContornoSVG(document.getElementById('talao-cab-titulo'), 'Talão do dia');
+  await aplicarContornoSVG(document.getElementById('talao-cab-loja'), lojaCurta(loja));
+  await aplicarContornoSVG(document.getElementById('talao-cab-data'), formatarDataCurta(dia));
+  document.getElementById('talao-cab-gerado').textContent = `Gerado em ${new Date().toLocaleString('pt-PT')}`;
 
   const totalVendasCarregamentos = arredEuro(r.totalVendas + r.totalCarregamentos);
-  document.getElementById('talao-resumo-vendas').innerHTML = `
-    <div class="resumo-item"><div class="valor">${formatarEuro(r.totalVendas)}</div><div class="rotulo">Total das vendas</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(r.totalCarregamentos)}</div><div class="rotulo">Total dos Carregamentos</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(totalVendasCarregamentos)}</div><div class="rotulo">Total</div></div>
+  document.getElementById('talao-corpo-resumo').innerHTML = `
+    <tr><td>Total das vendas</td><td>${formatarEuro(r.totalVendas)}</td></tr>
+    <tr><td>Total dos Carregamentos</td><td>${formatarEuro(r.totalCarregamentos)}</td></tr>
+    <tr class="talao-linha-total"><td>Total</td><td>${formatarEuro(totalVendasCarregamentos)}</td></tr>
   `;
 
-  document.getElementById('talao-corpo-colaboradores').innerHTML = r.apuros.map(a => `<tr${a.confere ? '' : ' style="background:#fdecea"'}>
-    <td>${a.colaborador}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
+  // "(ERRO)" ao lado do nome (texto simples, sem emoji nem fundo colorido,
+  // agora que é preto e branco) sinaliza o mesmo apuro "com erro" já
+  // assinalado no ecrã.
+  document.getElementById('talao-corpo-colaboradores').innerHTML = r.apuros.map(a => `<tr>
+    <td>${a.colaborador}${a.confere ? '' : ' (ERRO)'}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
     <td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td><td>${formatarEuro(a.totalApurado)}</td>
   </tr>`).join('');
 
@@ -1374,17 +1532,30 @@ function gerarTalaoDia() {
   const totNumerario = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.numerario) || 0), 0));
   const totTransferencia = arredEuro(r.apuros.reduce((s, a) => s + (Number(a.transferencia) || 0), 0));
   const totalDia = arredEuro(totAtm + totVisa + totNumerario + totTransferencia);
-  document.getElementById('talao-resumo-recebimentos').innerHTML = `
-    <div class="resumo-item"><div class="valor">${formatarEuro(totAtm)}</div><div class="rotulo">Totalizador do ATM</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(totVisa)}</div><div class="rotulo">Totalizador do VISA</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(totNumerario)}</div><div class="rotulo">Totalizador Numerário</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(totTransferencia)}</div><div class="rotulo">Totalizador das Transferências</div></div>
+  document.getElementById('talao-corpo-recebimentos').innerHTML = `
+    <tr><td>Totalizador do ATM (Multibanco)</td><td>${formatarEuro(totAtm)}</td></tr>
+    <tr><td>Totalizador do VISA</td><td>${formatarEuro(totVisa)}</td></tr>
+    <tr><td>Totalizador Numerário</td><td>${formatarEuro(totNumerario)}</td></tr>
+    <tr><td>Totalizador das Transferências</td><td>${formatarEuro(totTransferencia)}</td></tr>
+    <tr class="talao-linha-total"><td>TOTAL do dia</td><td>${formatarEuro(totalDia)}</td></tr>
   `;
-  document.getElementById('talao-total-dia').textContent = formatarEuro(totalDia);
+
   const diferencaTotal = arredEuro(totalDia - totalVendasCarregamentos);
   document.getElementById('talao-rodape').innerHTML = Math.abs(diferencaTotal) < 0.005
-    ? 'TOTAL do dia (apurado) confere com o Total das vendas + Carregamentos (documentos).'
-    : `⚠️ TOTAL do dia (apurado) ${formatarEuro(totalDia)} ≠ Total das vendas + Carregamentos (documentos) ${formatarEuro(totalVendasCarregamentos)} — diferença ${formatarEuro(diferencaTotal)}. Confirma os apuros com erro assinalados acima antes de arquivar este talão.`;
+    ? '<strong>CONFERE</strong> — o TOTAL do dia (apurado) bate com o Total das vendas + Carregamentos (documentos).'
+    : `<strong>NÃO CONFERE</strong> — TOTAL do dia (apurado) ${formatarEuro(totalDia)} ≠ Total das vendas + Carregamentos (documentos) ${formatarEuro(totalVendasCarregamentos)} — diferença ${formatarEuro(diferencaTotal)}. Confirma os apuros com erro assinalados acima antes de arquivar este talão.`;
+
+  // Lista em destaque, para conferir de relance contra os talões físicos —
+  // Depósitos não soma ao "TOTAL do dia" (é numerário já contado em
+  // "Totalizador Numerário" a sair da gaveta para o banco, não uma nova
+  // entrada), por isso fica de fora da tabela de Recebimentos, só aqui.
+  document.getElementById('talao-zonas').innerHTML =
+    linhaMetodo('Multibanco', totAtm) +
+    linhaMetodo('VISA', totVisa) +
+    linhaMetodo('Numerário', totNumerario) +
+    linhaMetodo('Transferências', totTransferencia) +
+    linhaMetodo('Depósitos', r.totalDepositos);
+  await aplicarContornoEmTodos('#talao-zonas .rotulo[data-contorno-texto]');
 }
 
 async function apagarApuro(colaborador) {
