@@ -162,13 +162,14 @@
      fica sempre alinhado como o texto que substitui (esquerda/direita
      conforme o container). */
   .talao-titulo-script svg, .talao-loja-script svg, .talao-data-script svg, .talao-lista-metodos .rotulo svg { display: inline-block; vertical-align: middle; }
-  /* Margens da página impressa (2026-09-25, 3ª correcção do talão) — sem
-     esta regra, a margem em branco à volta do papel dependia inteiramente
-     da configuração de impressão do browser/utilizador (que pode estar em
+  /* Margens da página impressa (2026-09-25, 3ª correcção do talão, e
+     ajustada para 1cm nos 4 lados a pedido do Ricardo) — sem esta regra,
+     a margem em branco à volta do papel dependia inteiramente da
+     configuração de impressão do browser/utilizador (que pode estar em
      "Nenhuma", para poupar papel) — o Ricardo reportou o talão "sem
      margens". Isto fixa sempre a mesma margem, própria para a folha A4 de
      agrafar, independente da configuração de impressão de quem imprime. */
-  @page { size: A4; margin: 14mm 12mm; }
+  @page { size: A4; margin: 10mm; }
   @media print {
     .topo, .abas, .no-print { display: none !important; }
     body { background: var(--white); }
