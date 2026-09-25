@@ -132,11 +132,11 @@
   .talao-folha .rodape-nota { opacity: .7; }
   .talao-folha th { border-bottom: 1px solid #000; }
   .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
-  .talao-titulo-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.8rem; }
+  .talao-titulo-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.2rem; }
   .talao-loja-data { text-align: right; }
-  .talao-loja-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 3.4rem; line-height: 1.1; }
-  .talao-data-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.2rem; line-height: 1.2; }
-  .talao-separador { border: none; border-top: 2px dashed #000; margin: .6rem 0 1.4rem; }
+  .talao-loja-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.6rem; line-height: 1.1; }
+  .talao-data-script { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 1.7rem; line-height: 1.2; }
+  .talao-separador { border: none; border-top: 2px dashed #000; margin: .5rem 0 1rem; }
   .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 1.1rem; }
   .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: .92rem; }
   .talao-tabela-resumo td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -149,14 +149,21 @@
      agrafar da 1ª versão (o Ricardo pediu para simplificar para só esta
      lista, sem reservar espaço de agrafar). */
   .talao-lista-metodos { margin: 0 0 .5rem; }
-  .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .75rem 0; border-bottom: 1px dashed #999; }
+  .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
-  .talao-lista-metodos .rotulo { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.7rem; line-height: 1; }
-  .talao-lista-metodos .valor { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .talao-lista-metodos .rotulo { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 2.2rem; line-height: 1; }
+  .talao-lista-metodos .valor { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
      conforme o container). */
   .talao-titulo-script svg, .talao-loja-script svg, .talao-data-script svg, .talao-lista-metodos .rotulo svg { display: inline-block; vertical-align: middle; }
+  /* Margens da página impressa (2026-09-25, 3ª correcção do talão) — sem
+     esta regra, a margem em branco à volta do papel dependia inteiramente
+     da configuração de impressão do browser/utilizador (que pode estar em
+     "Nenhuma", para poupar papel) — o Ricardo reportou o talão "sem
+     margens". Isto fixa sempre a mesma margem, própria para a folha A4 de
+     agrafar, independente da configuração de impressão de quem imprime. */
+  @page { size: A4; margin: 14mm 12mm; }
   @media print {
     .topo, .abas, .no-print { display: none !important; }
     body { background: var(--white); }
