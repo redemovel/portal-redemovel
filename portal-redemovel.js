@@ -182,6 +182,10 @@ async function enterDashboard() {
   if (SESSION.role==='master'||SESSION.role==='coordenador_lojas') {
     document.getElementById('nav-gestao').style.display='';
   }
+  // Botão "💰 Controlo de Caixa" (2026-09-26) — só Master, Coordenador e
+  // Assistente de Loja. Criado aqui por JS (não no HTML da Apps Script) para
+  // esta funcionalidade só precisar de um commit deste ficheiro.
+  atualizarBotaoCaixa();
 
   // Regras e RGPD (2026-09-10): confirmação de leitura obrigatória antes de
   // aceder ao resto do portal. Se ainda não confirmou a versão actual do
@@ -200,6 +204,80 @@ async function enterDashboard() {
   startClock();
   if (!okRegras) return;
   await mostrarVistaInicial();
+}
+
+// ═══════════════════════════════════════
+//  CONTROLO DE CAIXA — entrada sem 2º login (2026-09-26)
+// ═══════════════════════════════════════
+// O Controlo de Caixa é uma página à parte (GitHub Pages + serviço Cloud Run
+// próprio) — domínio diferente deste portal, por isso não consegue ler esta
+// sessão. A passagem faz-se com um token assinado pelo próprio serviço da
+// caixa: trocamos as credenciais que já temos em memória por um token
+// (acção emitirTokenCaixa, válido 12h) e abrimos a página com ele depois do
+// "#" (essa parte do endereço nunca é enviada a nenhum servidor). A página
+// da caixa tira-o logo da barra de endereço e entra directamente.
+// A permissão a sério é sempre validada no servidor da caixa — a lista
+// abaixo serve só para não mostrar o botão a quem não o pode usar.
+const CAIXA_API_URL = 'https://redemovel-controlo-caixa-389728721690.europe-west1.run.app';
+const CAIXA_PAGINA_URL = 'https://redemovel.github.io/portal-redemovel/controlo-caixa.html';
+const ROLES_CONTROLO_CAIXA = new Set(['master', 'coordenador', 'coordenador_lojas', 'assistente', 'assistente_loja']);
+
+function temAcessoControloCaixa() {
+  return !!(SESSION && ROLES_CONTROLO_CAIXA.has(String(SESSION.role || '').toLowerCase()));
+}
+
+// Cria (ou remove) o botão na barra de navegação, logo antes de "Perfil".
+// Remove-o também quando alguém sem acesso entra a seguir no mesmo PC.
+function atualizarBotaoCaixa() {
+  const existente = document.getElementById('nav-caixa');
+  if (!temAcessoControloCaixa()) { if (existente) existente.remove(); return; }
+  if (existente) return;
+  const lista = document.getElementById('topbar-nav-list');
+  if (!lista) return;
+  const btn = document.createElement('button');
+  btn.className = 'nav-item';
+  btn.id = 'nav-caixa';
+  btn.type = 'button';
+  btn.title = 'Abre o Controlo de Caixa num separador novo, já com sessão iniciada';
+  btn.textContent = '💰 Controlo de Caixa';
+  btn.addEventListener('click', abrirControloCaixa);
+  const perfil = lista.querySelector('.nav-item[onclick*="\'perfil\'"]');
+  lista.insertBefore(btn, perfil || null);
+}
+
+async function abrirControloCaixa() {
+  if (!temAcessoControloCaixa() || !SESSION.username || !SESSION.password) return;
+  // A janela tem de ser aberta JÁ, dentro do clique — se só a abríssemos
+  // depois de receber o token (pedido assíncrono), o browser tratava-a como
+  // pop-up não pedido e bloqueava-a. Abre-se vazia e navega-se a seguir.
+  let janela = null;
+  try { janela = window.open('', '_blank'); } catch (_) {}
+  try {
+    if (janela) janela.document.write('<p style="font-family:sans-serif;padding:2rem;color:#555">A abrir o Controlo de Caixa…</p>');
+  } catch (_) {}
+  showGlobalLoading('A abrir o Controlo de Caixa…');
+  let r;
+  try {
+    r = await fetchComRetry(CAIXA_API_URL, { acao: 'emitirTokenCaixa', username: SESSION.username, password: SESSION.password }, 2);
+  } finally {
+    hideGlobalLoading();
+  }
+  if (!r || !r.ok || !r.token) {
+    try { if (janela) janela.close(); } catch (_) {}
+    alert((r && r.erro) || 'Não foi possível abrir o Controlo de Caixa.');
+    return;
+  }
+  const url = CAIXA_PAGINA_URL + '#t=' + encodeURIComponent(r.token);
+  if (janela) {
+    try { janela.opener = null; } catch (_) {}
+    janela.location.href = url;
+  } else {
+    // Pop-ups bloqueados neste browser: tenta abrir directamente; se nem
+    // assim der, explica o que fazer (o token não é mostrado ao utilizador).
+    const outra = window.open(url, '_blank');
+    if (outra) { try { outra.opener = null; } catch (_) {} }
+    else alert('O browser bloqueou a abertura do Controlo de Caixa. Permite pop-ups para o portal e clica de novo no botão.');
+  }
 }
 
 // Vista inicial: a última vista guardada (F5) ou Assiduidade por defeito.
