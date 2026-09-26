@@ -140,6 +140,17 @@
      margem sozinha empurrava a última linha "Depósitos" para uma 2ª
      página, mesmo já tudo o resto comprimido a caber). */
   .talao-folha { margin-bottom: 0 !important; }
+  /* O resto do "chrome" do .cartao genérico (padding, cantos
+     arredondados, sombra) só desaparecia em @media print — sempre foi
+     inofensivo visualmente (o talão só se vê mesmo a sério ao imprimir),
+     mas isso significava que a pré-visualização em ecrã ficava sempre
+     ~48px mais alta do que o resultado impresso real, o que fazia
+     ajustarTalaoParaCaberNumaPagina() (12ª correcção, medição feita fora
+     de @media print) ver uma altura maior do que a verdadeira e
+     comprimir a tabela de colaboradores mais do que era preciso. Tirar
+     isto sempre (não só a imprimir) torna a pré-visualização em ecrã
+     igual, a sério, ao papel — e a medição deixa de poder enganar-se. */
+  .talao-folha { padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; border: none !important; }
   .talao-folha .rodape-nota { opacity: .7; }
   .talao-folha th { border-bottom: 1px solid #000; }
   .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: .6rem; flex-wrap: wrap; }
@@ -171,6 +182,24 @@
      Padding das células reduzido na 8ª correcção (ver nota acima). */
   .talao-folha table:not(.talao-tabela-resumo) { font-size: 1.05rem; }
   .talao-folha table:not(.talao-tabela-resumo) th, .talao-folha table:not(.talao-tabela-resumo) td { padding: .14rem .4rem; }
+  /* Níveis de compressão da tabela "Descrição dos movimentos por
+     vendedor" — a ÚNICA secção do talão cujo tamanho varia (uma linha
+     por colaborador que apurou nesse dia/loja). ajustarTalaoParaCaberNumaPagina()
+     (2026-09-26, 12ª correcção) mede a altura real e aplica um destes
+     níveis automaticamente, só quando é preciso, para o talão nunca
+     passar de uma única página A4 — nunca encolhe o título, a loja, a
+     data, nem a lista de Multibanco/VISA/etc., que o Ricardo pediu
+     expressamente para ficarem grandes. */
+  /* !important necessário: sem isto, a regra genérica logo acima
+     (".talao-folha table:not(.talao-tabela-resumo)") tem mais
+     especificidade (2 classes + 1 tipo) do que estas (2 classes) e
+     ganhava sempre, tornando os dois níveis de compressão sem qualquer
+     efeito — bug apanhado ao testar com mais colaboradores (2026-09-26,
+     12ª correcção). */
+  .talao-tabela-colaboradores.talao-compacta { font-size: .85rem !important; }
+  .talao-tabela-colaboradores.talao-compacta th, .talao-tabela-colaboradores.talao-compacta td { padding: .06rem .3rem !important; }
+  .talao-tabela-colaboradores.talao-muito-compacta { font-size: .62rem !important; line-height: 1.05 !important; }
+  .talao-tabela-colaboradores.talao-muito-compacta th, .talao-tabela-colaboradores.talao-muito-compacta td { padding: 0 .18rem !important; }
   /* Lista compacta "Multibanco / VISA / Numerário / Transferências /
      Depósitos", rótulo em letra serif grande + valor alinhado à direita
      na mesma linha — substitui as letras grandes em contorno + caixa de
@@ -413,7 +442,7 @@
           <table class="talao-tabela-resumo"><tbody id="talao-corpo-resumo"></tbody></table>
 
           <h3 class="talao-subtitulo">Descrição dos movimentos por vendedor já apurados</h3>
-          <table>
+          <table class="talao-tabela-colaboradores" id="talao-tabela-colaboradores">
             <thead><tr><th>Colaborador</th><th>ATM Multibanco</th><th>VISA</th><th>Numerário</th><th>Transf.</th><th>Total apurado</th></tr></thead>
             <tbody id="talao-corpo-colaboradores"></tbody>
           </table>
@@ -495,6 +524,7 @@
         <div class="caixa-ficheiro">
           <h4>Relatório de cobranças (CSV)</h4>
           <p>Carregamentos & Pagamento de Faturas — export diário/semanal do balcão.</p>
+          <p class="rodape-nota" id="info-ultima-cobrancas" style="margin-bottom:.75rem">A verificar última importação…</p>
           <input type="file" id="ficheiro-cobrancas" accept=".csv">
           <button class="btn" style="width:100%" onclick="importarFicheiro('cobrancas')">Importar</button>
           <div id="resultado-cobrancas"></div>
@@ -502,6 +532,7 @@
         <div class="caixa-ficheiro">
           <h4>Invoice GSV (.xls)</h4>
           <p>Vendas e devoluções de equipamento/acessórios/serviços.</p>
+          <p class="rodape-nota" id="info-ultima-gsv" style="margin-bottom:.75rem">A verificar última importação…</p>
           <input type="file" id="ficheiro-gsv" accept=".xls,.xlsx">
           <button class="btn" style="width:100%" onclick="importarFicheiro('gsv')">Importar</button>
           <div id="resultado-gsv"></div>
@@ -1097,6 +1128,12 @@ function mudarAba(nome) {
   // botão "Atualizar"/"Pesquisar" de cada uma. "Saldo de numerário por loja"
   // (carregarSaldos) fica de fora desta regra: é 1 única leitura que já
   // mostra as 5 lojas de uma vez (não "adivinha" nenhuma loja).
+  // "Importar ficheiros" é a tab por omissão ao entrar (entrarNoPainel
+  // chama mudarAba('importar') logo de início) — carregar aqui a última
+  // importação de cada tipo não viola a regra acima: é a mesma excepção
+  // já aberta para carregarSaldos (1 única leitura pequena, que não
+  // adivinha nenhuma loja nem processa nada, só mostra o estado actual).
+  if (nome === 'importar' && !ABAS_CARREGADAS.has('importar')) { ABAS_CARREGADAS.add('importar'); carregarUltimasImportacoes(); }
   if (nome === 'folha' && !ABAS_CARREGADAS.has('folha')) { ABAS_CARREGADAS.add('folha'); carregarSaldos(); }
   if (nome === 'diverso' && !ABAS_CARREGADAS.has('diverso')) { ABAS_CARREGADAS.add('diverso'); carregarDiversos(); }
   if (nome === 'arqueio' && !ABAS_CARREGADAS.has('arqueio')) { ABAS_CARREGADAS.add('arqueio'); atualizarSaldoTeoricoArqueio(); carregarArqueios(); }
@@ -1231,10 +1268,32 @@ async function importarFicheiro(tipo) {
     // Depois de importar, o histórico/classificação podem ter mudado — refresca em segundo plano.
     carregarHistorico();
     carregarClassificacao();
+    if (tipo === 'cobrancas' || tipo === 'gsv') carregarUltimasImportacoes();
     ULTIMA_RECONCILIACAO = null;
   } catch (err) {
     resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (err.message || 'Erro inesperado.') + '</div>';
   }
+}
+
+// ═══ Última importação por tipo (2026-09-26, pedido do Ricardo) ═══
+// Mostra, por cima do botão "Importar" de cada ficheiro, quando foi a
+// última importação (e por quem) e qual foi o último documento
+// importado — visível a qualquer papel (tal como o resto desta tab),
+// ao contrário do histórico completo de "🔐 Gestão → Histórico".
+async function carregarUltimasImportacoes() {
+  const r = await chamarApi({ acao: 'ultimasImportacoes' });
+  if (!r.ok) return;
+  renderizarUltimaImportacao('cobrancas', r.porTipo.cobrancas);
+  renderizarUltimaImportacao('gsv', r.porTipo.gsv);
+}
+
+function renderizarUltimaImportacao(tipo, info) {
+  const el = document.getElementById('info-ultima-' + tipo);
+  if (!el) return;
+  if (!info) { el.textContent = 'Ainda sem nenhuma importação registada.'; return; }
+  let texto = `Última importação: ${info.atualizadoEm || ''} · ${info.ficheiroNome || '(sem nome)'}${info.importadoPor ? ' · por ' + info.importadoPor : ''}`;
+  if (info.ultimoDocumento) texto += ` · último documento: ${info.ultimoDocumento}`;
+  el.textContent = texto;
 }
 
 // ═══ Tabela Comercial Vodafone (2026-09-21) ═══
@@ -1695,6 +1754,59 @@ async function gerarTalaoDia() {
     linhaMetodo('Transferências', totTransferencia) +
     linhaMetodo('Depósitos', r.totalDepositos);
   await aplicarContornoEmTodos('#talao-zonas .rotulo[data-contorno-texto], #talao-zonas .valor[data-contorno-texto]');
+  ajustarTalaoParaCaberNumaPagina();
+}
+
+// Garante que o talão cabe sempre numa única folha A4, seja qual for o
+// número de colaboradores que apuraram nesse dia/loja (2026-09-26, 12ª
+// correcção — o Ricardo receou que, com mais colaboradores do que no
+// exemplo que estava a ver, o talão passasse para uma 2ª página, "algo
+// que não quero de todo"). A única secção do talão cujo tamanho varia
+// com o número de colaboradores é a tabela "Descrição dos movimentos por
+// vendedor" — tudo o resto (título, loja, data, lista de Multibanco/
+// VISA/etc.) tem sempre o mesmo número de linhas, e o Ricardo pediu
+// expressamente para ficarem grandes, por isso nunca são estas a
+// encolher.
+//
+// Mede a altura real clonando a folha inteira para um container
+// invisível à LARGURA REAL de impressão (190mm = A4 menos as margens de
+// 1cm de cada lado) — medir à largura do ecrã (normalmente bem mais
+// larga) subestimava a altura, porque o texto quebra menos linhas do
+// que realmente quebra no papel. Se não couber no espaço disponível
+// (277mm úteis, com uma margem de segurança), aplica um nível de
+// compressão à tabela de colaboradores (só tamanho de letra/
+// espaçamento — nunca corta nem esconde nenhuma linha) e mede outra
+// vez; repete para um segundo nível mais compacto se ainda for preciso.
+function medirAlturaTalaoMM(folha) {
+  const clone = folha.cloneNode(true);
+  const container = document.createElement('div');
+  container.style.cssText = 'position:absolute;left:-9999px;top:0;width:190mm;visibility:hidden;';
+  container.appendChild(clone);
+  document.body.appendChild(container);
+  const alturaPx = clone.getBoundingClientRect().height;
+  document.body.removeChild(container);
+  return alturaPx / 96 * 25.4; // px (96 por polegada, CSS) → mm
+}
+
+function ajustarTalaoParaCaberNumaPagina() {
+  const folha = document.querySelector('#cd-talao-imprimivel .talao-folha');
+  const tabela = document.getElementById('talao-tabela-colaboradores');
+  if (!folha || !tabela) return;
+  tabela.classList.remove('talao-compacta', 'talao-muito-compacta');
+
+  const LIMITE_MM = 272; // 277mm úteis (A4 - 2×10mm de margem) - 5mm de segurança
+  if (medirAlturaTalaoMM(folha) <= LIMITE_MM) return;
+
+  tabela.classList.add('talao-compacta');
+  if (medirAlturaTalaoMM(folha) <= LIMITE_MM) return;
+
+  tabela.classList.remove('talao-compacta');
+  tabela.classList.add('talao-muito-compacta');
+  // Mesmo no nível mais compacto, um número verdadeiramente extraordinário
+  // de colaboradores pode ainda não caber — fica no nível mais compacto
+  // possível (nunca esconde nem corta linhas), e não há mais nenhuma
+  // secção do talão que se possa comprimir mais sem contrariar o pedido
+  // do Ricardo de letras grandes nas restantes secções.
 }
 
 async function apagarApuro(colaborador) {
