@@ -134,43 +134,62 @@
      é a mesma fonte dos dois lados. O Google Font 'Dancing Script' foi
      removido do <link> no <head> (deixou de ser usado em lado nenhum). */
   .talao-folha, .talao-folha h2, .talao-folha h3, .talao-folha th, .talao-folha .rodape-nota { color: #000; }
+  /* Sem margem por baixo — a folha do talão é o único conteúdo da página
+     impressa, não precisa do espaço que o .cartao genérico reserva a
+     separar cartões consecutivos no ecrã (2026-09-26, 8ª correcção: esta
+     margem sozinha empurrava a última linha "Depósitos" para uma 2ª
+     página, mesmo já tudo o resto comprimido a caber). */
+  .talao-folha { margin-bottom: 0 !important; }
   .talao-folha .rodape-nota { opacity: .7; }
   .talao-folha th { border-bottom: 1px solid #000; }
-  .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .talao-cabecalho-nova { display: flex; justify-content: space-between; align-items: flex-end; gap: .6rem; flex-wrap: wrap; }
   .talao-titulo-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.2rem; }
   .talao-loja-data { text-align: right; }
-  .talao-loja-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.6rem; line-height: 1.1; }
-  .talao-data-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 1.7rem; line-height: 1.2; }
-  .talao-separador { border: none; border-top: 2px dashed #000; margin: .5rem 0 1rem; }
-  .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 1.1rem; }
-  .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: 1.15rem; }
+  .talao-loja-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 5.2rem; line-height: 1.1; }
+  .talao-data-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 3.4rem; line-height: 1.2; }
+  .talao-separador { border: none; border-top: 2px dashed #000; margin: .15rem 0 .25rem; }
+  /* Espaçamentos das tabelas/caixas de resumo comprimidos (2026-09-26, 8ª
+     correcção) — não para ficarem mais pequenas (o texto mantém o mesmo
+     tamanho), só para sobrar altura de página depois de o rótulo/valor da
+     lista de baixo e a loja/data terem duplicado de tamanho, e a folha
+     continuar a caber numa só página A4. */
+  .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 .3rem; }
+  .talao-tabela-resumo td { padding: .12rem .1rem; border-bottom: 1px solid #ccc; font-size: 1.15rem; }
   .talao-tabela-resumo td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.3rem; font-weight: 800; padding-top: .5rem; }
-  .talao-subtitulo { margin: 0 0 .5rem; font-size: 1.05rem; font-weight: 700; color: #000 !important; }
+  .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.3rem; font-weight: 800; padding-top: .25rem; }
+  .talao-subtitulo { margin: 0 0 .2rem; font-size: 1.05rem; font-weight: 700; color: #000 !important; }
   /* CONFERE/NÃO CONFERE e os totalizadores da lista (Multibanco/VISA/
      Numerário/Transferências) aumentados a pedido do Ricardo (2026-09-26,
      depois de imprimir e digitalizar): "quero que as letras e números
-     sejam bem maiores para facilidade de leitura". */
-  .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .7rem .9rem; font-size: 1.15rem; margin: 0 0 1.5rem; }
+     sejam bem maiores para facilidade de leitura". Padding/margem
+     comprimidos na 8ª correcção pela mesma razão da nota acima. */
+  .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .32rem .6rem; font-size: 1.15rem; margin: 0 0 .3rem; }
   /* A tabela "Descrição dos movimentos por vendedor" (dentro do talão) não
      tem classe própria — sem esta regra, ficava presa em .72rem pela
      regra genérica "table { font-size: .72rem }" em @media print (pensada
-     para OUTROS relatórios mais densos da app, não para este talão). */
+     para OUTROS relatórios mais densos da app, não para este talão).
+     Padding das células reduzido na 8ª correcção (ver nota acima). */
   .talao-folha table:not(.talao-tabela-resumo) { font-size: 1.05rem; }
+  .talao-folha table:not(.talao-tabela-resumo) th, .talao-folha table:not(.talao-tabela-resumo) td { padding: .14rem .4rem; }
   /* Lista compacta "Multibanco / VISA / Numerário / Transferências /
      Depósitos", rótulo em letra serif grande + valor alinhado à direita
      na mesma linha — substitui as letras grandes em contorno + caixa de
      agrafar da 1ª versão (o Ricardo pediu para simplificar para só esta
-     lista, sem reservar espaço de agrafar). */
-  .talao-lista-metodos { margin: 0 0 .5rem; }
-  .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
+     lista, sem reservar espaço de agrafar). Padding da linha comprimido na
+     8ª correcção (ver nota acima) — a letra é que dobrou, não o espaço à
+     volta dela. */
+  .talao-lista-metodos { margin: 0 0 .15rem; }
+  .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
-  .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.2rem; line-height: 1; }
-  .talao-lista-metodos .valor { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 4.4rem; line-height: 1; }
+  .talao-lista-metodos .valor { font-family: 'Outfit', Arial, sans-serif; font-size: 3.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
-     conforme o container). */
-  .talao-titulo-script svg, .talao-loja-script svg, .talao-data-script svg, .talao-lista-metodos .rotulo svg { display: inline-block; vertical-align: middle; }
+     conforme o container). Os valores (Multibanco/VISA/Numerário/
+     Transferências/Depósitos) passaram a usar o mesmo contorno a pedido
+     do Ricardo (2026-09-26, 8ª correcção), mantendo a fonte 'Outfit' —
+     ver generalização de contornoSVG/aplicarContornoSVG mais abaixo. */
+  .talao-titulo-script svg, .talao-loja-script svg, .talao-data-script svg, .talao-lista-metodos .rotulo svg, .talao-lista-metodos .valor svg { display: inline-block; vertical-align: middle; }
   /* Margens da página impressa (2026-09-25, 3ª correcção do talão, e
      ajustada para 1cm nos 4 lados a pedido do Ricardo) — sem esta regra,
      a margem em branco à volta do papel dependia inteiramente da
@@ -396,7 +415,7 @@
             <tbody id="talao-corpo-colaboradores"></tbody>
           </table>
 
-          <h3 class="talao-subtitulo" style="margin-top:1.1rem">Recebimentos</h3>
+          <h3 class="talao-subtitulo" style="margin-top:.4rem">Recebimentos</h3>
           <table class="talao-tabela-resumo"><tbody id="talao-corpo-recebimentos"></tbody></table>
 
           <p class="talao-nota-conferencia" id="talao-rodape"></p>
@@ -1480,10 +1499,12 @@ function formatarDataCurta(diaISO) {
 }
 
 // Uma linha da lista "Multibanco / VISA / Numerário / Transferências /
-// Depósitos" — rótulo em letra serif grande (convertido para contorno
-// depois, por aplicarContornoEmTodos) + valor à direita na mesma linha.
+// Depósitos" — rótulo em letra serif grande e valor (ambos convertidos
+// para contorno depois, por aplicarContornoEmTodos) lado a lado na mesma
+// linha. O valor manteve-se a preencher até 2026-09-26 (8ª correcção);
+// o Ricardo pediu para dobrar o tamanho e poupar tinta também aqui.
 function linhaMetodo(titulo, valor) {
-  return `<div class="linha"><div class="rotulo" data-contorno-texto="${escaparXml(titulo)}"></div><div class="valor">${formatarEuro(valor)}</div></div>`;
+  return `<div class="linha"><div class="rotulo" data-contorno-texto="${escaparXml(titulo)}"></div><div class="valor" data-contorno-texto="${escaparXml(formatarEuro(valor))}"></div></div>`;
 }
 
 // ── Letras grandes só de contorno (poupar tinta) ─────────────────────────
@@ -1500,37 +1521,48 @@ function escaparXml(s) {
 
 // Serif do sistema, não Google Font — ver nota junto de ".talao-titulo-
 // script" no <style> sobre porquê (2026-09-25, 5ª correcção do talão).
+// Continua a ser a fonte por omissão do contorno (título/loja/data/
+// rótulos); os valores (.valor) passam a sua própria font-family
+// ('Outfit', via CSS) — ver generalização de contornoSVG abaixo
+// (2026-09-26, 8ª correcção).
 const FONTE_TALAO_CONTORNO = "'Times New Roman', 'Liberation Serif', serif";
 
 // Mede o texto com a fonte real (depois de garantidamente carregada) para
 // desenhar um SVG do tamanho certo — sem isto, um SVG com largura a mais
-// deixa espaço em branco a mais, e a menos corta a letra.
-async function contornoSVG(texto, fontSizePx, fontWeight) {
+// deixa espaço em branco a mais, e a menos corta a letra. fontFamily é
+// opcional — por omissão usa a serif do talão, mas os valores (.valor)
+// passam a sua própria fonte ('Outfit') para não ficarem em serif.
+async function contornoSVG(texto, fontSizePx, fontWeight, fontFamily) {
+  const familia = fontFamily || FONTE_TALAO_CONTORNO;
   await document.fonts.ready;
-  const especFonte = `${fontWeight} ${fontSizePx}px ${FONTE_TALAO_CONTORNO}`;
+  const especFonte = `${fontWeight} ${fontSizePx}px ${familia}`;
   try { await document.fonts.load(especFonte); } catch (e) { /* segue com a fonte de reserva, se falhar */ }
   if (!contornoSVG._canvas) contornoSVG._canvas = document.createElement('canvas');
   const ctx = contornoSVG._canvas.getContext('2d');
   ctx.font = especFonte;
   const largura = Math.max(1, Math.ceil(ctx.measureText(texto).width)) + 8;
-  const altura = Math.ceil(fontSizePx * 1.35);
-  const baseline = Math.round(fontSizePx * 1.02);
-  return `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escaparXml(texto)}"><text x="0" y="${baseline}" font-family="${FONTE_TALAO_CONTORNO}" font-weight="${fontWeight}" font-size="${fontSizePx}" fill="white" stroke="#000" stroke-width="1">${escaparXml(texto)}</text></svg>`;
+  const altura = Math.ceil(fontSizePx * 1.07);
+  const baseline = Math.round(fontSizePx * 0.9);
+  return `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escaparXml(texto)}"><text x="0" y="${baseline}" font-family="${familia}" font-weight="${fontWeight}" font-size="${fontSizePx}" fill="white" stroke="#000" stroke-width="1">${escaparXml(texto)}</text></svg>`;
 }
 
-// Aplica o contorno a um elemento, usando o tamanho/peso de letra já
-// definidos por CSS nesse elemento (para não duplicar o tamanho em dois
-// sítios) — só muda o texto para o desenho em SVG.
+// Aplica o contorno a um elemento, usando o tamanho/peso/família de letra
+// já definidos por CSS nesse elemento (para não duplicar em dois sítios)
+// — só muda o texto para o desenho em SVG. Ler a font-family do próprio
+// elemento (em vez de assumir sempre a serif do talão) é o que permite
+// aos valores (.valor, fonte 'Outfit') usarem o mesmo contorno sem ficar
+// em serif (2026-09-26, 8ª correcção).
 async function aplicarContornoSVG(elemento, texto) {
   if (!elemento || !texto) return;
   const estilo = getComputedStyle(elemento);
   const fontSizePx = parseFloat(estilo.fontSize) || 24;
   const fontWeight = estilo.fontWeight || '700';
-  elemento.innerHTML = await contornoSVG(texto, fontSizePx, fontWeight);
+  const fontFamily = estilo.fontFamily || FONTE_TALAO_CONTORNO;
+  elemento.innerHTML = await contornoSVG(texto, fontSizePx, fontWeight, fontFamily);
 }
 
-// Todos os rótulos da lista de métodos (marcados em linhaMetodo com
-// data-contorno-texto) — em paralelo, já que cada um é independente.
+// Todos os rótulos/valores da lista de métodos (marcados em linhaMetodo
+// com data-contorno-texto) — em paralelo, já que cada um é independente.
 async function aplicarContornoEmTodos(seletor) {
   const elementos = [...document.querySelectorAll(seletor)];
   await Promise.all(elementos.map(el => aplicarContornoSVG(el, el.dataset.contornoTexto)));
@@ -1588,7 +1620,7 @@ async function gerarTalaoDia() {
     linhaMetodo('Numerário', totNumerario) +
     linhaMetodo('Transferências', totTransferencia) +
     linhaMetodo('Depósitos', r.totalDepositos);
-  await aplicarContornoEmTodos('#talao-zonas .rotulo[data-contorno-texto]');
+  await aplicarContornoEmTodos('#talao-zonas .rotulo[data-contorno-texto], #talao-zonas .valor[data-contorno-texto]');
 }
 
 async function apagarApuro(colaborador) {
