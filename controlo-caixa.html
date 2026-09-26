@@ -143,11 +143,20 @@
   .talao-data-script { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 1.7rem; line-height: 1.2; }
   .talao-separador { border: none; border-top: 2px dashed #000; margin: .5rem 0 1rem; }
   .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 1.1rem; }
-  .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: .92rem; }
+  .talao-tabela-resumo td { padding: .32rem .1rem; border-bottom: 1px solid #ccc; font-size: 1.15rem; }
   .talao-tabela-resumo td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.05rem; font-weight: 800; padding-top: .5rem; }
-  .talao-subtitulo { margin: 0 0 .5rem; font-size: .88rem; font-weight: 700; color: #000 !important; }
-  .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .55rem .8rem; font-size: .76rem; margin: 0 0 1.5rem; }
+  .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.3rem; font-weight: 800; padding-top: .5rem; }
+  .talao-subtitulo { margin: 0 0 .5rem; font-size: 1.05rem; font-weight: 700; color: #000 !important; }
+  /* CONFERE/NÃO CONFERE e os totalizadores da lista (Multibanco/VISA/
+     Numerário/Transferências) aumentados a pedido do Ricardo (2026-09-26,
+     depois de imprimir e digitalizar): "quero que as letras e números
+     sejam bem maiores para facilidade de leitura". */
+  .talao-nota-conferencia { border: 1px solid #000; border-radius: 8px; padding: .7rem .9rem; font-size: 1.15rem; margin: 0 0 1.5rem; }
+  /* A tabela "Descrição dos movimentos por vendedor" (dentro do talão) não
+     tem classe própria — sem esta regra, ficava presa em .72rem pela
+     regra genérica "table { font-size: .72rem }" em @media print (pensada
+     para OUTROS relatórios mais densos da app, não para este talão). */
+  .talao-folha table:not(.talao-tabela-resumo) { font-size: 1.05rem; }
   /* Lista compacta "Multibanco / VISA / Numerário / Transferências /
      Depósitos", rótulo em letra serif grande + valor alinhado à direita
      na mesma linha — substitui as letras grandes em contorno + caixa de
@@ -157,7 +166,7 @@
   .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
   .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 2.2rem; line-height: 1; }
-  .talao-lista-metodos .valor { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .talao-lista-metodos .valor { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
      conforme o container). */
