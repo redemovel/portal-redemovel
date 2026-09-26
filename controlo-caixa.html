@@ -1281,15 +1281,35 @@ async function importarFicheiro(tipo) {
 // importado — visível a qualquer papel (tal como o resto desta tab),
 // ao contrário do histórico completo de "🔐 Gestão → Histórico".
 async function carregarUltimasImportacoes() {
-  const r = await chamarApi({ acao: 'ultimasImportacoes' });
-  if (!r.ok) return;
-  renderizarUltimaImportacao('cobrancas', r.porTipo.cobrancas);
-  renderizarUltimaImportacao('gsv', r.porTipo.gsv);
+  // Bug real (2026-09-26): sem tratar o caso de falha, as duas linhas
+  // ficavam presas para sempre em "A verificar última importação…" — quer
+  // por um erro de rede, quer (o caso mais provável, visto pelo Ricardo)
+  // por esta acção ainda não existir no Cloud Run publicado, se o
+  // `controlo-caixa.html` novo for publicado ANTES do deploy do backend
+  // (esta acção só existe a partir da 13ª correcção, que precisa de
+  // deploy — ver README). Agora mostra sempre um estado final, nunca fica
+  // preso no "a verificar".
+  try {
+    const r = await chamarApi({ acao: 'ultimasImportacoes' });
+    if (!r.ok) {
+      const erro = 'Não foi possível obter a última importação' + (r.erro ? ' (' + r.erro + ')' : '') + '.';
+      renderizarUltimaImportacao('cobrancas', null, erro);
+      renderizarUltimaImportacao('gsv', null, erro);
+      return;
+    }
+    renderizarUltimaImportacao('cobrancas', r.porTipo.cobrancas);
+    renderizarUltimaImportacao('gsv', r.porTipo.gsv);
+  } catch (err) {
+    const erro = 'Não foi possível obter a última importação (' + (err.message || 'erro de rede') + ').';
+    renderizarUltimaImportacao('cobrancas', null, erro);
+    renderizarUltimaImportacao('gsv', null, erro);
+  }
 }
 
-function renderizarUltimaImportacao(tipo, info) {
+function renderizarUltimaImportacao(tipo, info, mensagemErro) {
   const el = document.getElementById('info-ultima-' + tipo);
   if (!el) return;
+  if (mensagemErro) { el.textContent = mensagemErro; return; }
   if (!info) { el.textContent = 'Ainda sem nenhuma importação registada.'; return; }
   let texto = `Última importação: ${info.atualizadoEm || ''} · ${info.ficheiroNome || '(sem nome)'}${info.importadoPor ? ' · por ' + info.importadoPor : ''}`;
   if (info.ultimoDocumento) texto += ` · último documento: ${info.ultimoDocumento}`;
