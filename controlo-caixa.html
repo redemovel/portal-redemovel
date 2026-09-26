@@ -181,8 +181,8 @@
   .talao-lista-metodos { margin: 0 0 .15rem; }
   .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
-  .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 4.4rem; line-height: 1; }
-  .talao-lista-metodos .valor { font-family: 'Outfit', Arial, sans-serif; font-size: 3.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 4.4rem; line-height: 1; flex-shrink: 0; }
+  .talao-lista-metodos .valor { font-family: 'Outfit', Arial, sans-serif; font-size: 3.8rem; font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
      conforme o container). Os valores (Multibanco/VISA/Numerário/
@@ -1532,6 +1532,9 @@ const FONTE_TALAO_CONTORNO = "'Times New Roman', 'Liberation Serif', serif";
 // deixa espaço em branco a mais, e a menos corta a letra. fontFamily é
 // opcional — por omissão usa a serif do talão, mas os valores (.valor)
 // passam a sua própria fonte ('Outfit') para não ficarem em serif.
+// A largura calculada aqui (via <canvas>) é só uma ESTIMATIVA inicial —
+// aplicarContornoSVG() corrige-a a seguir com a largura real, medida no
+// próprio texto já desenhado (ver nota lá, 2026-09-26, 9ª correcção).
 async function contornoSVG(texto, fontSizePx, fontWeight, fontFamily) {
   const familia = fontFamily || FONTE_TALAO_CONTORNO;
   await document.fonts.ready;
@@ -1540,7 +1543,12 @@ async function contornoSVG(texto, fontSizePx, fontWeight, fontFamily) {
   if (!contornoSVG._canvas) contornoSVG._canvas = document.createElement('canvas');
   const ctx = contornoSVG._canvas.getContext('2d');
   ctx.font = especFonte;
-  const largura = Math.max(1, Math.ceil(ctx.measureText(texto).width)) + 8;
+  // Folga generosa na estimativa inicial (30% do tamanho da letra, para
+  // além dos 8px de sempre) — mesmo que a fonte usada aqui para medir não
+  // seja exactamente a que acaba por ser desenhada, o texto real nunca
+  // fica maior do que este SVG de estimativa, por isso nunca é cortado
+  // antes da correcção de largura acontecer.
+  const largura = Math.max(1, Math.ceil(ctx.measureText(texto).width)) + 8 + Math.ceil(fontSizePx * 0.3);
   const altura = Math.ceil(fontSizePx * 1.07);
   const baseline = Math.round(fontSizePx * 0.9);
   return `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escaparXml(texto)}"><text x="0" y="${baseline}" font-family="${familia}" font-weight="${fontWeight}" font-size="${fontSizePx}" fill="white" stroke="#000" stroke-width="1">${escaparXml(texto)}</text></svg>`;
@@ -1552,6 +1560,19 @@ async function contornoSVG(texto, fontSizePx, fontWeight, fontFamily) {
 // elemento (em vez de assumir sempre a serif do talão) é o que permite
 // aos valores (.valor, fonte 'Outfit') usarem o mesmo contorno sem ficar
 // em serif (2026-09-26, 8ª correcção).
+//
+// Depois de inserir o SVG, a largura da "caixa" (viewBox/width) é
+// corrigida para a largura REAL do texto, medida com
+// getComputedTextLength() no próprio <text> já no documento — em vez de
+// confiar só na estimativa do <canvas> em contornoSVG(). O Ricardo viu
+// os números de "Numerário" (432,95€) aparecerem esmagados/sobrepostos
+// uns nos outros (2026-09-26, 9ª correcção): a largura estimada por
+// <canvas> tinha ficado mais estreita do que o texto realmente ocupava
+// depois de desenhado (a fonte 'Outfit' pode não estar disponível/pronta
+// exactamente da mesma forma nos dois sítios), e como o <svg> recorta ao
+// tamanho da viewBox declarada, o texto ficava comprimido dentro de uma
+// caixa mais estreita do que precisava. Medir o texto já desenhado
+// elimina esse desfasamento de vez, seja qual for a causa exacta.
 async function aplicarContornoSVG(elemento, texto) {
   if (!elemento || !texto) return;
   const estilo = getComputedStyle(elemento);
@@ -1559,6 +1580,18 @@ async function aplicarContornoSVG(elemento, texto) {
   const fontWeight = estilo.fontWeight || '700';
   const fontFamily = estilo.fontFamily || FONTE_TALAO_CONTORNO;
   elemento.innerHTML = await contornoSVG(texto, fontSizePx, fontWeight, fontFamily);
+  const svgEl = elemento.querySelector('svg');
+  const textEl = elemento.querySelector('text');
+  if (svgEl && textEl && typeof textEl.getComputedTextLength === 'function') {
+    let larguraReal = 0;
+    try { larguraReal = textEl.getComputedTextLength(); } catch (e) { /* mantém a estimativa, se falhar */ }
+    if (larguraReal > 0) {
+      const novaLargura = Math.ceil(larguraReal) + 8;
+      const altura = svgEl.getAttribute('height');
+      svgEl.setAttribute('width', novaLargura);
+      svgEl.setAttribute('viewBox', `0 0 ${novaLargura} ${altura}`);
+    }
+  }
 }
 
 // Todos os rótulos/valores da lista de métodos (marcados em linhaMetodo
