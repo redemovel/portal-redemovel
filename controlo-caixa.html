@@ -289,6 +289,12 @@
          (2026-09-25, pedido do Ricardo — ver entrarNoPainel/
          mudarAba('importar')). -->
     <button class="aba-btn" data-aba="folha" onclick="mudarAba('folha')">📒 Mapa Global</button>
+    <!-- "📘 Manual" (2026-09-26, pedido do Ricardo: "faz instruções para os
+         assistentes de lojas e coloca na aplicação como Manual de
+         utilização") — conteúdo estático, sem nenhuma leitura ao servidor,
+         por isso visível a todos os papéis tal como o resto desta barra
+         (nenhuma informação sensível aqui, só instruções de utilização). -->
+    <button class="aba-btn" data-aba="manual" onclick="mudarAba('manual')">📘 Manual</button>
     <!-- "🔐 Gestão" (2026-09-21) — reúne tudo o que não é trabalho do dia-a-
          dia de loja (classificação/margens, relatórios, conta corrente
          Vodafone, tabela comercial, comissões mensais, etc.); só visível a
@@ -538,6 +544,113 @@
           <div id="resultado-gsv"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ── 📘 Manual de Utilização (2026-09-26) — pedido do Ricardo: instruções
+       para os assistentes de loja, dentro da própria aplicação. Conteúdo
+       estático (sem nenhuma chamada ao servidor), por isso sem nenhuma
+       lógica de carregamento em mudarAba() — só texto. ── -->
+  <div class="aba-conteudo" id="aba-manual" hidden>
+    <div class="cartao">
+      <h2>📘 Manual de Utilização — Controlo de Caixa</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem">Guia rápido para o dia-a-dia da loja. Sempre que tiveres uma dúvida sobre "o que faço agora", volta aqui.</p>
+      <ul style="margin:.5rem 0 0 1.1rem; font-size:.85rem; line-height:1.9">
+        <li><a href="#manual-rotina">Rotina diária (resumo)</a></li>
+        <li><a href="#manual-importar">📥 Importar ficheiros Vodafone</a></li>
+        <li><a href="#manual-caixadia">🧾 Caixa Dia (apurar e talão do dia)</a></li>
+        <li><a href="#manual-diverso">➕ Movimento diverso</a></li>
+        <li><a href="#manual-arqueio">🧮 Arqueio (fecho de caixa)</a></li>
+        <li><a href="#manual-folha">📒 Mapa Global</a></li>
+        <li><a href="#manual-faq">Perguntas frequentes</a></li>
+      </ul>
+    </div>
+
+    <div class="cartao" id="manual-rotina">
+      <h2>Rotina diária (resumo)</h2>
+      <ol style="margin:.3rem 0 0 1.2rem; font-size:.85rem; line-height:1.9">
+        <li>Exporta e importa os dois ficheiros da Vodafone em <strong>📥 Importar</strong> (Relatório de cobranças e Invoice GSV).</li>
+        <li>Vai a <strong>🧾 Caixa Dia</strong>, escolhe a loja e o dia, e clica em "🔍 Pesquisar".</li>
+        <li>Confere em "Orientação" quanto foi facturado por cada colaborador (numerário vs cartão/ATM) — é só orientação, ainda não é o apuro real.</li>
+        <li>Conta o dinheiro/confere o terminal e regista o apuro real em "Inserir apuro real do dia".</li>
+        <li>Sempre que sair dinheiro físico da loja para o banco, regista o depósito em "💳 Saldo em numerário da loja".</li>
+        <li>Quando todos os colaboradores dessa loja/dia já tiverem apurado, imprime/grava o "🧾 Talão do dia" e arquiva-o junto dos talões físicos.</li>
+        <li>No fecho do dia/período, faz o "🧮 Arqueio" — conta o dinheiro da gaveta e compara com o saldo teórico do sistema.</li>
+      </ol>
+    </div>
+
+    <div class="cartao" id="manual-importar">
+      <h2>📥 Importar ficheiros Vodafone</h2>
+      <p>Aqui importas os dois ficheiros que exportas do sistema da Vodafone, sempre que fechares um período (diário ou semanal, conforme a loja):</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Relatório de cobranças (CSV)</strong> — Carregamentos e Pagamento de Faturas.</li>
+        <li><strong>Invoice GSV (.xls)</strong> — vendas e devoluções de equipamento/acessórios/serviços.</li>
+      </ul>
+      <h3>Como importar</h3>
+      <ol style="margin:.3rem 0 0 1.2rem; font-size:.85rem; line-height:1.9">
+        <li>Exporta o ficheiro do sistema da Vodafone, como habitualmente.</li>
+        <li>Na tab "📥 Importar", escolhe o ficheiro na caixa certa ("Relatório de cobranças" ou "Invoice GSV") e clica em "Importar".</li>
+        <li>Aparece uma mensagem a verde com "X novas, Y já existiam, de Z linhas no ficheiro" — a importação é incremental, por isso reimportar o mesmo ficheiro mais do que uma vez nunca duplica movimentos.</li>
+        <li>Por cima do botão "Importar" fica sempre visível quando foi a última importação (data/hora, ficheiro, quem importou e o último documento) — serve para confirmares rapidamente que a importação mais recente é mesmo a que estavas à espera.</li>
+      </ol>
+      <div class="alerta alerta-aviso">⚠️ Se aparecer um erro de "colaborador não reconhecido", a importação INTEIRA é cancelada — nada fica gravado. O nome (Cobranças) ou código (GSV) desse colaborador ainda não está associado no sistema. Fala com o Master/Coordenador para o associar (em "🔐 Gestão → 👤 Colaboradores") e depois volta a importar o mesmo ficheiro.</div>
+    </div>
+
+    <div class="cartao" id="manual-caixadia">
+      <h2>🧾 Caixa Dia</h2>
+      <p>É aqui que se apura o dinheiro/cartão do dia, colaborador a colaborador, e onde se gera o talão para arquivar.</p>
+      <ol style="margin:.3rem 0 0 1.2rem; font-size:.85rem; line-height:1.9">
+        <li>Escolhe a <strong>Loja</strong> e o <strong>Dia</strong> no topo, e clica em "🔍 Pesquisar" — nada aparece antes disso.</li>
+        <li><strong>"Saldo do dia por apurar"</strong> mostra quanto falta apurar, em numerário e em ATM (Multibanco+VISA), para bater certo com os documentos Vodafone desse dia. O objectivo é chegar a 0€ nos dois, quando todos já tiverem apurado.</li>
+        <li><strong>"Orientação — o que cada colaborador facturou"</strong> mostra, por colaborador, quanto foi facturado (GSV + Carregamentos) e como se reparte entre Numerário e Cartão/ATM — é só orientação, para saberes o que esperar antes de apurar de verdade.</li>
+        <li>Para apurar a sério: clica no botão da linha do colaborador em "Orientação" (pré-preenche o nome) ou escreve o nome directamente em <strong>"Inserir apuro real do dia"</strong>. Conta o dinheiro e confere o terminal, e preenche os 4 valores: ATM Multibanco, ATM VISA, Numerário, Transferência. Clica em "Apurar".</li>
+        <li>O sistema compara o total que inseriste com o total dos documentos desse colaborador nesse dia — avisa se não bater certo.</li>
+        <li>Se esse colaborador já tiver um apuro registado nesse mesmo dia, o sistema avisa antes de deixar substituir.</li>
+        <li>Sempre que sair dinheiro físico da loja para o banco, regista-o em <strong>"💳 Saldo em numerário da loja → Registar depósito"</strong> — o saldo é actualizado na hora.</li>
+        <li>Quando TODOS os colaboradores com movimentos nessa loja/dia já tiverem apurado, aparece o botão <strong>"🖨 Imprimir / Gravar PDF"</strong> no "🧾 Talão do dia" — usa-o para imprimir (ou gravar em PDF) e arquivar junto dos talões físicos de Multibanco/VISA/Transferência/Depósito desse dia.</li>
+      </ol>
+    </div>
+
+    <div class="cartao" id="manual-diverso">
+      <h2>➕ Movimento diverso</h2>
+      <p>Usa esta tab para depósitos bancários e entradas digitais que NÃO vêm de nenhum ficheiro Vodafone (por isso não aparecem em "Importar"):</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li>Depósito bancário (numerário)</li>
+        <li>MB Way recebido</li>
+        <li>Transferência recebida</li>
+        <li>Outra entrada em numerário</li>
+        <li>Outra saída em numerário</li>
+      </ul>
+      <p style="font-size:.85rem">Só o depósito bancário e as "outras" entradas/saídas em numerário mexem no saldo de caixa físico da loja — MB Way e Transferência são digitais, não passam pela gaveta. Escolhe a loja, o tipo e o valor, escreve uma observação se ajudar a identificar depois, e clica em "Registar".</p>
+    </div>
+
+    <div class="cartao" id="manual-arqueio">
+      <h2>🧮 Arqueio (fecho de caixa)</h2>
+      <p>Serve para confirmar, fisicamente, que o dinheiro que está na gaveta bate certo com o que o sistema acha que devia lá estar.</p>
+      <ol style="margin:.3rem 0 0 1.2rem; font-size:.85rem; line-height:1.9">
+        <li>Escolhe a loja — o "Saldo teórico (sistema)" preenche-se sozinho.</li>
+        <li>Conta o dinheiro físico da loja e escreve o valor em "Saldo contado (€)".</li>
+        <li>Clica em "Registar arqueio".</li>
+      </ol>
+      <p style="font-size:.85rem">Se a diferença for superior a 2€, fica destacada para o coordenador/master — vale a pena confirmar a contagem antes de registar, se a diferença for grande.</p>
+    </div>
+
+    <div class="cartao" id="manual-folha">
+      <h2>📒 Mapa Global</h2>
+      <p style="font-size:.85rem">Consulta todos os movimentos de uma loja (Cobranças, GSV, diversos, arqueios) num período — útil para conferir ou procurar algo específico, sem teres de ir a cada tab separadamente. Escolhe a loja e o período ("De"/"Até") e clica em "Atualizar".</p>
+    </div>
+
+    <div class="cartao" id="manual-faq">
+      <h2>Perguntas frequentes</h2>
+      <h3>Apareceu "colaborador não reconhecido" ao importar um ficheiro</h3>
+      <p style="font-size:.85rem">Fala com o Master/Coordenador para associar o nome (Cobranças) ou código (GSV) em "🔐 Gestão → 👤 Colaboradores" — depois volta a importar o mesmo ficheiro, sem precisares de fazer mais nada.</p>
+      <h3>O Talão do dia diz "NÃO CONFERE"</h3>
+      <p style="font-size:.85rem">Há uma diferença entre o que foi apurado e o total dos documentos Vodafone desse dia/loja. Confirma se todos os colaboradores já apuraram e se os valores inseridos em cada apuro estão correctos. Se a diferença persistir, fala com o Master/Coordenador antes de arquivar o talão.</p>
+      <h3>A informação de "última importação" não aparece / dá erro</h3>
+      <p style="font-size:.85rem">Clica em "Sair" e volta a entrar — isso renova a sessão. Se o erro continuar, fala com o Master.</p>
+      <h3>Esqueci-me da password / não consigo entrar</h3>
+      <p style="font-size:.85rem">Pede ao Master/Coordenador para verificar a tua conta em "👤 Colaboradores".</p>
+      <p class="rodape-nota" style="margin-top:1rem">Dúvidas que este manual não responda? Fala com o teu Coordenador ou com o Ricardo.</p>
     </div>
   </div>
 
