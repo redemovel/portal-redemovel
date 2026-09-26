@@ -182,7 +182,10 @@
   .talao-lista-metodos .linha { display: flex; justify-content: space-between; align-items: center; padding: 0; border-bottom: 1px dashed #999; page-break-inside: avoid; }
   .talao-lista-metodos .linha:first-child { border-top: 1px dashed #999; }
   .talao-lista-metodos .rotulo { font-family: 'Times New Roman', 'Liberation Serif', serif; font-weight: 700; font-size: 4.4rem; line-height: 1; flex-shrink: 0; }
-  .talao-lista-metodos .valor { font-family: 'Outfit', Arial, sans-serif; font-size: 3.8rem; font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  /* Peso 700 (bold "a sério"), não 800 — ver nota junto de
+     aplicarContornoSVG() sobre porquê o 800 causava o efeito de letras
+     "encavalitadas"/a fantasma (2026-09-26, 11ª correcção). */
+  .talao-lista-metodos .valor { font-family: Arial, Helvetica, sans-serif; font-size: 3.8rem; font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
   /* Contentores das letras grandes em contorno — o <svg> gerado por JS
      fica sempre alinhado como o texto que substitui (esquerda/direita
      conforme o container). Os valores (Multibanco/VISA/Numerário/
@@ -947,15 +950,7 @@ async function chamarApi(payload) {
     try {
       const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(corpo) });
       if (!res.ok) throw 0;
-      const resposta = JSON.parse(await res.text());
-      // Sessão por token (2026-09-26): o token dura 12h e deixa de servir se
-      // a password mudar ou a conta for desactivada — nesse caso o servidor
-      // responde "Credenciais inválidas." e voltamos ao ecrã de entrada com
-      // uma mensagem clara, em vez de deixar a página a mostrar erros soltos.
-      if (!resposta.ok && resposta.erro === 'Credenciais inválidas.' && SESSAO && sessaoPorToken()) {
-        sessaoExpirada();
-      }
-      return resposta;
+      return JSON.parse(await res.text());
     } catch (_) {
       if (i < TENTATIVAS - 1) await new Promise(r => setTimeout(r, 900 + i * 500));
     }
@@ -976,63 +971,6 @@ function lerFicheiroBase64(ficheiro) {
   });
 }
 
-// ═══ Sessão por token (2026-09-26) — integração com o Portal Assiduidade ═══
-// Quem entra pelo botão "💰 Controlo de Caixa" do Portal chega aqui com
-// controlo-caixa.html#t=<token> — já com sessão, sem segundo login. O login
-// directo desta página também passou a trocar a password por um token
-// (emitirTokenCaixa) logo à entrada, para a password deixar de ficar
-// guardada no browser. O token viaja no mesmo campo `password` de sempre
-// (o servidor reconhece-o pelo prefixo "tk1."), por isso nenhuma outra
-// chamada desta página precisou de mudar.
-const PREFIXO_TOKEN = 'tk1.';
-
-function sessaoPorToken() {
-  return !!(SESSAO && String(SESSAO.password || '').indexOf(PREFIXO_TOKEN) === 0);
-}
-
-// Lê o username de dentro do token (só para o saber — a validação a sério
-// é sempre feita no servidor, que confirma a assinatura).
-function usernameDoToken(token) {
-  try {
-    const corpo = String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(corpo)).u || '';
-  } catch (_) { return ''; }
-}
-
-function mostrarErroLogin(msg) {
-  const erroEl = document.getElementById('login-err');
-  erroEl.textContent = msg; erroEl.hidden = false;
-}
-
-function sessaoExpirada() {
-  sair();
-  mostrarErroLogin('A sessão expirou. Entra de novo — ou volta a abrir o Controlo de Caixa a partir do Portal.');
-}
-
-// Chegada a partir do Portal: #t=<token>. Tira logo o token da barra de
-// endereço (fica só em sessionStorage, que morre ao fechar o separador),
-// confirma-o no servidor e entra.
-async function entrarComTokenDoLink() {
-  const m = /[#&]t=([^&]+)/.exec(location.hash || '');
-  if (!m) return false;
-  const token = decodeURIComponent(m[1]);
-  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-  const username = usernameDoToken(token);
-  if (!username) { mostrarErroLogin('Link de entrada inválido. Volta a abrir a partir do Portal.'); return true; }
-  SESSAO = { username, password: token };
-  const r = await chamarApi({ acao: 'sessaoAtual' });
-  if (!r.ok) {
-    SESSAO = null;
-    try { sessionStorage.removeItem('caixaSessao'); } catch (_) {}
-    mostrarErroLogin(r.erro === 'Credenciais inválidas.' ? 'O link de entrada expirou ou já não é válido. Volta a abrir a partir do Portal.' : (r.erro || 'Não foi possível entrar.'));
-    return true;
-  }
-  SESSAO = { username: r.username || username, password: token, nome: r.nome, role: r.role };
-  try { sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO)); } catch (_) {}
-  await entrarNoPainel();
-  return true;
-}
-
 // ═══ Login ═══
 async function entrar() {
   const erroEl = document.getElementById('login-err');
@@ -1042,20 +980,10 @@ async function entrar() {
   if (!username || !password) { erroEl.textContent = 'Preenche utilizador e password.'; erroEl.hidden = false; return; }
   const btn = document.getElementById('btn-entrar');
   btn.disabled = true; btn.textContent = 'A entrar…';
-  // 1º tenta trocar a password por um token (a password deixa de ficar
-  // guardada no browser). Se o servidor ainda não tiver a chave de sessão
-  // configurada (semChave) ou ainda for uma versão antiga sem esta acção,
-  // cai no login antigo por password — nunca bloqueia ninguém.
-  let r = await chamarApi({ acao: 'emitirTokenCaixa', username, password });
-  let credencial = password;
-  if (r.ok && r.token) {
-    credencial = r.token;
-  } else if (r.semChave || /Ação (desconhecida|não disponível)/.test(r.erro || '')) {
-    r = await chamarApi({ acao: 'sessaoAtual', username, password });
-  }
+  const r = await chamarApi({ acao: 'sessaoAtual', username, password });
   btn.disabled = false; btn.textContent = 'Entrar';
   if (!r.ok) { erroEl.textContent = r.erro || 'Credenciais inválidas ou sem permissão para o Controlo de Caixa.'; erroEl.hidden = false; return; }
-  SESSAO = { username, password: credencial, nome: r.nome, role: r.role };
+  SESSAO = { username, password, nome: r.nome, role: r.role };
   sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO));
   await entrarNoPainel();
 }
@@ -1596,11 +1524,25 @@ function escaparXml(s) {
 
 // Serif do sistema, não Google Font — ver nota junto de ".talao-titulo-
 // script" no <style> sobre porquê (2026-09-25, 5ª correcção do talão).
-// Continua a ser a fonte por omissão do contorno (título/loja/data/
-// rótulos); os valores (.valor) passam a sua própria font-family
-// ('Outfit', via CSS) — ver generalização de contornoSVG abaixo
-// (2026-09-26, 8ª correcção).
+// Fonte por omissão do contorno (título/loja/data/rótulos).
 const FONTE_TALAO_CONTORNO = "'Times New Roman', 'Liberation Serif', serif";
+
+// Fonte dos VALORES em contorno (Multibanco/VISA/Numerário/Transferências/
+// Depósitos) — sans-serif do sistema, pela mesma razão da serif acima:
+// nada de Google Fonts aqui. Chegou a ser 'Outfit' (2026-09-26, 8ª
+// correcção), mas o Ricardo continuou a ver os números "encavalitados"
+// mesmo depois de corrigir a largura da caixa do SVG pela medida real do
+// texto (9ª correcção) — sinal de que o problema não era só a conta da
+// largura, era a própria fonte 'Outfit' (que vem da Google, tal como a
+// Dancing Script do título/loja/data no passado) a não estar
+// consistentemente pronta entre o momento em que o texto é medido e o
+// momento em que é desenhado a sério. A solução foi a mesma que resolveu
+// esse problema lá: parar de depender de um Google Font aqui também
+// (2026-09-26, 10ª correcção). O resto da app continua em 'Outfit'
+// normalmente — isto é só para o desenho em contorno dos valores do
+// talão, que precisa de ser sempre a mesma fonte em qualquer browser, sem
+// pedido de rede nenhum.
+const FONTE_TALAO_VALOR_CONTORNO = "Arial, Helvetica, sans-serif";
 
 // Mede o texto com a fonte real (depois de garantidamente carregada) para
 // desenhar um SVG do tamanho certo — sem isto, um SVG com largura a mais
@@ -1629,31 +1571,50 @@ async function contornoSVG(texto, fontSizePx, fontWeight, fontFamily) {
   return `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escaparXml(texto)}"><text x="0" y="${baseline}" font-family="${familia}" font-weight="${fontWeight}" font-size="${fontSizePx}" fill="white" stroke="#000" stroke-width="1">${escaparXml(texto)}</text></svg>`;
 }
 
-// Aplica o contorno a um elemento, usando o tamanho/peso/família de letra
-// já definidos por CSS nesse elemento (para não duplicar em dois sítios)
-// — só muda o texto para o desenho em SVG. Ler a font-family do próprio
-// elemento (em vez de assumir sempre a serif do talão) é o que permite
-// aos valores (.valor, fonte 'Outfit') usarem o mesmo contorno sem ficar
-// em serif (2026-09-26, 8ª correcção).
+// As fontes do sistema usadas no contorno (a serif do título/loja/data/
+// rótulos, e a sans-serif dos valores) só têm mesmo dois pesos "a sério"
+// como ficheiro próprio: Regular (400) e Bold (700) — não existe um
+// ficheiro "ExtraBold"/900 nem "800" para Times New Roman, Arial ou
+// Helvetica em lado nenhum. Pedir um peso que não existe como ficheiro
+// (como o 800 que os valores usavam) obriga o Windows a "inventar" esse
+// peso a mais por cima do Bold verdadeiro (bold sintético/algorítmico,
+// desenhando o contorno da letra uma segunda vez, ligeiramente
+// desviado, para parecer mais carregado) — e é exactamente esse segundo
+// desenho, ligeiramente desviado, que aparecia como as letras
+// "encavalitadas"/fantasma que o Ricardo via, sempre só nos valores
+// (nunca nos rótulos, que já usavam 700) e sempre só no Windows dele
+// (este ambiente de testes nunca tem essa fonte a sério instalada, por
+// isso nunca reproduziu o problema, mesmo depois de duas tentativas
+// anteriores mudarem a fonte em vez do peso). Por isso esta função nunca
+// deixa passar um peso que não seja 400 ou 700 para o desenho do
+// contorno, seja lá o que a CSS disser (2026-09-26, 11ª correcção).
+function pesoSeguroContorno(fontWeight) {
+  const n = parseInt(fontWeight, 10);
+  if (Number.isNaN(n)) return /bold/i.test(String(fontWeight)) ? '700' : '400';
+  return n >= 600 ? '700' : '400';
+}
+
+// Aplica o contorno a um elemento, usando o tamanho de letra já definido
+// por CSS nesse elemento (para não duplicar em dois sítios) — só muda o
+// texto para o desenho em SVG. fontFamilyForcada é opcional: quando
+// indicada, usa-se essa fonte em vez de ler a font-family computada do
+// elemento — é o que os valores (.valor) passam, para garantir sempre a
+// sans-serif do sistema (FONTE_TALAO_VALOR_CONTORNO), nunca o que a CSS
+// lá tiver declarado (ver nota nessa constante, 2026-09-26, 10ª
+// correcção, sobre porquê não se pode confiar na font-family computada
+// quando é um Google Font).
 //
 // Depois de inserir o SVG, a largura da "caixa" (viewBox/width) é
 // corrigida para a largura REAL do texto, medida com
 // getComputedTextLength() no próprio <text> já no documento — em vez de
-// confiar só na estimativa do <canvas> em contornoSVG(). O Ricardo viu
-// os números de "Numerário" (432,95€) aparecerem esmagados/sobrepostos
-// uns nos outros (2026-09-26, 9ª correcção): a largura estimada por
-// <canvas> tinha ficado mais estreita do que o texto realmente ocupava
-// depois de desenhado (a fonte 'Outfit' pode não estar disponível/pronta
-// exactamente da mesma forma nos dois sítios), e como o <svg> recorta ao
-// tamanho da viewBox declarada, o texto ficava comprimido dentro de uma
-// caixa mais estreita do que precisava. Medir o texto já desenhado
-// elimina esse desfasamento de vez, seja qual for a causa exacta.
-async function aplicarContornoSVG(elemento, texto) {
+// confiar só na estimativa do <canvas> em contornoSVG() (2026-09-26, 9ª
+// correcção) — mantido como segunda linha de defesa.
+async function aplicarContornoSVG(elemento, texto, fontFamilyForcada) {
   if (!elemento || !texto) return;
   const estilo = getComputedStyle(elemento);
   const fontSizePx = parseFloat(estilo.fontSize) || 24;
-  const fontWeight = estilo.fontWeight || '700';
-  const fontFamily = estilo.fontFamily || FONTE_TALAO_CONTORNO;
+  const fontWeight = pesoSeguroContorno(estilo.fontWeight);
+  const fontFamily = fontFamilyForcada || estilo.fontFamily || FONTE_TALAO_CONTORNO;
   elemento.innerHTML = await contornoSVG(texto, fontSizePx, fontWeight, fontFamily);
   const svgEl = elemento.querySelector('svg');
   const textEl = elemento.querySelector('text');
@@ -1673,7 +1634,12 @@ async function aplicarContornoSVG(elemento, texto) {
 // com data-contorno-texto) — em paralelo, já que cada um é independente.
 async function aplicarContornoEmTodos(seletor) {
   const elementos = [...document.querySelectorAll(seletor)];
-  await Promise.all(elementos.map(el => aplicarContornoSVG(el, el.dataset.contornoTexto)));
+  await Promise.all(elementos.map(el => {
+    // .valor força sempre a sans-serif do sistema (nunca 'Outfit', mesmo
+    // que a CSS a declare) — ver FONTE_TALAO_VALOR_CONTORNO.
+    const fontFamilyForcada = el.classList.contains('valor') ? FONTE_TALAO_VALOR_CONTORNO : null;
+    return aplicarContornoSVG(el, el.dataset.contornoTexto, fontFamilyForcada);
+  }));
 }
 
 async function gerarTalaoDia() {
@@ -3183,15 +3149,12 @@ async function carregarContaCorrente() {
 }
 
 // ═══ Arranque ═══
-(async function iniciar() {
-  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
-  // Um link vindo do Portal (#t=…) tem sempre prioridade sobre uma sessão
-  // já guardada neste separador — pode ser outra pessoa a entrar no mesmo PC.
-  if (await entrarComTokenDoLink()) return;
+(function iniciar() {
   try {
     const guardada = sessionStorage.getItem('caixaSessao');
     if (guardada) { SESSAO = JSON.parse(guardada); entrarNoPainel(); }
   } catch (_) {}
+  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
 })();
 </script>
 </body>
