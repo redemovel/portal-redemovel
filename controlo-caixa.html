@@ -1094,7 +1094,15 @@ async function chamarApi(payload) {
     try {
       const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(corpo) });
       if (!res.ok) throw 0;
-      return JSON.parse(await res.text());
+      const resposta = JSON.parse(await res.text());
+      // Sessão por token (2026-09-26): o token dura 12h e deixa de servir se
+      // a password mudar ou a conta for desactivada — nesse caso o servidor
+      // responde "Credenciais inválidas." e voltamos ao ecrã de entrada com
+      // uma mensagem clara, em vez de deixar a página a mostrar erros soltos.
+      if (!resposta.ok && resposta.erro === 'Credenciais inválidas.' && SESSAO && sessaoPorToken()) {
+        sessaoExpirada();
+      }
+      return resposta;
     } catch (_) {
       if (i < TENTATIVAS - 1) await new Promise(r => setTimeout(r, 900 + i * 500));
     }
@@ -1115,6 +1123,63 @@ function lerFicheiroBase64(ficheiro) {
   });
 }
 
+// ═══ Sessão por token (2026-09-26) — integração com o Portal Assiduidade ═══
+// Quem entra pelo botão "💰 Controlo de Caixa" do Portal chega aqui com
+// controlo-caixa.html#t=<token> — já com sessão, sem segundo login. O login
+// directo desta página também passou a trocar a password por um token
+// (emitirTokenCaixa) logo à entrada, para a password deixar de ficar
+// guardada no browser. O token viaja no mesmo campo `password` de sempre
+// (o servidor reconhece-o pelo prefixo "tk1."), por isso nenhuma outra
+// chamada desta página precisou de mudar.
+const PREFIXO_TOKEN = 'tk1.';
+
+function sessaoPorToken() {
+  return !!(SESSAO && String(SESSAO.password || '').indexOf(PREFIXO_TOKEN) === 0);
+}
+
+// Lê o username de dentro do token (só para o saber — a validação a sério
+// é sempre feita no servidor, que confirma a assinatura).
+function usernameDoToken(token) {
+  try {
+    const corpo = String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(corpo)).u || '';
+  } catch (_) { return ''; }
+}
+
+function mostrarErroLogin(msg) {
+  const erroEl = document.getElementById('login-err');
+  erroEl.textContent = msg; erroEl.hidden = false;
+}
+
+function sessaoExpirada() {
+  sair();
+  mostrarErroLogin('A sessão expirou. Entra de novo — ou volta a abrir o Controlo de Caixa a partir do Portal.');
+}
+
+// Chegada a partir do Portal: #t=<token>. Tira logo o token da barra de
+// endereço (fica só em sessionStorage, que morre ao fechar o separador),
+// confirma-o no servidor e entra.
+async function entrarComTokenDoLink() {
+  const m = /[#&]t=([^&]+)/.exec(location.hash || '');
+  if (!m) return false;
+  const token = decodeURIComponent(m[1]);
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+  const username = usernameDoToken(token);
+  if (!username) { mostrarErroLogin('Link de entrada inválido. Volta a abrir a partir do Portal.'); return true; }
+  SESSAO = { username, password: token };
+  const r = await chamarApi({ acao: 'sessaoAtual' });
+  if (!r.ok) {
+    SESSAO = null;
+    try { sessionStorage.removeItem('caixaSessao'); } catch (_) {}
+    mostrarErroLogin(r.erro === 'Credenciais inválidas.' ? 'O link de entrada expirou ou já não é válido. Volta a abrir a partir do Portal.' : (r.erro || 'Não foi possível entrar.'));
+    return true;
+  }
+  SESSAO = { username: r.username || username, password: token, nome: r.nome, role: r.role };
+  try { sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO)); } catch (_) {}
+  await entrarNoPainel();
+  return true;
+}
+
 // ═══ Login ═══
 async function entrar() {
   const erroEl = document.getElementById('login-err');
@@ -1124,10 +1189,20 @@ async function entrar() {
   if (!username || !password) { erroEl.textContent = 'Preenche utilizador e password.'; erroEl.hidden = false; return; }
   const btn = document.getElementById('btn-entrar');
   btn.disabled = true; btn.textContent = 'A entrar…';
-  const r = await chamarApi({ acao: 'sessaoAtual', username, password });
+  // 1º tenta trocar a password por um token (a password deixa de ficar
+  // guardada no browser). Se o servidor ainda não tiver a chave de sessão
+  // configurada (semChave) ou ainda for uma versão antiga sem esta acção,
+  // cai no login antigo por password — nunca bloqueia ninguém.
+  let r = await chamarApi({ acao: 'emitirTokenCaixa', username, password });
+  let credencial = password;
+  if (r.ok && r.token) {
+    credencial = r.token;
+  } else if (r.semChave || /Ação (desconhecida|não disponível)/.test(r.erro || '')) {
+    r = await chamarApi({ acao: 'sessaoAtual', username, password });
+  }
   btn.disabled = false; btn.textContent = 'Entrar';
   if (!r.ok) { erroEl.textContent = r.erro || 'Credenciais inválidas ou sem permissão para o Controlo de Caixa.'; erroEl.hidden = false; return; }
-  SESSAO = { username, password, nome: r.nome, role: r.role };
+  SESSAO = { username, password: credencial, nome: r.nome, role: r.role };
   sessionStorage.setItem('caixaSessao', JSON.stringify(SESSAO));
   await entrarNoPainel();
 }
@@ -3394,12 +3469,15 @@ async function carregarContaCorrente() {
 }
 
 // ═══ Arranque ═══
-(function iniciar() {
+(async function iniciar() {
+  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+  // Um link vindo do Portal (#t=…) tem sempre prioridade sobre uma sessão
+  // já guardada neste separador — pode ser outra pessoa a entrar no mesmo PC.
+  if (await entrarComTokenDoLink()) return;
   try {
     const guardada = sessionStorage.getItem('caixaSessao');
     if (guardada) { SESSAO = JSON.parse(guardada); entrarNoPainel(); }
   } catch (_) {}
-  document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
 })();
 </script>
 </body>
