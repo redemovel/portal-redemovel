@@ -2340,6 +2340,38 @@ function mostrarCaixaMes() {
   const podeGerir = ehMasterOuCoordenador();
   const podeReabrir = ehMaster();
 
+  // 2026-10-01 — arranque da produção: meses antes de 10/2026 foram
+  // período de testes (lib/periodos.js) — não se fecham, não se reabrem,
+  // não levam vistos. Mostra só o aviso, sem botões.
+  if (e.periodoTeste) {
+    resultadoEl.innerHTML = `<div class="alerta alerta-aviso" style="margin-top:1rem">🧪 ${e.mensagem}</div>`;
+    return;
+  }
+  const NOMES_MESES_CM = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const nomeMesCM = m => { const [a, n] = String(m).split('-').map(Number); return `${NOMES_MESES_CM[n - 1]}/${a}`; };
+
+  // Saldo do mês (2026-10-01): transporte do mês anterior + numerário do
+  // mês = saldo final, que é o que o fecho compara com zero e o que passa
+  // para o mês seguinte. Já não depende do saldo da gaveta "de agora".
+  const t = e.transporte;
+  const nm = e.numerarioMes;
+  const saldoMesHtml = `
+    <h3>Saldo de numerário do mês</h3>
+    <div class="tabela-scroll"><table>
+      <tbody>
+        <tr><td>${t.inicioProducao ? 'Saldo inicial (arranque da produção, 01/10/2026)' : `Transporte de saldo de ${nomeMesCM(t.mesAnterior)}`}</td>
+            <td style="text-align:right">${t.conhecido ? formatarEuro(t.valor) : `<span style="color:#b3000a">por apurar — ${nomeMesCM(t.mesAnterior)} ainda não está fechado</span>`}</td></tr>
+        <tr><td>+ Carregamentos/Pag. Fatura recebidos em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasCarregamentos)}</td></tr>
+        <tr><td>+ Vendas GSV recebidas em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasGSV)}</td></tr>
+        <tr><td>− Depósitos bancários do mês</td><td style="text-align:right">${formatarEuro(nm.depositos)}</td></tr>
+        <tr><td>± Outras entradas/saídas de numerário</td><td style="text-align:right">${formatarEuro(nm.outrasEntradasSaidas)}</td></tr>
+        <tr style="font-weight:700;border-top:2px solid #333"><td>= Saldo final do mês</td>
+            <td style="text-align:right">${e.saldoFinalMes === null ? '—' : formatarEuro(e.saldoFinalMes)}</td></tr>
+      </tbody>
+    </table></div>
+    <p class="rodape-nota">Só conta movimentos com data deste mês — fechar o mês uns dias depois não muda nada.
+      Saldo da gaveta neste momento (inclui já o mês seguinte, se houver): ${formatarEuro(e.saldoNumerarioAtual)}.</p>`;
+
   // Bug real reportado pelo Ricardo (2026-09-17): os totais só apareciam
   // DEPOIS de já teres dado o visto — impossível decidir se está certo sem
   // o ver primeiro. Agora mostra sempre o valor actual (calculado ao vivo),
@@ -2405,20 +2437,22 @@ function mostrarCaixaMes() {
     }
     fechoHtml = `
       <div class="conferencia-badge ${classe}" style="margin-top:1rem">${f.status === 'CONFORME' ? '✅ CONFORME' : '⚠️ NÃO CONFERE'} — mês fechado por ${f.fechadoPor || ''}</div>
-      <p class="rodape-nota">Saldo de numerário no fecho: ${formatarEuro(f.saldoNumerarioFecho)}.</p>
+      <p class="rodape-nota">Saldo final do mês no fecho: <strong>${formatarEuro(f.saldoNumerarioFecho)}</strong> — transportado para ${nomeMesCM(proximoMesCM(e.mes))}.</p>
+      <p class="rodape-nota">🔒 Mês fechado: já não é possível registar movimentos de espécie alguma com data deste mês (importações, depósitos, apuros, arqueios, vistos).</p>
       ${transitoHtml}
       ${podeReabrir ? `<button class="btn btn-secundario" style="margin-top:.6rem" onclick="reabrirMesCM()">🔓 Reabrir mês</button>` : '<p class="rodape-nota">Só um Master pode reabrir este mês.</p>'}
     `;
   } else {
-    const saldo = e.saldoNumerarioAtual;
-    const temSaldoPorDepositar = Math.abs(saldo) > 0.01;
+    const saldo = e.saldoFinalMes === null ? 0 : e.saldoFinalMes;
+    const temSaldoPorDepositar = e.saldoFinalMes !== null && Math.abs(saldo) > 0.01;
     fechoHtml = `
-      <p class="rodape-nota" style="margin-top:1rem">Saldo de numerário actual por depositar: <strong>${formatarEuro(saldo)}</strong>.</p>
+      <p class="rodape-nota" style="margin-top:1rem">Saldo final do mês: <strong>${e.saldoFinalMes === null ? '—' : formatarEuro(saldo)}</strong>.</p>
       ${temSaldoPorDepositar ? `
         <div class="alerta alerta-aviso">
-          O saldo não está em zero — normal para o(s) último(s) dia(s) do mês, cujo depósito só é feito já no mês seguinte.
+          O saldo final não está em zero — normal para o(s) último(s) dia(s) do mês, cujo depósito só é feito já no mês seguinte.
           Se for esse o caso, marca aqui como <strong>depósito em trânsito</strong> para o mês fechar CONFORME na mesma;
           se não marcares nada, o mês fecha como <strong>NÃO CONFERE</strong>.
+          Em qualquer dos casos, este saldo passa para ${nomeMesCM(proximoMesCM(e.mes))} como transporte.
           <div class="filtros" style="margin-top:.6rem">
             <div><label class="form-label">Valor em trânsito (€)</label><input type="number" class="form-input" id="cm-transito-valor" step="0.01" value="${saldo}"></div>
             <div><label class="form-label">Data prevista do depósito</label><input type="date" class="form-input" id="cm-transito-data"></div>
@@ -2426,7 +2460,7 @@ function mostrarCaixaMes() {
           </div>
         </div>` : ''}
       ${podeGerir ? `<button class="btn" style="margin-top:.6rem" ${e.podeFechar ? '' : 'disabled title="Faltam vistos por dar"'} onclick="fecharMesCM()">🔒 Fechar mês</button>` : ''}
-      ${!e.podeFechar ? '<p class="rodape-nota">Só dá para fechar depois de todos os dias e os 2 vistos mensais (Carregamentos e GSV) estarem com visto.</p>' : ''}
+      ${!e.podeFechar && e.motivoNaoPodeFechar ? `<p class="rodape-nota">${e.motivoNaoPodeFechar}</p>` : ''}
     `;
   }
 
@@ -2460,9 +2494,15 @@ function mostrarCaixaMes() {
       ${linhaVistoMensal('carregamentos', 'Total do mês — Carregamentos/Pag. Fatura')}
       ${linhaVistoMensal('gsv', 'Total do mês — GSV')}
     </div>
+    ${saldoMesHtml}
     <h3>Fecho do mês</h3>
     ${fechoHtml}
   `;
+}
+
+function proximoMesCM(mes) {
+  const [a, m] = String(mes).split('-').map(Number);
+  return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`;
 }
 
 async function marcarVistoDiarioCM(dia, tipo) {
@@ -2504,7 +2544,7 @@ async function fecharMesCM() {
       observacoes: document.getElementById('cm-transito-obs') ? document.getElementById('cm-transito-obs').value : '',
     };
   }
-  if (!confirm(`Fechar o mês ${mes} de ${loja}? Depois de fechado, apagar ou corrigir apuros desse mês fica bloqueado até um Master reabrir.`)) return;
+  if (!confirm(`Fechar o mês ${mes} de ${loja}?\n\nDepois de fechado, NÃO será possível registar movimentos de espécie alguma com data desse mês (importações, depósitos, apuros, arqueios, vistos) — só um Master, reabrindo o mês.\n\nConfirma que já importaste os ficheiros Vodafone até ao último dia do mês.`)) return;
   const r = await chamarApi({ acao: 'fecharCaixaMes', loja, mes, depositoEmTransito });
   if (!r.ok) { alert(r.erro || 'Erro ao fechar o mês.'); return; }
   carregarCaixaMes();
