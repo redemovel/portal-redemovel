@@ -487,6 +487,7 @@
         <p class="rodape-nota" style="margin-bottom:.75rem">Dinheiro físico que devia estar na gaveta da loja neste momento. Regista aqui o depósito bancário assim que o dinheiro sai da loja — o saldo é actualizado de imediato.</p>
         <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
         <div id="cd-saldo-dia" style="margin-top:.75rem"></div>
+        <div id="cd-diversos-dia" style="margin-top:.75rem"></div>
         <div class="filtros">
           <div><label class="form-label">Depósito bancário (€)</label><input type="number" class="form-input" id="cd-deposito-valor" min="0.01" step="0.01"></div>
           <div><label class="form-label">Observações</label><input type="text" class="form-input" id="cd-deposito-observacoes" placeholder="Opcional"></div>
@@ -2083,6 +2084,47 @@ async function carregarSaldoDia() {
     <div class="tabela-scroll"><table><tbody>${linhasSaldoDia(r).map(([rot, val, total]) =>
       `<tr${total ? ' style="font-weight:700;border-top:2px solid #333"' : ''}><td>${rot}</td><td style="text-align:right">${val}</td></tr>`).join('')}</tbody></table></div>
     <p class="rodape-nota">Numerário = o que os assistentes apuraram (contado) neste dia${r.nApuros ? ` (${r.nApuros} apuro(s))` : ' — ainda ninguém apurou'}.</p>`;
+  await carregarDiversosDia();
+}
+
+// Movimentos diversos do dia + 🗑 Anular (2026-10-01, pedido do Ricardo) —
+// para corrigir um depósito/MB Way/transferência/outra entrada ou saída
+// registado POR ENGANO. Só o Master vê o botão (o servidor valida sempre:
+// só Master, só com o mês aberto, motivo obrigatório). Um movimento anulado
+// não é apagado: passa para uma lista à parte, com quem/quando/porquê, e
+// continua a aparecer aqui riscado.
+async function carregarDiversosDia() {
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const el = document.getElementById('cd-diversos-dia');
+  if (!loja || !dia) { el.innerHTML = ''; return; }
+  const r = await chamarApi({ acao: 'listarMovimentosDiversosDia', loja, dia });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar os movimentos do dia.') + '</div>'; return; }
+  if (!r.movimentos.length) { el.innerHTML = '<p class="rodape-nota">Sem depósitos nem outros movimentos diversos registados neste dia.</p>'; return; }
+  const podeAnular = ehMaster();
+  el.innerHTML = `
+    <h3 style="margin:.25rem 0 .5rem">Depósitos e outros movimentos do dia</h3>
+    <div class="tabela-scroll"><table>
+      <thead><tr><th>Hora</th><th>Tipo</th><th style="text-align:right">Valor</th><th>Observações</th><th>Registado por</th><th></th></tr></thead>
+      <tbody>${r.movimentos.map(m => m.anulado
+        ? `<tr style="color:#888"><td><s>${String(m.atualizadoEm).slice(11, 16)}</s></td><td><s>${m.tipoNome || m.tipo}</s></td>
+             <td style="text-align:right"><s>${formatarEuro(m.valor)}</s></td><td><s>${m.observacoes || ''}</s></td><td>${m.registadoPor || ''}</td>
+             <td>Anulado por ${m.anuladoPor} — ${m.motivoAnulacao}</td></tr>`
+        : `<tr><td>${String(m.atualizadoEm).slice(11, 16)}</td><td>${m.tipoNome || m.tipo}</td>
+             <td style="text-align:right">${formatarEuro(m.valor)}</td><td>${m.observacoes || ''}</td><td>${m.registadoPor || ''}</td>
+             <td>${podeAnular ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="anularDiversoCD('${m.id}', '${(m.tipoNome || m.tipo).replace(/'/g, "\\'")}', ${Number(m.valor) || 0})">🗑 Anular</button>` : ''}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function anularDiversoCD(id, tipoNome, valor) {
+  const motivo = prompt(`Anular "${tipoNome}" de ${formatarEuro(valor)}?\n\nIndica o motivo (fica registado):`);
+  if (motivo === null) return;
+  if (!motivo.trim()) { alert('O motivo é obrigatório.'); return; }
+  const r = await chamarApi({ acao: 'anularMovimentoDiverso', id, motivo: motivo.trim() });
+  if (!r.ok) { alert(r.erro || 'Erro ao anular.'); return; }
+  await carregarSaldoLojaCaixaDia();
+  await carregarResumoDia();
+  atualizarTalaoDia();
 }
 
 // Linhas do quadro "Saldo de numerário do dia" — partilhadas pelo ecrã e
