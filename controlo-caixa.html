@@ -167,6 +167,16 @@
   .talao-tabela-resumo { width: 100%; border-collapse: collapse; margin: 0 0 .3rem; }
   .talao-tabela-resumo td { padding: .12rem .1rem; border-bottom: 1px solid #ccc; font-size: 1.15rem; }
   .talao-tabela-resumo td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* Saldo de numerário do dia (2026-10-01) — em linha (5 colunas: rótulo
+     pequeno por cima, valor por baixo), não 5 linhas como as outras
+     tabelas: ocupa só ~2 linhas de altura, para o talão continuar a caber
+     numa única folha A4 mesmo com muitos colaboradores. */
+  .talao-tabela-saldo-dia { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .talao-tabela-saldo-dia td { padding: .1rem .2rem; text-align: center; vertical-align: bottom; border-bottom: 1px solid #ccc; }
+  .talao-tabela-saldo-dia .rot { display: block; font-size: .72rem; line-height: 1.15; color: #000; }
+  .talao-tabela-saldo-dia .val { display: block; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .talao-tabela-saldo-dia td.final { border: 2px solid #000; }
+  .talao-tabela-saldo-dia td.final .val { font-size: 1.3rem; font-weight: 800; }
   .talao-tabela-resumo tr.talao-linha-total td { border-top: 2px solid #000; border-bottom: none; font-size: 1.3rem; font-weight: 800; padding-top: .25rem; }
   .talao-subtitulo { margin: 0 0 .2rem; font-size: 1.05rem; font-weight: 700; color: #000 !important; }
   /* CONFERE/NÃO CONFERE e os totalizadores da lista (Multibanco/VISA/
@@ -456,6 +466,9 @@
           <h3 class="talao-subtitulo" style="margin-top:.4rem">Recebimentos</h3>
           <table class="talao-tabela-resumo"><tbody id="talao-corpo-recebimentos"></tbody></table>
 
+          <h3 class="talao-subtitulo" style="margin-top:.4rem">Saldo de numerário (caixa da loja)</h3>
+          <table class="talao-tabela-saldo-dia"><tbody id="talao-corpo-saldo-dia"></tbody></table>
+
           <p class="talao-nota-conferencia" id="talao-rodape"></p>
 
           <!-- Lista "Multibanco / VISA / Numerário / Transferências /
@@ -471,6 +484,7 @@
         <h2>💳 Saldo em numerário da loja</h2>
         <p class="rodape-nota" style="margin-bottom:.75rem">Dinheiro físico que devia estar na gaveta da loja neste momento. Regista aqui o depósito bancário assim que o dinheiro sai da loja — o saldo é actualizado de imediato.</p>
         <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
+        <div id="cd-saldo-dia" style="margin-top:.75rem"></div>
         <div class="filtros">
           <div><label class="form-label">Depósito bancário (€)</label><input type="number" class="form-input" id="cd-deposito-valor" min="0.01" step="0.01"></div>
           <div><label class="form-label">Observações</label><input type="text" class="form-input" id="cd-deposito-observacoes" placeholder="Opcional"></div>
@@ -1640,6 +1654,7 @@ function linhaTipologia(r) {
 
 // ═══ Caixa Dia (Conferência de Caixa por Colaborador, Fase 3a) ═══
 let ULTIMO_RESUMO_COLABORADORES = [];
+let CD_SALDO_DIA = null; // último resultado de saldoDiaLoja (2026-10-01) — saldo transitado/final do dia, também usado no Talão
 let CD_RESUMO_DIA = null; // último resultado de resumoDiaLoja — reaproveitado para saber quem já apurou hoje, sem leitura extra
 
 function atualizarLojaDiaMostrados() {
@@ -1946,6 +1961,11 @@ async function gerarTalaoDia() {
     <tr class="talao-linha-total"><td>TOTAL do dia</td><td>${formatarEuro(totalDia)}</td></tr>
   `;
 
+  // Saldo de numerário do dia (2026-10-01) — mesmas linhas do ecrã.
+  document.getElementById('talao-corpo-saldo-dia').innerHTML = CD_SALDO_DIA
+    ? '<tr>' + linhasSaldoDia(CD_SALDO_DIA).map(([rot, val, total]) => `<td${total ? ' class="final"' : ''}><span class="rot">${rot}</span><span class="val">${val}</span></td>`).join('') + '</tr>'
+    : '<tr><td><span class="rot">Saldo do dia indisponível</span></td></tr>';
+
   const diferencaTotal = arredEuro(totalDia - totalVendasCarregamentos);
   document.getElementById('talao-rodape').innerHTML = Math.abs(diferencaTotal) < 0.005
     ? '<strong>CONFERE</strong> — o TOTAL do dia (apurado) bate com o Total das vendas + Carregamentos (documentos).'
@@ -2024,6 +2044,7 @@ async function apagarApuro(colaborador) {
   const r = await chamarApi({ acao: 'apagarApuroColaborador', dados: { loja, colaborador, dia } });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
   await carregarResumoDia();
+  await carregarSaldoDia();
   atualizarTalaoDia();
 }
 
@@ -2034,7 +2055,50 @@ async function carregarSaldoLojaCaixaDia() {
   const r = await chamarApi({ acao: 'listarSaldos' });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo.') + '</div>'; return; }
   const s = r.saldos.find(x => x.loja === loja);
-  el.innerHTML = `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">Saldo actual em caixa (numerário)</div></div>`;
+  el.innerHTML = `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">Saldo actual em caixa (numerário, agora)</div></div>`;
+  await carregarSaldoDia();
+}
+
+// Saldo de numerário do DIA (2026-10-01, pedido do Ricardo: "nas folhas de
+// caixa diárias não temos o saldo em caixa da loja que transita para o dia
+// seguinte"). Transitado do dia anterior + numerário APURADO pelos
+// assistentes (o contado) − depósitos ± outros = saldo que transita para o
+// dia seguinte. Calculado no servidor (lib/saldoDia.js) só com movimentos
+// até ao dia escolhido — imprimir a folha hoje ou daqui a um mês dá o
+// mesmo resultado.
+async function carregarSaldoDia() {
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const el = document.getElementById('cd-saldo-dia');
+  CD_SALDO_DIA = null;
+  if (!loja || !dia) { el.innerHTML = ''; return; }
+  const r = await chamarApi({ acao: 'saldoDiaLoja', loja, dia });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo do dia.') + '</div>'; return; }
+  if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; return; }
+  CD_SALDO_DIA = r;
+  el.innerHTML = `
+    <h3 style="margin:.25rem 0 .5rem">Saldo de numerário do dia ${dia}</h3>
+    <div class="tabela-scroll"><table><tbody>${linhasSaldoDia(r).map(([rot, val, total]) =>
+      `<tr${total ? ' style="font-weight:700;border-top:2px solid #333"' : ''}><td>${rot}</td><td style="text-align:right">${val}</td></tr>`).join('')}</tbody></table></div>
+    <p class="rodape-nota">Numerário = o que os assistentes apuraram (contado) neste dia${r.nApuros ? ` (${r.nApuros} apuro(s))` : ' — ainda ninguém apurou'}.</p>`;
+}
+
+// Linhas do quadro "Saldo de numerário do dia" — partilhadas pelo ecrã e
+// pelo Talão do dia, para os dois mostrarem sempre exactamente o mesmo.
+function linhasSaldoDia(r) {
+  const transitadoRotulo = r.transporte.inicioProducao && r.dia === `${r.dia.slice(0, 7)}-01`
+    ? 'Saldo inicial (arranque da produção)'
+    : 'Saldo transitado do dia anterior';
+  const transitadoValor = r.saldoTransitado === null
+    ? `por apurar (fecha primeiro o mês ${r.transporte.mesAnterior})`
+    : formatarEuro(r.saldoTransitado);
+  return [
+    [transitadoRotulo, transitadoValor, false],
+    ['+ Numerário apurado no dia', formatarEuro(r.apuradoNumerario), false],
+    ['− Depósitos bancários do dia', formatarEuro(r.depositos), false],
+    ['± Outras entradas/saídas de numerário', formatarEuro(r.outrasEntradasSaidas), false],
+    ['= Saldo que transita para o dia seguinte', r.saldoFinalDia === null ? '—' : formatarEuro(r.saldoFinalDia), true],
+  ];
 }
 
 async function registarDepositoCaixaDia() {
@@ -2051,7 +2115,8 @@ async function registarDepositoCaixaDia() {
   resultadoEl.innerHTML = `<div class="alerta alerta-ok">Depósito registado. Novo saldo em caixa: ${formatarEuro(r.saldoNumerario)}.</div>`;
   document.getElementById('cd-deposito-valor').value = '';
   document.getElementById('cd-deposito-observacoes').value = '';
-  carregarSaldoLojaCaixaDia();
+  await carregarSaldoLojaCaixaDia();
+  atualizarTalaoDia();
 }
 
 // Orientação — agora sempre ligada à loja+dia escolhidos no topo (pedido do
@@ -2200,6 +2265,7 @@ async function confirmarGravarApuro() {
   // (para o botão "Apurar" da linha deste colaborador passar a "✓ Já
   // apurado") com este apuro incluído.
   await carregarResumoDia();
+  await carregarSaldoDia();
   mostrarResumoColaboradores();
   atualizarTalaoDia();
 }
