@@ -2088,9 +2088,10 @@ async function carregarSaldoDia() {
 // Linhas do quadro "Saldo de numerário do dia" — partilhadas pelo ecrã e
 // pelo Talão do dia, para os dois mostrarem sempre exactamente o mesmo.
 function linhasSaldoDia(r) {
-  const transitadoRotulo = r.transporte.inicioProducao && r.dia === `${r.dia.slice(0, 7)}-01`
-    ? 'Saldo inicial (arranque da produção)'
-    : 'Saldo transitado do dia anterior';
+  const ehPrimeiroDiaProducao = r.transporte.inicioProducao && r.dia === `${r.dia.slice(0, 7)}-01`;
+  const transitadoRotulo = !ehPrimeiroDiaProducao
+    ? 'Saldo transitado do dia anterior'
+    : (r.transporte.transitoArranque ? 'Transporte de setembro — depósito em trânsito' : 'Saldo inicial (arranque da produção)');
   const transitadoValor = r.saldoTransitado === null
     ? `por apurar (fecha primeiro o mês ${r.transporte.mesAnterior})`
     : formatarEuro(r.saldoTransitado);
@@ -2427,7 +2428,9 @@ function mostrarCaixaMes() {
     <h3>Saldo de numerário do mês</h3>
     <div class="tabela-scroll"><table>
       <tbody>
-        <tr><td>${t.inicioProducao ? 'Saldo inicial (arranque da produção, 01/10/2026)' : `Transporte de saldo de ${nomeMesCM(t.mesAnterior)}`}</td>
+        <tr><td>${t.inicioProducao
+              ? (t.transitoArranque ? 'Transporte de setembro/2026 — depósito em trânsito (arranque da produção)' : 'Saldo inicial (arranque da produção, 01/10/2026)')
+              : `Transporte de saldo de ${nomeMesCM(t.mesAnterior)}`}</td>
             <td style="text-align:right">${t.conhecido ? formatarEuro(t.valor) : `<span style="color:#b3000a">por apurar — ${nomeMesCM(t.mesAnterior)} ainda não está fechado</span>`}</td></tr>
         <tr><td>+ Carregamentos/Pag. Fatura recebidos em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasCarregamentos)}</td></tr>
         <tr><td>+ Vendas GSV recebidas em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasGSV)}</td></tr>
