@@ -483,8 +483,8 @@
       </div>
 
       <div class="cartao no-print">
-        <h2>💳 Saldo em numerário da loja</h2>
-        <p class="rodape-nota" style="margin-bottom:.75rem">Dinheiro físico que devia estar na gaveta da loja neste momento. Regista aqui o depósito bancário assim que o dinheiro sai da loja — o saldo é actualizado de imediato.</p>
+        <h2>💰 Saldo da loja — Ao Vivo</h2>
+        <p class="rodape-nota" style="margin-bottom:.75rem">O que devia estar na loja neste momento. Até cada colaborador apurar contam os documentos Vodafone; depois de apurado passa a contar o que ele declarou — e é esse valor que transita para o dia seguinte. Regista aqui o depósito bancário assim que o dinheiro sai da loja.</p>
         <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
         <div id="cd-saldo-dia" style="margin-top:.75rem"></div>
         <div id="cd-diversos-dia" style="margin-top:.75rem"></div>
@@ -590,7 +590,7 @@
         <li>Vai a <strong>🧾 Caixa Dia</strong>, escolhe a loja e o dia, e clica em "🔍 Pesquisar".</li>
         <li>Confere em "Orientação" quanto foi facturado por cada colaborador (numerário vs cartão/ATM) — é só orientação, ainda não é o apuro real.</li>
         <li>Conta o dinheiro/confere o terminal e regista o apuro real em "Inserir apuro real do dia".</li>
-        <li>Sempre que sair dinheiro físico da loja para o banco, regista o depósito em "💳 Saldo em numerário da loja".</li>
+        <li>Sempre que sair dinheiro físico da loja para o banco, regista o depósito em "💰 Saldo da loja — Ao Vivo".</li>
         <li>Quando todos os colaboradores dessa loja/dia já tiverem apurado, imprime/grava o "🧾 Talão do dia" e arquiva-o junto dos talões físicos.</li>
         <li>No fecho do dia/período, faz o "🧮 Arqueio" — conta o dinheiro da gaveta e compara com o saldo teórico do sistema.</li>
       </ol>
@@ -2047,19 +2047,32 @@ async function apagarApuro(colaborador) {
   const r = await chamarApi({ acao: 'apagarApuroColaborador', dados: { loja, colaborador, dia } });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
   await carregarResumoDia();
-  await carregarSaldoDia();
+  await carregarSaldoLojaCaixaDia();
   atualizarTalaoDia();
 }
 
+// 💰 Saldo da loja — Ao Vivo (2026-10-02, desenhado com o Ricardo depois do
+// caso real da Av. Liberdade): numerário na gaveta AGORA + Multibanco e
+// VISA de hoje. Regra única (lib/numerario.js no servidor): quem já apurou
+// conta pelo que declarou; quem ainda não apurou conta pelos documentos
+// Vodafone. Os cartões só se separam em Multibanco/VISA depois do apuro (a
+// Vodafone só diz "Cartão") e não transitam de dia — vão directos ao banco.
 async function carregarSaldoLojaCaixaDia() {
   const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
   const el = document.getElementById('cd-saldo-loja');
   if (!loja) { el.innerHTML = ''; return; }
-  const r = await chamarApi({ acao: 'listarSaldos' });
-  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo.') + '</div>'; return; }
-  const s = r.saldos.find(x => x.loja === loja);
-  el.innerHTML = `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">Saldo actual em caixa (numerário, agora)</div></div>`;
-  await carregarSaldoDia();
+  const r = await chamarApi({ acao: 'saldoDiaLoja', loja, dia: 'hoje' });
+  if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo.') + '</div>'; await carregarSaldoDia(); return; }
+  if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; await carregarSaldoDia(); return; }
+  el.innerHTML = `
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.saldoFinalDia)}</div><div class="rotulo">💰 Numerário que devia estar na gaveta agora${r.transporte.provisorio ? ' <span title="O mês anterior ainda não foi fechado — transporte calculado, por confirmar no fecho">(provisório)</span>' : ''}</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.multibanco)}</div><div class="rotulo">💳 Multibanco de hoje (já apurado)</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.visa)}</div><div class="rotulo">💳 VISA de hoje (já apurado)</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(r.cartaoPorApurar)}</div><div class="rotulo">Cartões de hoje ainda por apurar (Multibanco+VISA juntos)</div></div>`;
+  // Se o dia escolhido no topo é hoje, o quadro do dia usa esta mesma
+  // resposta — sem repetir as leituras.
+  await carregarSaldoDia(dia === r.dia ? r : null);
 }
 
 // Saldo de numerário do DIA (2026-10-01, pedido do Ricardo: "nas folhas de
@@ -2069,13 +2082,13 @@ async function carregarSaldoLojaCaixaDia() {
 // dia seguinte. Calculado no servidor (lib/saldoDia.js) só com movimentos
 // até ao dia escolhido — imprimir a folha hoje ou daqui a um mês dá o
 // mesmo resultado.
-async function carregarSaldoDia() {
+async function carregarSaldoDia(jaCarregado) {
   const loja = document.getElementById('cd-loja').value;
   const dia = document.getElementById('cd-dia').value;
   const el = document.getElementById('cd-saldo-dia');
   CD_SALDO_DIA = null;
   if (!loja || !dia) { el.innerHTML = ''; return; }
-  const r = await chamarApi({ acao: 'saldoDiaLoja', loja, dia });
+  const r = jaCarregado || await chamarApi({ acao: 'saldoDiaLoja', loja, dia });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo do dia.') + '</div>'; return; }
   if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; return; }
   CD_SALDO_DIA = r;
@@ -2083,7 +2096,8 @@ async function carregarSaldoDia() {
     <h3 style="margin:.25rem 0 .5rem">Saldo de numerário do dia ${dia}</h3>
     <div class="tabela-scroll"><table><tbody>${linhasSaldoDia(r).map(([rot, val, total]) =>
       `<tr${total ? ' style="font-weight:700;border-top:2px solid #333"' : ''}><td>${rot}</td><td style="text-align:right">${val}</td></tr>`).join('')}</tbody></table></div>
-    <p class="rodape-nota">Numerário = o que os assistentes apuraram (contado) neste dia${r.nApuros ? ` (${r.nApuros} apuro(s))` : ' — ainda ninguém apurou'}.</p>`;
+    <p class="rodape-nota">${r.nApuros} apuro(s) neste dia${r.colaboradoresPorApurar && r.colaboradoresPorApurar.length ? ` — falta apurar: ${r.colaboradoresPorApurar.join(', ')} (contam pelos documentos até apurarem)` : ''}.</p>
+    ${(r.divergencias || []).map(d => `<div class="alerta alerta-aviso">⚠ <strong>${d.colaborador}</strong>: o total confere, mas a divisão é diferente dos documentos — declarou ${formatarEuro(d.numerarioApurado)} em numerário e os documentos Vodafone dizem ${formatarEuro(d.numerarioDocumentos)} (diferença ${d.diferenca > 0 ? '+' : ''}${formatarEuro(d.diferenca)}). Vale o que foi declarado; confirma se o meio de pagamento foi mal registado na venda.</div>`).join('')}`;
   await carregarDiversosDia();
 }
 
@@ -2140,6 +2154,7 @@ function linhasSaldoDia(r) {
   return [
     [transitadoRotulo, transitadoValor, false],
     ['+ Numerário apurado no dia', formatarEuro(r.apuradoNumerario), false],
+    ...(Math.abs(r.porApurarNumerario || 0) > 0.005 ? [['+ Numerário ainda por apurar (documentos)', formatarEuro(r.porApurarNumerario), false]] : []),
     ['− Depósitos bancários do dia', formatarEuro(r.depositos), false],
     ['± Outras entradas/saídas de numerário', formatarEuro(r.outrasEntradasSaidas), false],
     ['= Saldo que transita para o dia seguinte', r.saldoFinalDia === null ? '—' : formatarEuro(r.saldoFinalDia), true],
@@ -2157,7 +2172,7 @@ async function registarDepositoCaixaDia() {
   resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
   const r = await chamarApi({ acao: 'registarMovimentoDiverso', dados: { loja, tipo: 'deposito', valor, observacoes } });
   if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
-  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Depósito registado. Novo saldo em caixa: ${formatarEuro(r.saldoNumerario)}.</div>`;
+  resultadoEl.innerHTML = '<div class="alerta alerta-ok">Depósito registado — o saldo acima já está actualizado.</div>';
   document.getElementById('cd-deposito-valor').value = '';
   document.getElementById('cd-deposito-observacoes').value = '';
   await carregarSaldoLojaCaixaDia();
@@ -2310,7 +2325,7 @@ async function confirmarGravarApuro() {
   // (para o botão "Apurar" da linha deste colaborador passar a "✓ Já
   // apurado") com este apuro incluído.
   await carregarResumoDia();
-  await carregarSaldoDia();
+  await carregarSaldoLojaCaixaDia();
   mostrarResumoColaboradores();
   atualizarTalaoDia();
 }
@@ -2474,16 +2489,15 @@ function mostrarCaixaMes() {
               ? (t.transitoArranque ? 'Transporte de setembro/2026 — depósito em trânsito (arranque da produção)' : 'Saldo inicial (arranque da produção, 01/10/2026)')
               : `Transporte de saldo de ${nomeMesCM(t.mesAnterior)}`}</td>
             <td style="text-align:right">${t.conhecido ? formatarEuro(t.valor) : `<span style="color:#b3000a">por apurar — ${nomeMesCM(t.mesAnterior)} ainda não está fechado</span>`}</td></tr>
-        <tr><td>+ Carregamentos/Pag. Fatura recebidos em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasCarregamentos)}</td></tr>
-        <tr><td>+ Vendas GSV recebidas em numerário</td><td style="text-align:right">${formatarEuro(nm.vendasGSV)}</td></tr>
+        <tr><td>+ Numerário apurado pelos assistentes (contado)</td><td style="text-align:right">${formatarEuro(nm.apuradoNumerario)}</td></tr>
+        <tr><td>+ Numerário ainda por apurar (documentos Vodafone)</td><td style="text-align:right">${formatarEuro(nm.porApurarNumerario)}</td></tr>
         <tr><td>− Depósitos bancários do mês</td><td style="text-align:right">${formatarEuro(nm.depositos)}</td></tr>
         <tr><td>± Outras entradas/saídas de numerário</td><td style="text-align:right">${formatarEuro(nm.outrasEntradasSaidas)}</td></tr>
         <tr style="font-weight:700;border-top:2px solid #333"><td>= Saldo final do mês</td>
             <td style="text-align:right">${e.saldoFinalMes === null ? '—' : formatarEuro(e.saldoFinalMes)}</td></tr>
       </tbody>
     </table></div>
-    <p class="rodape-nota">Só conta movimentos com data deste mês — fechar o mês uns dias depois não muda nada.
-      Saldo da gaveta neste momento (inclui já o mês seguinte, se houver): ${formatarEuro(e.saldoNumerarioAtual)}.</p>`;
+    <p class="rodape-nota">Só conta movimentos com data deste mês — fechar o mês uns dias depois não muda nada. Mesma regra do saldo "ao vivo": vale o apurado de quem já apurou e os documentos de quem ainda não apurou.</p>`;
 
   // Bug real reportado pelo Ricardo (2026-09-17): os totais só apareciam
   // DEPOIS de já teres dado o visto — impossível decidir se está certo sem
@@ -2840,7 +2854,7 @@ async function registarDiverso() {
   resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A registar…</div>';
   const r = await chamarApi({ acao: 'registarMovimentoDiverso', dados: { loja, tipo, valor, observacoes } });
   if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao registar.') + '</div>'; return; }
-  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Registado.${r.saldoNumerario !== null ? ' Novo saldo de numerário da loja: ' + formatarEuro(r.saldoNumerario) + '.' : ' (não afecta o numerário — movimento digital.)'}</div>`;
+  resultadoEl.innerHTML = `<div class="alerta alerta-ok">Registado.${r.saldoNumerario !== null ? '' : ' (não afecta o numerário — movimento digital.)'}</div>`;
   document.getElementById('diverso-valor').value = '';
   document.getElementById('diverso-observacoes').value = '';
   carregarDiversos();
