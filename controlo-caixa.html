@@ -1657,6 +1657,15 @@ function linhaTipologia(r) {
 
 // ═══ Caixa Dia (Conferência de Caixa por Colaborador, Fase 3a) ═══
 let ULTIMO_RESUMO_COLABORADORES = [];
+// Etiqueta de um apuro cujo total não bate com os documentos (2026-10-02):
+// apurou MENOS → a diferença fica "por receber" do cliente (facturado e
+// ainda não pago); apurou MAIS → recebeu de uma venda anterior, abate ao
+// "por receber". `diferenca` = apurado − documentos.
+function etiquetaApuroDiferenca(diferenca) {
+  return diferenca < 0
+    ? `⚠ Por receber: ${formatarEuro(-diferenca)}`
+    : `⚠ Recebido a mais: ${formatarEuro(diferenca)} (abate ao por receber)`;
+}
 let CD_SALDO_DIA = null; // último resultado de saldoDiaLoja (2026-10-01) — saldo transitado/final do dia, também usado no Talão
 let CD_RESUMO_DIA = null; // último resultado de resumoDiaLoja — reaproveitado para saber quem já apurou hoje, sem leitura extra
 
@@ -1723,7 +1732,7 @@ async function carregarResumoDia() {
       <thead><tr><th>Colaborador</th><th>Total apurado</th><th>Documentos</th><th>Diferença</th><th>Confere</th><th></th></tr></thead>
       <tbody>${r.apuros.map(a => `<tr${a.confere ? '' : ' style="background:#fdecea"'}>
         <td>${a.colaborador}</td><td>${formatarEuro(a.totalApurado)}</td><td>${formatarEuro(a.totalDocumentos)}</td>
-        <td>${formatarEuro(a.diferenca)}</td><td>${a.confere ? '✅ Confere' : '<strong style="color:#b3000a">❌ Apurado com ERRO</strong>'}</td>
+        <td>${formatarEuro(a.diferenca)}</td><td>${a.confere ? '✅ Confere' : `<strong style="color:#b3000a">${etiquetaApuroDiferenca(a.diferenca)}</strong>`}</td>
         <td><button class="btn btn-secundario" style="padding:.35rem .7rem;font-size:.75rem" onclick="apagarApuro('${a.colaborador.replace(/'/g, "\\'")}')">🗑 Apagar</button></td>
       </tr>`).join('')}</tbody>
     </table></div>` : '<p class="rodape-nota">Ainda ninguém apurou hoje nesta loja.</p>'}
@@ -1761,7 +1770,7 @@ async function atualizarTalaoDia() {
   }
   const comErro = CD_RESUMO_DIA.apuros.filter(a => !a.confere);
   avisoEl.innerHTML = comErro.length
-    ? `<div class="alerta alerta-erro">⚠️ Todos já apuraram, mas ${comErro.length} apuro(s) têm erro (${comErro.map(a => a.colaborador).join(', ')}) — o talão pode ser impresso, mas confirma esses valores antes de arquivar.</div>`
+    ? `<div class="alerta alerta-erro">⚠️ Todos já apuraram, mas ${comErro.length} apuro(s) não batem com os documentos (${comErro.map(a => `${a.colaborador}: ${etiquetaApuroDiferenca(a.diferenca)}`).join('; ')}) — o talão pode ser impresso; a diferença fica em "Por receber de clientes".</div>`
     : '<div class="alerta alerta-ok">✅ Todos os colaboradores já apuraram — talão pronto a imprimir.</div>';
   await gerarTalaoDia();
   btn.hidden = false;
@@ -1947,7 +1956,7 @@ async function gerarTalaoDia() {
   // agora que é preto e branco) sinaliza o mesmo apuro "com erro" já
   // assinalado no ecrã.
   document.getElementById('talao-corpo-colaboradores').innerHTML = r.apuros.map(a => `<tr>
-    <td>${a.colaborador}${a.confere ? '' : ' (ERRO)'}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
+    <td>${a.colaborador}${a.confere ? '' : (a.diferenca < 0 ? ' (por receber)' : ' (recebido a mais)')}</td><td>${formatarEuro(a.atmMultibanco)}</td><td>${formatarEuro(a.atmVisa)}</td>
     <td>${formatarEuro(a.numerario)}</td><td>${formatarEuro(a.transferencia)}</td><td>${formatarEuro(a.totalApurado)}</td>
   </tr>`).join('');
 
@@ -1966,13 +1975,14 @@ async function gerarTalaoDia() {
 
   // Saldo de numerário do dia (2026-10-01) — mesmas linhas do ecrã.
   document.getElementById('talao-corpo-saldo-dia').innerHTML = CD_SALDO_DIA
-    ? '<tr>' + linhasSaldoDia(CD_SALDO_DIA).map(([rot, val, total]) => `<td${total ? ' class="final"' : ''}><span class="rot">${rot}</span><span class="val">${val}</span></td>`).join('') + '</tr>'
+    ? '<tr>' + linhasSaldoDia(CD_SALDO_DIA).map(([rot, val, total]) => `<td${total ? ' class="final"' : ''}><span class="rot">${rot}</span><span class="val">${val}</span></td>`).join('')
+        + (Math.abs(CD_SALDO_DIA.porReceberSaldo || 0) > 0.005 ? `<td><span class="rot">Por receber de clientes</span><span class="val">${formatarEuro(CD_SALDO_DIA.porReceberSaldo)}</span></td>` : '') + '</tr>'
     : '<tr><td><span class="rot">Saldo do dia indisponível</span></td></tr>';
 
   const diferencaTotal = arredEuro(totalDia - totalVendasCarregamentos);
   document.getElementById('talao-rodape').innerHTML = Math.abs(diferencaTotal) < 0.005
     ? '<strong>CONFERE</strong> — o TOTAL do dia (apurado) bate com o Total das vendas + Carregamentos (documentos).'
-    : `<strong>NÃO CONFERE</strong> — TOTAL do dia (apurado) ${formatarEuro(totalDia)} ≠ Total das vendas + Carregamentos (documentos) ${formatarEuro(totalVendasCarregamentos)} — diferença ${formatarEuro(diferencaTotal)}. Confirma os apuros com erro assinalados acima antes de arquivar este talão.`;
+    : `<strong>NÃO CONFERE</strong> — TOTAL do dia (apurado) ${formatarEuro(totalDia)} ≠ Total das vendas + Carregamentos (documentos) ${formatarEuro(totalVendasCarregamentos)} — diferença ${formatarEuro(diferencaTotal)} (${diferencaTotal < 0 ? 'fica por receber de clientes' : 'recebido a mais, abate ao por receber'}).`;
 
   // Lista em destaque, para conferir de relance contra os talões físicos —
   // Depósitos não soma ao "TOTAL do dia" (é numerário já contado em
@@ -2067,6 +2077,7 @@ async function carregarSaldoLojaCaixaDia() {
   if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; await carregarSaldoDia(); return; }
   el.innerHTML = `
     <div class="resumo-item"><div class="valor">${formatarEuro(r.saldoFinalDia)}</div><div class="rotulo">💰 Numerário que devia estar na gaveta agora${r.transporte.provisorio ? ' <span title="O mês anterior ainda não foi fechado — transporte calculado, por confirmar no fecho">(provisório)</span>' : ''}</div></div>
+    <div class="resumo-item"><div class="valor" style="color:${Math.abs(r.porReceberSaldo || 0) > 0.005 ? '#b3000a' : 'inherit'}">${formatarEuro(r.porReceberSaldo || 0)}</div><div class="rotulo">🧾 Por receber de clientes (facturado e ainda não pago)</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(r.multibanco)}</div><div class="rotulo">💳 Multibanco de hoje (já apurado)</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(r.visa)}</div><div class="rotulo">💳 VISA de hoje (já apurado)</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(r.cartaoPorApurar)}</div><div class="rotulo">Cartões de hoje ainda por apurar (Multibanco+VISA juntos)</div></div>`;
@@ -2098,7 +2109,26 @@ async function carregarSaldoDia(jaCarregado) {
       `<tr${total ? ' style="font-weight:700;border-top:2px solid #333"' : ''}><td>${rot}</td><td style="text-align:right">${val}</td></tr>`).join('')}</tbody></table></div>
     <p class="rodape-nota">${r.nApuros} apuro(s) neste dia${r.colaboradoresPorApurar && r.colaboradoresPorApurar.length ? ` — falta apurar: ${r.colaboradoresPorApurar.join(', ')} (contam pelos documentos até apurarem)` : ''}.</p>
     ${(r.divergencias || []).map(d => `<div class="alerta alerta-aviso">⚠ <strong>${d.colaborador}</strong>: o total confere, mas a divisão é diferente dos documentos — declarou ${formatarEuro(d.numerarioApurado)} em numerário e os documentos Vodafone dizem ${formatarEuro(d.numerarioDocumentos)} (diferença ${d.diferenca > 0 ? '+' : ''}${formatarEuro(d.diferenca)}). Vale o que foi declarado; confirma se o meio de pagamento foi mal registado na venda.</div>`).join('')}`;
+  el.innerHTML += blocoPorReceber(r);
   await carregarDiversosDia();
+}
+
+// 🧾 Por receber de clientes (2026-10-02): saldo que transita de dia para
+// dia + de onde vem (apuros do mês abaixo/acima dos documentos, com a
+// observação escrita pelo assistente).
+function blocoPorReceber(r) {
+  const det = r.porReceberDetalhe || [];
+  if (!det.length && Math.abs(r.porReceberSaldo || 0) < 0.005) return '';
+  return `
+    <h3 style="margin:.9rem 0 .5rem">🧾 Por receber de clientes até ${r.dia}: <span style="color:${Math.abs(r.porReceberSaldo) > 0.005 ? '#b3000a' : 'inherit'}">${formatarEuro(r.porReceberSaldo)}</span></h3>
+    <div class="tabela-scroll"><table>
+      <thead><tr><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th>Observações</th></tr></thead>
+      <tbody>
+        ${Math.abs(r.porReceberTransporteMes || 0) > 0.005 ? `<tr><td colspan="2">Transporte do mês anterior</td><td style="text-align:right">${formatarEuro(r.porReceberTransporteMes)}</td><td></td></tr>` : ''}
+        ${det.map(d => `<tr><td>${d.dia}</td><td>${d.colaborador}</td><td style="text-align:right">${d.valor > 0 ? '+' : ''}${formatarEuro(d.valor)}</td><td>${d.valor > 0 ? 'Por receber' : 'Recebido'}${d.observacoes ? ' — ' + d.observacoes : ''}</td></tr>`).join('')}
+      </tbody>
+    </table></div>
+    <p class="rodape-nota">Quando o cliente pagar, o assistente declara esse valor no apuro desse dia (em Transferência, Multibanco, VISA ou Numerário) e o "por receber" abate sozinho.</p>`;
 }
 
 // Movimentos diversos do dia + 🗑 Anular (2026-10-01, pedido do Ricardo) —
@@ -2218,7 +2248,7 @@ function mostrarResumoColaboradores() {
     } else if (apuroExistente.confere) {
       estado = '<span class="rodape-nota">✓ Já apurado</span>';
     } else {
-      estado = '<span class="rodape-nota" style="color:#b3000a">✖ Apurado com erro</span>';
+      estado = `<span class="rodape-nota" style="color:#b3000a">${etiquetaApuroDiferenca(apuroExistente.diferenca)}</span>`;
     }
     const colabJs = l.colaborador.replace(/'/g, "\\'");
     return `<tr>
@@ -2283,11 +2313,27 @@ function pedirConfirmacaoApuro() {
   if (!colaborador) { confEl.innerHTML = '<div class="alerta alerta-erro">Indica o colaborador.</div>'; return; }
   if (!loja || !dia) { confEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a loja e o dia no topo da página.</div>'; return; }
 
+  // Por receber de clientes (2026-10-02): apurar MENOS do que os documentos
+  // é permitido (venda facturada e ainda não paga), mas tem de ficar
+  // escrito de quem é a dívida. O total dos documentos deste colaborador
+  // já está carregado na "Orientação" — sem leitura extra.
+  const linhaDocs = ULTIMO_RESUMO_COLABORADORES.find(l => l.colaborador === colaborador);
+  const totalDocs = linhaDocs ? arred(linhaDocs.total) : null;
+  const emFalta = totalDocs === null ? 0 : arred(totalDocs - total);
+  const observacoesTxt = document.getElementById('apuro-observacoes').value.trim();
+  if (emFalta > 0.01 && !observacoesTxt) {
+    confEl.innerHTML = `<div class="alerta alerta-erro">Estás a apurar ${formatarEuro(total)} e os documentos somam ${formatarEuro(totalDocs)} — faltam <strong>${formatarEuro(emFalta)}</strong>. Se é uma venda ainda não paga, escreve em "Observações" o cliente e o nº do documento; esse valor fica em "Por receber de clientes".</div>`;
+    return;
+  }
+  const avisoDiferenca = Math.abs(emFalta) > 0.01
+    ? `<br><strong style="color:#b3000a">${etiquetaApuroDiferenca(-emFalta)}</strong> face aos documentos (${formatarEuro(totalDocs)}).`
+    : '';
+
   confEl.innerHTML = `
     <div class="alerta alerta-aviso">
       Vais gravar o apuro de <strong>${colaborador}</strong>, loja ${loja}, dia ${dia}:<br>
       ATM Multibanco ${formatarEuro(mb)} + ATM VISA ${formatarEuro(visa)} + Numerário ${formatarEuro(numerario)} + Transferência ${formatarEuro(transferencia)}
-      = <strong>Total apurado ${formatarEuro(total)}</strong>.<br><br>
+      = <strong>Total apurado ${formatarEuro(total)}</strong>.${avisoDiferenca}<br><br>
       Confirmas que estes são os valores finais?
       <div style="margin-top:.6rem">
         <button class="btn" onclick="confirmarGravarApuro()">✅ Confirmar e gravar</button>
@@ -2316,7 +2362,7 @@ async function confirmarGravarApuro() {
   const classe = r.confere ? 'alerta-ok' : 'alerta-erro';
   const texto = r.confere
     ? `✅ Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
-    : `❌ APURADO COM ERRO — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}, diferença ${formatarEuro(r.diferenca)}.`;
+    : `${etiquetaApuroDiferenca(r.diferenca)} — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}.`;
   resultadoEl.innerHTML = `<div class="alerta ${classe}" style="${r.confere ? '' : 'font-weight:700'}">${texto}</div>`;
   ['apuro-colaborador', 'apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('apuro-aviso-ja-apurado').innerHTML = '';
@@ -2495,6 +2541,8 @@ function mostrarCaixaMes() {
         <tr><td>± Outras entradas/saídas de numerário</td><td style="text-align:right">${formatarEuro(nm.outrasEntradasSaidas)}</td></tr>
         <tr style="font-weight:700;border-top:2px solid #333"><td>= Saldo final do mês</td>
             <td style="text-align:right">${e.saldoFinalMes === null ? '—' : formatarEuro(e.saldoFinalMes)}</td></tr>
+        ${e.porReceberFinalMes !== null && e.porReceberFinalMes !== undefined && (Math.abs(e.porReceberFinalMes) > 0.005 || Math.abs(t.porReceber || 0) > 0.005) ? `<tr style="color:#b3000a"><td>🧾 Por receber de clientes no fim do mês (transporte ${formatarEuro(t.porReceber || 0)} ${nm.porReceber >= 0 ? '+' : '−'} ${formatarEuro(Math.abs(nm.porReceber || 0))} do mês) — passa para o mês seguinte</td>
+            <td style="text-align:right">${formatarEuro(e.porReceberFinalMes)}</td></tr>` : ''}
       </tbody>
     </table></div>
     <p class="rodape-nota">Só conta movimentos com data deste mês — fechar o mês uns dias depois não muda nada. Mesma regra do saldo "ao vivo": vale o apurado de quem já apurou e os documentos de quem ainda não apurou.</p>`;
