@@ -338,7 +338,7 @@
           <thead><tr>
             <th>Data/Hora</th><th>Origem</th><th>Tipo</th><th>Método</th><th>Descrição</th><th>Valor</th><th>Numerário</th><th>Saldo acumulado</th>
           </tr></thead>
-          <tbody id="corpo-folha"><tr><td colspan="8">Escolhe uma loja e clica em "Atualizar".</td></tr></tbody>
+          <tbody id="corpo-folha"><tr><td colspan="8">Escolhe uma loja e clica em "Atualizar". Sem datas, mostra o mês corrente.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1456,7 +1456,7 @@ async function importarFicheiro(tipo) {
         htmlErro += '<div class="alerta alerta-erro">Vai a "🔐 Gestão → 👤 Colaboradores" e associa: <strong>' + r.colaboradoresNaoReconhecidos.map(c => `"${c}"`).join(', ') + '</strong> — depois volta a escolher e importar este mesmo ficheiro.</div>';
       }
       resultadoEl.innerHTML = htmlErro;
-      carregarHistorico();
+      if (GESTAO_SUBABAS_CARREGADAS.has('historico')) carregarHistorico();
       return;
     }
 
@@ -1470,9 +1470,12 @@ async function importarFicheiro(tipo) {
     }
     resultadoEl.innerHTML = html;
     inputEl.value = '';
-    // Depois de importar, o histórico/classificação podem ter mudado — refresca em segundo plano.
-    carregarHistorico();
-    carregarClassificacao();
+    // Depois de importar, o histórico/classificação podem ter mudado —
+    // refresca em segundo plano, mas só os que já foram abertos nesta
+    // sessão (2026-10-06): os outros carregam quando forem abertos, em vez
+    // de gastarem leituras em todas as importações.
+    if (GESTAO_SUBABAS_CARREGADAS.has('historico')) carregarHistorico();
+    if (GESTAO_SUBABAS_CARREGADAS.has('classificacao')) carregarClassificacao();
     if (tipo === 'cobrancas' || tipo === 'gsv') carregarUltimasImportacoes();
     ULTIMA_RECONCILIACAO = null;
   } catch (err) {
@@ -1669,6 +1672,33 @@ function etiquetaApuroDiferenca(diferenca) {
 let CD_SALDO_DIA = null; // último resultado de saldoDiaLoja (2026-10-01) — saldo transitado/final do dia, também usado no Talão
 let CD_RESUMO_DIA = null; // último resultado de resumoDiaLoja — reaproveitado para saber quem já apurou hoje, sem leitura extra
 
+// Painel do Caixa Dia num só pedido (2026-10-06, redução de leituras ao
+// Firestore). Antes, cada "Pesquisar" (e cada apuro, depósito ou anulação)
+// fazia 4 a 5 pedidos ao servidor, e cada um lia os mesmos movimentos outra
+// vez. Agora faz-se UM pedido (painelCaixaDia) que traz as mesmas partes
+// todas juntas; cada função de carregamento vai buscar a sua parte aqui em
+// vez de chamar o servidor. Se o pedido único falhar (ex.: servidor ainda
+// numa versão anterior), cada função volta a chamar o servidor como antes —
+// a página nunca deixa de funcionar por causa disto.
+let CD_PAINEL = null;
+async function obterPainelCD() {
+  CD_PAINEL = null;
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  if (!loja || !dia) return;
+  const r = await chamarApi({ acao: 'painelCaixaDia', loja, dia });
+  if (r && r.ok) CD_PAINEL = { ...r, loja, dia };
+}
+// Devolve (uma única vez) a parte pedida do painel, se for da loja/dia que
+// estão escolhidos no ecrã; senão devolve null e quem chama pede ao servidor.
+function tirarDoPainelCD(parte) {
+  if (!CD_PAINEL) return null;
+  if (CD_PAINEL.loja !== document.getElementById('cd-loja').value || CD_PAINEL.dia !== document.getElementById('cd-dia').value) return null;
+  const v = CD_PAINEL[parte] || null;
+  CD_PAINEL[parte] = null;
+  return v;
+}
+
 function atualizarLojaDiaMostrados() {
   document.getElementById('apuro-loja-mostrar').value = document.getElementById('cd-loja').value;
   document.getElementById('apuro-dia-mostrar').value = document.getElementById('cd-dia').value;
@@ -1693,8 +1723,10 @@ async function pesquisarCaixaDia() {
   document.getElementById('cd-talao-imprimivel').hidden = true;
   // resumoDiaLoja primeiro — a Orientação usa o resultado (CD_RESUMO_DIA)
   // para marcar quem já apurou, sem nenhuma leitura extra.
+  await obterPainelCD();
   await carregarResumoDia();
   await Promise.all([carregarSaldoLojaCaixaDia(), pesquisarResumoColaboradores()]);
+  CD_PAINEL = null;
   // Só depois de CD_RESUMO_DIA E ULTIMO_RESUMO_COLABORADORES estarem os dois
   // actualizados é que dá para saber se falta alguém apurar — ver nota em
   // atualizarTalaoDia().
@@ -1715,7 +1747,7 @@ async function carregarResumoDia() {
   const el = document.getElementById('cd-resumo-dia');
   if (!loja || !dia) { el.innerHTML = '<p class="rodape-nota">Escolhe a loja e o dia.</p>'; return; }
   el.innerHTML = '<div class="resumo-item"><span class="spinner"></span> A carregar…</div>';
-  const r = await chamarApi({ acao: 'resumoDiaLoja', loja, dia });
+  const r = tirarDoPainelCD('resumoDia') || await chamarApi({ acao: 'resumoDiaLoja', loja, dia });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o resumo do dia.') + '</div>'; CD_RESUMO_DIA = null; return; }
   CD_RESUMO_DIA = r;
 
@@ -2056,8 +2088,10 @@ async function apagarApuro(colaborador) {
   if (!confirm(`Apagar o apuro de ${colaborador} do dia ${dia}? Só Master/Coordenador conseguem fazer isto — se não tiveres permissão, o servidor recusa.`)) return;
   const r = await chamarApi({ acao: 'apagarApuroColaborador', dados: { loja, colaborador, dia } });
   if (!r.ok) { alert(r.erro || 'Erro ao apagar.'); return; }
+  await obterPainelCD();
   await carregarResumoDia();
   await carregarSaldoLojaCaixaDia();
+  CD_PAINEL = null;
   atualizarTalaoDia();
 }
 
@@ -2072,7 +2106,7 @@ async function carregarSaldoLojaCaixaDia() {
   const dia = document.getElementById('cd-dia').value;
   const el = document.getElementById('cd-saldo-loja');
   if (!loja) { el.innerHTML = ''; return; }
-  const r = await chamarApi({ acao: 'saldoDiaLoja', loja, dia: 'hoje' });
+  const r = tirarDoPainelCD('saldoHoje') || await chamarApi({ acao: 'saldoDiaLoja', loja, dia: 'hoje' });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo.') + '</div>'; await carregarSaldoDia(); return; }
   if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; await carregarSaldoDia(); return; }
   el.innerHTML = `
@@ -2099,7 +2133,7 @@ async function carregarSaldoDia(jaCarregado) {
   const el = document.getElementById('cd-saldo-dia');
   CD_SALDO_DIA = null;
   if (!loja || !dia) { el.innerHTML = ''; return; }
-  const r = jaCarregado || await chamarApi({ acao: 'saldoDiaLoja', loja, dia });
+  const r = jaCarregado || tirarDoPainelCD('saldoDia') || await chamarApi({ acao: 'saldoDiaLoja', loja, dia });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o saldo do dia.') + '</div>'; return; }
   if (r.periodoTeste) { el.innerHTML = `<p class="rodape-nota">${r.mensagem}</p>`; return; }
   CD_SALDO_DIA = r;
@@ -2142,7 +2176,7 @@ async function carregarDiversosDia() {
   const dia = document.getElementById('cd-dia').value;
   const el = document.getElementById('cd-diversos-dia');
   if (!loja || !dia) { el.innerHTML = ''; return; }
-  const r = await chamarApi({ acao: 'listarMovimentosDiversosDia', loja, dia });
+  const r = tirarDoPainelCD('diversosDia') || await chamarApi({ acao: 'listarMovimentosDiversosDia', loja, dia });
   if (!r.ok) { el.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar os movimentos do dia.') + '</div>'; return; }
   if (!r.movimentos.length) { el.innerHTML = '<p class="rodape-nota">Sem depósitos nem outros movimentos diversos registados neste dia.</p>'; return; }
   const podeAnular = ehMaster();
@@ -2166,8 +2200,10 @@ async function anularDiversoCD(id, tipoNome, valor) {
   if (!motivo.trim()) { alert('O motivo é obrigatório.'); return; }
   const r = await chamarApi({ acao: 'anularMovimentoDiverso', id, motivo: motivo.trim() });
   if (!r.ok) { alert(r.erro || 'Erro ao anular.'); return; }
+  await obterPainelCD();
   await carregarSaldoLojaCaixaDia();
   await carregarResumoDia();
+  CD_PAINEL = null;
   atualizarTalaoDia();
 }
 
@@ -2205,7 +2241,9 @@ async function registarDepositoCaixaDia() {
   resultadoEl.innerHTML = '<div class="alerta alerta-ok">Depósito registado — o saldo acima já está actualizado.</div>';
   document.getElementById('cd-deposito-valor').value = '';
   document.getElementById('cd-deposito-observacoes').value = '';
+  await obterPainelCD();
   await carregarSaldoLojaCaixaDia();
+  CD_PAINEL = null;
   atualizarTalaoDia();
 }
 
@@ -2219,7 +2257,7 @@ async function pesquisarResumoColaboradores() {
   corpo.innerHTML = '<tr><td colspan="7"><span class="spinner"></span>A pesquisar…</td></tr>';
   const loja = document.getElementById('cd-loja').value;
   const dia = document.getElementById('cd-dia').value;
-  const r = await chamarApi({ acao: 'resumoColaboradoresPeriodo', filtros: { loja, de: dia, ate: dia } });
+  const r = tirarDoPainelCD('colaboradores') || await chamarApi({ acao: 'resumoColaboradoresPeriodo', filtros: { loja, de: dia, ate: dia } });
   if (!r.ok) { corpo.innerHTML = '<tr><td colspan="7">' + (r.erro || 'Erro ao pesquisar.') + '</td></tr>'; return; }
   ULTIMO_RESUMO_COLABORADORES = r.linhas;
   mostrarResumoColaboradores();
@@ -2370,8 +2408,10 @@ async function confirmarGravarApuro() {
   // Actualiza o saldo por apurar (e quem já apurou hoje) e a Orientação
   // (para o botão "Apurar" da linha deste colaborador passar a "✓ Já
   // apurado") com este apuro incluído.
+  await obterPainelCD();
   await carregarResumoDia();
   await carregarSaldoLojaCaixaDia();
+  CD_PAINEL = null;
   mostrarResumoColaboradores();
   atualizarTalaoDia();
 }
@@ -2400,7 +2440,7 @@ async function gerarRelatorio() {
     // 2026-09-16, era o mesmo bug do backend: um apuro diário nunca aparecia
     // num relatório semanal/mensal que o continha), mesma lógica que
     // conferenciaLoja usa (lib/conferenciaColaborador.js).
-    chamarApi({ acao: 'listarApurosColaborador', filtros: { loja, limite: 200 } }),
+    chamarApi({ acao: 'listarApurosColaborador', filtros: { loja, diaDe: de, diaAte: ate, limite: 200 } }),
   ]);
 
   if (!folha.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (folha.erro || 'Erro ao carregar o Mapa Global.') + '</div>'; return; }
@@ -2838,10 +2878,21 @@ function filtrarLinhasReconciliacao() {
 }
 
 // ═══ Folha de Caixa ═══
+// Última resposta de listarSaldos (2026-10-06): o Arqueio reaproveita-a
+// durante 1 minuto ao trocar de loja, em vez de pedir os saldos das 5
+// lojas ao servidor a cada troca.
+let SALDOS_LOJAS = null;
+async function obterSaldosLojas(aceitarRecente) {
+  if (aceitarRecente && SALDOS_LOJAS && Date.now() - SALDOS_LOJAS.em < 60000) return SALDOS_LOJAS.r;
+  const r = await chamarApi({ acao: 'listarSaldos' });
+  if (r.ok) SALDOS_LOJAS = { r, em: Date.now() };
+  return r;
+}
+
 async function carregarSaldos() {
   const el = document.getElementById('resumo-saldos');
   el.innerHTML = '<div class="resumo-item"><span class="spinner"></span>A carregar…</div>';
-  const r = await chamarApi({ acao: 'listarSaldos' });
+  const r = await obterSaldosLojas(false);
   if (!r.ok) { el.innerHTML = '<div class="resumo-item">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
   el.innerHTML = NOMES_LOJAS.map(loja => {
     const s = r.saldos.find(x => x.loja === loja);
@@ -2920,7 +2971,7 @@ async function carregarDiversos() {
   corpo.innerHTML = r.movimentos.length ? r.movimentos.map(m => `<tr>
     <td>${m.atualizadoEm || ''}</td><td>${m.loja}</td><td>${m.tipoNome}</td><td>${formatarEuro(m.valor)}</td>
     <td>${m.numerario ? 'Sim' : 'Não'}</td><td>${m.observacoes || ''}</td><td>${m.registadoPor || ''}</td>
-  </tr>`).join('') : '<tr><td colspan="7">Ainda sem movimentos diversos.</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="7">Sem movimentos diversos nos últimos 60 dias.</td></tr>';
 }
 
 // ═══ Arqueio ═══
@@ -2929,7 +2980,7 @@ async function atualizarSaldoTeoricoArqueio() {
   const campo = document.getElementById('arqueio-teorico');
   if (!loja) { campo.value = ''; return; }
   campo.value = 'A carregar…';
-  const r = await chamarApi({ acao: 'listarSaldos' });
+  const r = await obterSaldosLojas(true);
   if (!r.ok) { campo.value = '—'; return; }
   const s = r.saldos.find(x => x.loja === loja);
   campo.value = formatarEuro(s ? s.saldoNumerario : 0);
@@ -2965,7 +3016,7 @@ async function carregarArqueios() {
   corpo.innerHTML = r.arqueios.length ? r.arqueios.map(a => `<tr${a.destacar ? ' style="background:#fdecea"' : ''}>
     <td>${a.atualizadoEm || ''}</td><td>${a.loja}</td><td>${formatarEuro(a.saldoTeorico)}</td><td>${formatarEuro(a.saldoContado)}</td>
     <td>${formatarEuro(a.diferenca)}${a.destacar ? ' ⚠️' : ''}</td><td>${a.observacoes || ''}</td><td>${a.registadoPor || ''}</td>
-  </tr>`).join('') : '<tr><td colspan="7">Ainda sem arqueios registados.</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="7">Sem arqueios registados nos últimos 90 dias.</td></tr>';
 }
 
 // ═══ Classificação ═══
