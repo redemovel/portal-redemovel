@@ -1284,19 +1284,25 @@ async function carregarOcupacaoDiaria() {
     const pausaHtml   = emPausa.map(p=>linha(p.nome,'var(--warning)',`em pausa desde ${minParaHora(pausaAbertaDesde(p))}`)).join('');
     const saidosHtml  = saidos.map(p=>linha(p.nome,'var(--text-muted)',`${minParaHora(p.entradaRealMin)} → ${minParaHora(p.saidaRealMin)}`)).join('');
     const ausentesHtml = l.ausentes.map(a=>linha(a.nome,'var(--danger)',`previsto ${minParaHora(a.inicioPrevMin)}`)).join('');
+    // 2026-10-09 — colaboradores de férias/baixa médica/licença aprovada não
+    // são "ausentes" no sentido de alarme (esqueceram-se de bater o ponto);
+    // mostram-se à parte, com o mesmo amarelo já usado no Mapa Mensal.
+    const feriasLabel = { ferias:'Férias', baixa_medica:'Baixa médica', licenca:'Licença', outro:'Ausência aprovada' };
+    const feriasHtml = (l.ferias||[]).map(a=>linha(a.nome,'var(--warning)',feriasLabel[a.tipoAusencia]||'Ausência aprovada')).join('');
 
     const badgeParts=[];
     if(agora.length) badgeParts.push(`${agora.length} presente(s) agora`);
     if(emPausa.length) badgeParts.push(`${emPausa.length} em pausa`);
     if(saidos.length) badgeParts.push(`${saidos.length} já saiu/saíram`);
     if(l.ausentes.length) badgeParts.push(`${l.ausentes.length} ausente(s)`);
+    if((l.ferias||[]).length) badgeParts.push(`${l.ferias.length} de férias`);
     const badge = badgeParts.length ? badgeParts.join(' · ') : 'Sem movimento';
 
     const secao = (titulo,cor,html) => html
       ? `<div style="margin-top:.6rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${cor}">${titulo}</div>${html}`
       : '';
 
-    const semNada = !agora.length && !emPausa.length && !saidos.length && !l.ausentes.length;
+    const semNada = !agora.length && !emPausa.length && !saidos.length && !l.ausentes.length && !(l.ferias||[]).length;
 
     return `<div class="panel">
       <div class="panel-header"><div class="panel-title"><div class="dot"></div>${esc(l.localNome)}</div><span class="panel-badge">${esc(badge)}</span></div>
@@ -1305,6 +1311,7 @@ async function carregarOcupacaoDiaria() {
       ${secao('Em pausa','var(--warning)',pausaHtml)}
       ${secao('Já saíram hoje','var(--text-muted)',saidosHtml)}
       ${secao('Ausentes (escalados, sem registo)','var(--danger)',ausentesHtml)}
+      ${secao('De férias / ausência aprovada','var(--warning)',feriasHtml)}
     </div>`;
   }).join('');
 }
