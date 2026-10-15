@@ -861,8 +861,17 @@
         <table>
           <thead>
             <tr>
-              <th>Nº Documento</th><th>Loja</th><th>Data/Hora</th><th>Tipo</th><th>Refª SAP</th><th>Descrição</th>
-              <th>Total C/IVA</th><th>Comissão</th><th>Origem</th><th>Valor líq. Vodafone</th><th>Estado</th>
+              <th id="th-ord-nDocumento" style="cursor:pointer" onclick="ordenarReconciliacao('nDocumento')" title="Ordenar">Nº Documento</th>
+              <th id="th-ord-loja" style="cursor:pointer" onclick="ordenarReconciliacao('loja')" title="Ordenar">Loja</th>
+              <th id="th-ord-dataHora" style="cursor:pointer" onclick="ordenarReconciliacao('dataHora')" title="Ordenar">Data/Hora</th>
+              <th id="th-ord-tipo" style="cursor:pointer" onclick="ordenarReconciliacao('tipo')" title="Ordenar">Tipo</th>
+              <th id="th-ord-refSAP" style="cursor:pointer" onclick="ordenarReconciliacao('refSAP')" title="Ordenar">Refª SAP</th>
+              <th id="th-ord-descricaoSAP" style="cursor:pointer" onclick="ordenarReconciliacao('descricaoSAP')" title="Ordenar">Descrição</th>
+              <th id="th-ord-totalCIVA" style="cursor:pointer" onclick="ordenarReconciliacao('totalCIVA')" title="Ordenar">Total C/IVA</th>
+              <th id="th-ord-comissao" style="cursor:pointer" onclick="ordenarReconciliacao('comissao')" title="Ordenar">Comissão</th>
+              <th id="th-ord-origemComissao" style="cursor:pointer" onclick="ordenarReconciliacao('origemComissao')" title="Ordenar">Origem</th>
+              <th id="th-ord-valorLiquidoVodafone" style="cursor:pointer" onclick="ordenarReconciliacao('valorLiquidoVodafone')" title="Ordenar">Valor líq. Vodafone</th>
+              <th id="th-ord-estado" style="cursor:pointer" onclick="ordenarReconciliacao('estado')" title="Ordenar">Estado</th>
             </tr>
             <tr class="linha-filtros-coluna">
               <th><input type="text" class="form-input" id="colf-ndocumento" oninput="filtrarLinhasReconciliacao()" placeholder="filtrar…"></th>
@@ -1095,6 +1104,11 @@ const SCRIPT_URL = 'https://redemovel-controlo-caixa-389728721690.europe-west1.r
 
 let SESSAO = null;
 let ULTIMA_RECONCILIACAO = null;
+// Ordenação por coluna da tabela de Reconciliação GSV (2026-10-15, pedido
+// do Ricardo) — clicar num cabeçalho ordena por essa coluna; clicar outra
+// vez inverte a direcção. Puramente em memória, sobre as linhas já
+// carregadas (0 leituras novas), tal como os filtros de coluna já existentes.
+let ORDENACAO_RECONCILIACAO = { campo: null, direcao: 1 };
 
 // Mesma lista de nomes canónicos de lib/lojas.js — manter sincronizado se
 // alguma vez mudar (ex.: nova loja a abrir).
@@ -2816,8 +2830,57 @@ async function carregarReconciliacao() {
   document.getElementById('busca-linhas').value = '';
   ['colf-ndocumento', 'colf-loja', 'colf-data', 'colf-tipo', 'colf-refsap', 'colf-descricao',
     'colf-total', 'colf-comissao', 'colf-origem', 'colf-valorliq', 'colf-estado'].forEach(id => { document.getElementById(id).value = ''; });
+  // Cada "Atualizar" reparte do zero (ordem que o servidor devolveu) —
+  // mantém-se só o filtro de coluna/busca entre actualizações, não a ordenação.
+  ORDENACAO_RECONCILIACAO = { campo: null, direcao: 1 };
+  atualizarSetasOrdenacaoReconciliacao();
   renderLinhasReconciliacao(r.linhas);
   document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(r.linhas.length, 500)} de ${r.linhas.length} linha(s)${r.linhas.length > 500 ? ' — usa os filtros de data/loja/coluna ou a busca para reduzir.' : ''}.`;
+}
+
+// Campos numéricos ordenam por valor; os outros por texto (sem distinguir
+// maiúsculas/minúsculas). "estado" não é um campo da linha — usa sempre
+// estadoLinhaTexto(l), a mesma função que já decide a badge/o filtro.
+const CAMPOS_NUMERICOS_RECONCILIACAO = new Set(['totalCIVA', 'comissao', 'valorLiquidoVodafone']);
+function valorOrdenacaoReconciliacao(l, campo) {
+  if (campo === 'estado') return estadoLinhaTexto(l);
+  return l[campo];
+}
+function ordenarReconciliacao(campo) {
+  if (ORDENACAO_RECONCILIACAO.campo === campo) {
+    ORDENACAO_RECONCILIACAO.direcao *= -1;
+  } else {
+    ORDENACAO_RECONCILIACAO = { campo, direcao: 1 };
+  }
+  atualizarSetasOrdenacaoReconciliacao();
+  filtrarLinhasReconciliacao();
+}
+function aplicarOrdenacaoReconciliacao(linhas) {
+  const { campo, direcao } = ORDENACAO_RECONCILIACAO;
+  if (!campo) return linhas;
+  const numerico = CAMPOS_NUMERICOS_RECONCILIACAO.has(campo);
+  return linhas.slice().sort((a, b) => {
+    const va = valorOrdenacaoReconciliacao(a, campo);
+    const vb = valorOrdenacaoReconciliacao(b, campo);
+    if (va === null || va === undefined || va === '') return vb === null || vb === undefined || vb === '' ? 0 : 1;
+    if (vb === null || vb === undefined || vb === '') return -1;
+    const cmp = numerico ? (Number(va) - Number(vb)) : String(va).localeCompare(String(vb), 'pt-PT', { sensitivity: 'base' });
+    return cmp * direcao;
+  });
+}
+// Seta (▲/▼) no cabeçalho da coluna activa — as outras ficam sem seta.
+const ROTULOS_TH_RECONCILIACAO = {
+  nDocumento: 'Nº Documento', loja: 'Loja', dataHora: 'Data/Hora', tipo: 'Tipo', refSAP: 'Refª SAP',
+  descricaoSAP: 'Descrição', totalCIVA: 'Total C/IVA', comissao: 'Comissão', origemComissao: 'Origem',
+  valorLiquidoVodafone: 'Valor líq. Vodafone', estado: 'Estado',
+};
+function atualizarSetasOrdenacaoReconciliacao() {
+  Object.entries(ROTULOS_TH_RECONCILIACAO).forEach(([campo, rotulo]) => {
+    const th = document.getElementById('th-ord-' + campo);
+    if (!th) return;
+    const seta = campo === ORDENACAO_RECONCILIACAO.campo ? (ORDENACAO_RECONCILIACAO.direcao > 0 ? ' ▲' : ' ▼') : '';
+    th.textContent = rotulo + seta;
+  });
 }
 
 // Texto simples do estado (usado para mostrar E para filtrar — só uma
@@ -2826,7 +2889,12 @@ async function carregarReconciliacao() {
 function estadoLinhaTexto(l) {
   if (l.tipo === 'Devoluções') return 'Devolução';
   if (l.ambiguo) return 'Ambíguo';
-  if (l.origemComissao === 'confirmada') return 'Confirmada';
+  // "confirmada_repartida_proporcional" (2026-10-15) — comissão real da
+  // Vodafone para o documento inteiro, repartida proporcionalmente pelas
+  // linhas de produto via Tabela Comercial (ver lib/comissoes.js,
+  // tentarRepartirProporcionalmente) — é tão "Confirmada" como a comissão
+  // de uma linha única; sem isto caía em "Estimada" por engano.
+  if (l.origemComissao === 'confirmada' || l.origemComissao === 'confirmada_repartida_proporcional') return 'Confirmada';
   if (l.comissao !== null) return 'Estimada';
   return 'Por classificar';
 }
@@ -2869,10 +2937,11 @@ function filtrarLinhasReconciliacao() {
   ].map(c => ({ ...c, termo: document.getElementById(c.id).value.trim().toLowerCase() }))
    .filter(c => c.termo);
 
-  const filtradas = ULTIMA_RECONCILIACAO.linhas.filter(l => {
+  let filtradas = ULTIMA_RECONCILIACAO.linhas.filter(l => {
     if (termo && !(String(l.nDocumento).toLowerCase().includes(termo) || String(l.refSAP).toLowerCase().includes(termo) || String(l.descricaoSAP).toLowerCase().includes(termo))) return false;
     return colunas.every(c => String(c.valor(l) || '').toLowerCase().includes(c.termo));
   });
+  filtradas = aplicarOrdenacaoReconciliacao(filtradas);
   renderLinhasReconciliacao(filtradas);
   document.getElementById('nota-reconciliacao').textContent = `A mostrar ${Math.min(filtradas.length, 500)} de ${filtradas.length} linha(s)${filtradas.length > 500 ? ' — refina os filtros para reduzir.' : ''}.`;
 }
@@ -3383,6 +3452,19 @@ function badgeReconciliacao(ref) {
     return `<span class="rodape-nota">⏳ a confirmar</span>${detalheLinhasExcluidas(rec)}`;
   }
   if (rec.confere) return `<span style="color:var(--teal-dark)">✅ confere (${formatarEuro(rec.valorCalculado)})</span>${detalheLinhasExcluidas(rec)}`;
+  // "alertaSuspeita" (2026-10-15) — vem do servidor (lib/referenciasPagamento.js,
+  // estimarReconciliacao) quando a Vodafone está a cobrar um valor que a
+  // classificação pendente desse dia NUNCA explicaria sozinha (mesmo no
+  // melhor/pior caso possível) — sinal de um documento por importar, ou de
+  // um documento a mais/duplicado. Isto pode acontecer mesmo com
+  // rec.completo:false (ainda há linhas por classificar nesse dia), por
+  // isso precisa de um destaque PRÓPRIO, bem mais visível do que o
+  // "⚠️ não confere" genérico de baixo — é exactamente o mecanismo
+  // anti-fraude que o Ricardo pediu, para detectar se um colaborador
+  // sonegou uma linha de um ficheiro importado.
+  if (rec.alertaSuspeita) {
+    return `<div class="alerta alerta-erro" style="font-weight:700;border:2px solid #b3000a">🚨 SUSPEITA DE DOCUMENTO EM FALTA OU A MAIS — ${rec.alertaSuspeita}</div>${detalheLinhasExcluidas(rec)}`;
+  }
   return `<span style="color:#b3000a">⚠️ não confere (calculado ${formatarEuro(rec.valorCalculado)}${linhaDiferenca(rec.diferenca)})</span>${detalheLinhasExcluidas(rec)}`;
 }
 
