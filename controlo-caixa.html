@@ -1080,6 +1080,53 @@
       </div>
       <div id="cc-conta-corrente" style="margin-top:1rem"></div>
     </div>
+
+    <!-- ── Relatório do ciclo de referências — para a contabilidade
+         (2026-10-16, pedido do Ricardo depois de fechar os tectos de
+         comissão de Telemóveis): "Quero fechar, por exemplo o ciclo
+         anterior de referências para enviar a listagem para a
+         contabilidade." Ver lib/relatorios.js, relatorioCicloReferencias —
+         por documento, nunca por linha: comissão confirmada, valor
+         líquido Vodafone, e o desvio face à estimativa que já existia
+         antes de a comissão real chegar (para apanhar qualquer
+         irregularidade antes de enviar para a contabilidade). Só Master
+         (mesma restrição extra do resto desta secção). ── -->
+    <div class="cartao no-print">
+      <h3>📊 Relatório do ciclo — para a contabilidade</h3>
+      <p class="rodape-nota" style="margin-bottom:.6rem">Fecha um ciclo de referências Vodafone (normalmente 15→14) numa listagem por documento: comissão confirmada, valor líquido e o desvio face à estimativa anterior (antes de a comissão real chegar) — para apanhar qualquer irregularidade antes de enviar para a contabilidade. Só entram nos totais os documentos já com comissão confirmada; os ainda "por classificar" aparecem à parte, sem valor definitivo.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:.6rem">
+        <div><label class="form-label">De</label><input type="date" class="form-input" id="ciclo-de"></div>
+        <div><label class="form-label">Até</label><input type="date" class="form-input" id="ciclo-ate"></div>
+        <button class="btn" onclick="gerarRelatorioCicloUI()">🔍 Gerar relatório</button>
+        <button class="btn btn-secundario" id="btn-exportar-ciclo" onclick="exportarCicloCSV()" hidden>⬇️ Exportar Excel (CSV)</button>
+        <button class="btn btn-secundario" id="btn-imprimir-ciclo" onclick="window.print()" hidden>🖨 Imprimir / Gravar PDF</button>
+      </div>
+      <div id="ciclo-status"></div>
+      <div id="ciclo-resumo" class="resumo-grelha"></div>
+      <div id="ciclo-pendentes-aviso"></div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Nº Documento</th><th>Data</th><th>Loja</th><th>Colaborador</th><th>Produto</th><th>Facturado</th><th>Comissão confirmada</th><th>Valor líquido</th><th>Estimativa anterior</th><th>Desvio</th></tr></thead>
+          <tbody id="ciclo-corpo"><tr><td colspan="10">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ciclo-imprimivel" hidden>
+      <div class="cartao">
+        <div class="relatorio-cabecalho">
+          <h2>Relatório do ciclo de referências — Vodafone GSV</h2>
+          <div id="ciclo-imp-periodo" class="rodape-nota"></div>
+        </div>
+        <div class="resumo-grelha" id="ciclo-imp-resumo"></div>
+        <div id="ciclo-imp-pendentes"></div>
+        <table>
+          <thead><tr><th>Nº Documento</th><th>Data</th><th>Loja</th><th>Colaborador</th><th>Produto</th><th>Facturado</th><th>Comissão</th><th>Valor líquido</th><th>Desvio</th></tr></thead>
+          <tbody id="ciclo-imp-corpo"></tbody>
+        </table>
+        <p class="rodape-nota">Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — para anexar/enviar à contabilidade.</p>
+      </div>
+    </div>
   </div>
   <!-- ── fim "🔐 Gestão" ── -->
   </div>
@@ -3501,6 +3548,107 @@ async function confirmarCorrecaoDocumento(id, refSAP) {
   if (ensinarRegra) carregarClassificacao();
 }
 
+// ═══ Relatório do ciclo de referências — contabilidade (2026-10-16) ═══
+// Pedido do Ricardo, depois de fechar os tectos de comissão de Telemóveis:
+// "Quero fechar, por exemplo o ciclo anterior de referências para enviar
+// a listagem para a contabilidade." Ver lib/relatorios.js,
+// relatorioCicloReferencias — por documento: comissão confirmada, valor
+// líquido Vodafone, estimativa anterior e o desvio entre as duas.
+let ULTIMO_RELATORIO_CICLO = null;
+
+async function gerarRelatorioCicloUI() {
+  const de = document.getElementById('ciclo-de').value;
+  const ate = document.getElementById('ciclo-ate').value;
+  const statusEl = document.getElementById('ciclo-status');
+  const corpo = document.getElementById('ciclo-corpo');
+  const resumoEl = document.getElementById('ciclo-resumo');
+  const avisoEl = document.getElementById('ciclo-pendentes-aviso');
+  const btnExportar = document.getElementById('btn-exportar-ciclo');
+  const btnImprimir = document.getElementById('btn-imprimir-ciclo');
+  document.getElementById('ciclo-imprimivel').hidden = true;
+  btnExportar.hidden = true; btnImprimir.hidden = true;
+  if (!de || !ate) { statusEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (De/Até).</div>'; return; }
+  statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
+  corpo.innerHTML = '<tr><td colspan="10">A carregar…</td></tr>';
+  resumoEl.innerHTML = ''; avisoEl.innerHTML = '';
+
+  const r = await chamarApi({ acao: 'relatorioCicloReferencias', dataInicio: de, dataFim: ate });
+  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="10">—</td></tr>'; return; }
+  ULTIMO_RELATORIO_CICLO = r;
+  statusEl.innerHTML = '';
+
+  const t = r.totais;
+  resumoEl.innerHTML = `
+    <div class="resumo-item"><div class="valor">${t.fechados}</div><div class="rotulo">Documentos fechados</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalFacturado)}</div><div class="rotulo">Total facturado</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalComissaoConfirmada)}</div><div class="rotulo">Comissão confirmada</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalLiquido)}</div><div class="rotulo">Valor líquido Vodafone</div></div>
+    <div class="resumo-item"><div class="valor" style="color:${Math.abs(t.totalDesvio) > 0.01 ? '#b3000a' : 'inherit'}">${formatarEuro(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa (${t.documentosComDesvio} doc.)</div></div>
+  `;
+
+  if (t.pendentes > 0) {
+    avisoEl.innerHTML = `<div class="alerta alerta-aviso">⏳ ${t.pendentes} documento(s) ainda sem comissão confirmada pela Vodafone (${formatarEuro(t.totalFacturadoPendente)} facturado) — ficam de fora dos totais acima. O ciclo só está mesmo fechado quando este número for 0; costuma zerar depois de importar a "1ª Comissão" deste período.</div>`;
+  }
+
+  corpo.innerHTML = r.documentos.length ? r.documentos.map(linhaCiclo).join('') : '<tr><td colspan="10">Sem documentos neste período.</td></tr>';
+  if (r.documentos.length) { btnExportar.hidden = false; btnImprimir.hidden = false; prepararImpressaoCiclo(r, de, ate); }
+}
+
+function linhaCiclo(d) {
+  const dataCurta = (d.dataHora || '').slice(0, 10);
+  if (d.pendente) {
+    return `<tr style="color:#92610a"><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
+      <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td colspan="2">⏳ por classificar</td><td colspan="2"></td></tr>`;
+  }
+  const corDesvio = d.desvio !== null && Math.abs(d.desvio) > 0.01 ? '#b3000a' : 'inherit';
+  return `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
+    <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}</td>
+    <td>${formatarEuro(d.valorLiquido)}</td><td>${d.comissaoEstimadaAnterior !== null ? formatarEuro(d.comissaoEstimadaAnterior) : '—'}</td>
+    <td style="color:${corDesvio}">${d.desvio !== null ? formatarEuro(d.desvio) : '—'}</td></tr>`;
+}
+
+function prepararImpressaoCiclo(r, de, ate) {
+  document.getElementById('ciclo-imp-periodo').textContent = `Período: ${de} a ${ate} · Gerado em ${new Date().toLocaleString('pt-PT')}`;
+  const t = r.totais;
+  document.getElementById('ciclo-imp-resumo').innerHTML = `
+    <div class="resumo-item"><div class="valor">${t.fechados}</div><div class="rotulo">Documentos fechados</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalFacturado)}</div><div class="rotulo">Total facturado</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalComissaoConfirmada)}</div><div class="rotulo">Comissão confirmada</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalLiquido)}</div><div class="rotulo">Valor líquido Vodafone</div></div>
+    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa</div></div>
+  `;
+  document.getElementById('ciclo-imp-pendentes').innerHTML = t.pendentes > 0
+    ? `<div class="alerta alerta-aviso">⏳ ${t.pendentes} documento(s) ainda sem comissão confirmada (${formatarEuro(t.totalFacturadoPendente)}) — fora dos totais.</div>` : '';
+  document.getElementById('ciclo-imp-corpo').innerHTML = r.documentos.map(d => {
+    const dataCurta = (d.dataHora || '').slice(0, 10);
+    return d.pendente
+      ? `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td><td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td colspan="2">por classificar</td><td></td></tr>`
+      : `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td><td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}</td><td>${formatarEuro(d.valorLiquido)}</td><td>${d.desvio !== null ? formatarEuro(d.desvio) : '—'}</td></tr>`;
+  }).join('');
+  document.getElementById('ciclo-imprimivel').hidden = false;
+}
+
+function exportarCicloCSV() {
+  if (!ULTIMO_RELATORIO_CICLO) return;
+  const linhas = [
+    'Nº Documento;Data;Loja;Colaborador;Produto;Facturado;Comissão confirmada;Valor líquido;Estimativa anterior;Desvio;Estado',
+    ...ULTIMO_RELATORIO_CICLO.documentos.map(d => [
+      d.nDocumento, (d.dataHora || '').slice(0, 10), d.loja || '', d.colaborador || '', d.produto,
+      d.totalCIVA.toFixed(2).replace('.', ','),
+      d.pendente ? '' : (d.comissaoConfirmada != null ? d.comissaoConfirmada.toFixed(2).replace('.', ',') : ''),
+      d.pendente ? '' : (d.valorLiquido != null ? d.valorLiquido.toFixed(2).replace('.', ',') : ''),
+      d.comissaoEstimadaAnterior != null ? d.comissaoEstimadaAnterior.toFixed(2).replace('.', ',') : '',
+      d.desvio != null ? d.desvio.toFixed(2).replace('.', ',') : '',
+      d.pendente ? 'por classificar' : 'fechado',
+    ].join(';')),
+  ];
+  const blob = new Blob(['﻿' + linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `ciclo-referencias_${ULTIMO_RELATORIO_CICLO.periodo.de}_a_${ULTIMO_RELATORIO_CICLO.periodo.ate}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Modal "🧾 Ver documento" (pedido do Ricardo, 2026-09-19, depois de mostrar
 // o ecrã de Faturação do sistema antigo — onde um documento pode ter mais
@@ -3830,3 +3978,4 @@ async function carregarContaCorrente() {
 </script>
 </body>
 </html>
+
