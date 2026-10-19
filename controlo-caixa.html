@@ -2167,19 +2167,28 @@ async function carregarSaldoDia(jaCarregado) {
 // 🧾 Por receber de clientes (2026-10-02): saldo que transita de dia para
 // dia + de onde vem (apuros do mês abaixo/acima dos documentos, com a
 // observação escrita pelo assistente).
+//
+// 2026-10-19 (pedido do Ricardo, "a listagem dos clientes a receber nao
+// deve desaparecer quando é saldado?"): a lista deixou de mostrar um
+// evento por dia para sempre — agora mostra só quem ainda tem SALDO EM
+// ABERTO, agregado por colaborador (lib/saldoDia.js,
+// `colaboradoresComSaldoEmAberto`). Quem fica a 0€ desaparece da lista,
+// mesmo que tenha tido vários eventos em dias diferentes. O "Transporte do
+// mês anterior" continua à parte, sem nome associado, porque só cobre os
+// eventos DESTE mês (o fecho do mês anterior só grava o escalar).
 function blocoPorReceber(r) {
   const det = r.porReceberDetalhe || [];
   if (!det.length && Math.abs(r.porReceberSaldo || 0) < 0.005) return '';
   return `
     <h3 style="margin:.9rem 0 .5rem">🧾 Por receber de clientes até ${r.dia}: <span style="color:${Math.abs(r.porReceberSaldo) > 0.005 ? '#b3000a' : 'inherit'}">${formatarEuro(r.porReceberSaldo)}</span></h3>
     <div class="tabela-scroll"><table>
-      <thead><tr><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th>Observações</th></tr></thead>
+      <thead><tr><th>Colaborador</th><th>Desde</th><th style="text-align:right">Saldo em aberto</th><th>Observações</th></tr></thead>
       <tbody>
         ${Math.abs(r.porReceberTransporteMes || 0) > 0.005 ? `<tr><td colspan="2">Transporte do mês anterior</td><td style="text-align:right">${formatarEuro(r.porReceberTransporteMes)}</td><td></td></tr>` : ''}
-        ${det.map(d => `<tr><td>${d.dia}</td><td>${d.colaborador}</td><td style="text-align:right">${d.valor > 0 ? '+' : ''}${formatarEuro(d.valor)}</td><td>${d.valor > 0 ? 'Por receber' : 'Recebido'}${d.observacoes ? ' — ' + d.observacoes : ''}</td></tr>`).join('')}
+        ${det.map(d => `<tr><td>${d.colaborador}</td><td>${d.desde}${d.ultimoDia && d.ultimoDia !== d.desde ? ' – ' + d.ultimoDia : ''}</td><td style="text-align:right">${d.saldo > 0 ? '+' : ''}${formatarEuro(d.saldo)}</td><td>${d.saldo > 0 ? 'Por receber' : 'Recebido a mais'}${d.ultimaObservacao ? ' — ' + d.ultimaObservacao : ''}</td></tr>`).join('')}
       </tbody>
     </table></div>
-    <p class="rodape-nota">Quando o cliente pagar, o assistente declara esse valor no apuro desse dia (em Transferência, Multibanco, VISA ou Numerário) e o "por receber" abate sozinho.</p>`;
+    <p class="rodape-nota">Só aparece aqui quem ainda tem saldo em aberto — quando o cliente pagar e o saldo voltar a 0€, o nome desaparece sozinho da lista. O assistente declara o pagamento no apuro desse dia (em Transferência, Multibanco, VISA ou Numerário).</p>`;
 }
 
 // Movimentos diversos do dia + 🗑 Anular (2026-10-01, pedido do Ricardo) —
