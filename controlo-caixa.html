@@ -2199,16 +2199,18 @@ function blocoPorReceber(r) {
 // com -1064,90€ (09/10) — o MESMO pagamento de um cliente (CODEPLAS), mas
 // declarado por engano no apuro de outra colaboradora. Não é um problema de
 // grafia de nome (isso já se resolve nos "nomes alternativos" em Códigos
-// VDF/GSV) — são duas pessoas reais diferentes, por isso só o Master,
-// manualmente e com justificação, pode dizer "estes dois eventos são o
-// mesmo caso". Só o Master vê esta secção (o servidor valida sempre outra
-// vez). Lista sempre que há mais de 1 evento em aberto no mês (só aí é que
-// pode haver algo para ligar) ou pelo menos uma ligação já feita (para se
-// poder desfazer).
+// VDF/GSV) — são duas pessoas reais diferentes, por isso só o Master ou
+// Coordenador, manualmente e com justificação, pode dizer "estes dois
+// eventos são o mesmo caso" (2026-10-20, pedido do Ricardo: alargado de
+// só-Master para Master+Coordenador — mesma regra de ehMasterOuCoordenador,
+// já usada no resto do ecrã). Só quem tem esse papel vê esta secção (o
+// servidor valida sempre outra vez). Lista sempre que há mais de 1 evento
+// em aberto no mês (só aí é que pode haver algo para ligar) ou pelo menos
+// uma ligação já feita (para se poder desfazer).
 let CD_EVENTOS_POR_RECEBER = [];
 async function carregarLigarPorReceber() {
   const el = document.getElementById('cd-ligar-por-receber');
-  if (!ehMaster()) { el.innerHTML = ''; return; }
+  if (!ehMasterOuCoordenador()) { el.innerHTML = ''; return; }
   const loja = document.getElementById('cd-loja').value;
   if (!loja) { el.innerHTML = ''; return; }
   const [rEventos, rLigacoes] = await Promise.all([
