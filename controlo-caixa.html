@@ -488,6 +488,7 @@
         <p class="rodape-nota" style="margin-bottom:.75rem">O que devia estar na loja neste momento. Até cada colaborador apurar contam os documentos Vodafone; depois de apurado passa a contar o que ele declarou — e é esse valor que transita para o dia seguinte. Regista aqui o depósito bancário assim que o dinheiro sai da loja.</p>
         <div class="resumo-grelha" id="cd-saldo-loja"><div class="resumo-item">A carregar…</div></div>
         <div id="cd-saldo-dia" style="margin-top:.75rem"></div>
+        <div id="cd-ligar-por-receber" style="margin-top:.75rem"></div>
         <div id="cd-diversos-dia" style="margin-top:.75rem"></div>
         <div class="filtros">
           <div><label class="form-label">Depósito bancário (€)</label><input type="number" class="form-input" id="cd-deposito-valor" min="0.01" step="0.01"></div>
@@ -2161,6 +2162,7 @@ async function carregarSaldoDia(jaCarregado) {
     <p class="rodape-nota">${r.nApuros} apuro(s) neste dia${r.colaboradoresPorApurar && r.colaboradoresPorApurar.length ? ` — falta apurar: ${r.colaboradoresPorApurar.join(', ')} (contam pelos documentos até apurarem)` : ''}.</p>
     ${(r.divergencias || []).map(d => `<div class="alerta alerta-aviso">⚠ <strong>${d.colaborador}</strong>: o total confere, mas a divisão é diferente dos documentos — declarou ${formatarEuro(d.numerarioApurado)} em numerário e os documentos Vodafone dizem ${formatarEuro(d.numerarioDocumentos)} (diferença ${d.diferenca > 0 ? '+' : ''}${formatarEuro(d.diferenca)}). Vale o que foi declarado; confirma se o meio de pagamento foi mal registado na venda.</div>`).join('')}`;
   el.innerHTML += blocoPorReceber(r);
+  await carregarLigarPorReceber();
   await carregarDiversosDia();
 }
 
@@ -2189,6 +2191,102 @@ function blocoPorReceber(r) {
       </tbody>
     </table></div>
     <p class="rodape-nota">Só aparece aqui quem ainda tem saldo em aberto — quando o cliente pagar e o saldo voltar a 0€, o nome desaparece sozinho da lista. O assistente declara o pagamento no apuro desse dia (em Transferência, Multibanco, VISA ou Numerário).</p>`;
+}
+
+// 🔗 Ligar eventos "por receber" entre colaboradores diferentes (2026-10-19)
+// — ver lib/porReceberLigacoes.js. Caso real que levou a isto: Catarina
+// Gomes aparecia com +1342,79€ em aberto (01/10 a 16/10) e Susana Coutinho
+// com -1064,90€ (09/10) — o MESMO pagamento de um cliente (CODEPLAS), mas
+// declarado por engano no apuro de outra colaboradora. Não é um problema de
+// grafia de nome (isso já se resolve nos "nomes alternativos" em Códigos
+// VDF/GSV) — são duas pessoas reais diferentes, por isso só o Master,
+// manualmente e com justificação, pode dizer "estes dois eventos são o
+// mesmo caso". Só o Master vê esta secção (o servidor valida sempre outra
+// vez). Lista sempre que há mais de 1 evento em aberto no mês (só aí é que
+// pode haver algo para ligar) ou pelo menos uma ligação já feita (para se
+// poder desfazer).
+let CD_EVENTOS_POR_RECEBER = [];
+async function carregarLigarPorReceber() {
+  const el = document.getElementById('cd-ligar-por-receber');
+  if (!ehMaster()) { el.innerHTML = ''; return; }
+  const loja = document.getElementById('cd-loja').value;
+  if (!loja) { el.innerHTML = ''; return; }
+  const [rEventos, rLigacoes] = await Promise.all([
+    chamarApi({ acao: 'listarEventosPorReceber', loja, dia: 'hoje' }),
+    chamarApi({ acao: 'listarLigacoesPorReceber', loja }),
+  ]);
+  if (!rEventos.ok) { el.innerHTML = ''; return; }
+  CD_EVENTOS_POR_RECEBER = rEventos.eventos;
+  const porLigar = rEventos.eventos.filter(ev => !ev.ligado);
+  const ligacoesAtivas = rLigacoes.ok ? rLigacoes.ligacoes.filter(l => !l.desfeita) : [];
+  if (porLigar.length < 2 && !ligacoesAtivas.length) { el.innerHTML = ''; return; }
+
+  const linhaEvento = ev => `
+    <tr>
+      <td><input type="checkbox" class="cd-evento-ligar" value="${ev.chave}" onchange="limitarSelecaoLigarPorReceber(this)"></td>
+      <td>${ev.dia}</td><td>${ev.colaborador}</td>
+      <td style="text-align:right;color:${ev.valor > 0 ? 'inherit' : '#b3000a'}">${ev.valor > 0 ? '+' : ''}${formatarEuro(ev.valor)}</td>
+      <td>${ev.observacoes || ''}</td>
+    </tr>`;
+
+  el.innerHTML = `
+    <h3 style="margin:.9rem 0 .5rem">🔗 Ligar eventos "por receber" entre colaboradores diferentes</h3>
+    <p class="rodape-nota">Usa isto só quando o dinheiro de UM cliente foi mesmo declarado no apuro de OUTRO colaborador (ex.: o colega recebeu uma transferência que era de uma venda da colega do lado). Escolhe os dois eventos, explica o que se passou, e os dois deixam de aparecer separados na lista acima — o total da loja não muda, só a forma como é mostrado.</p>
+    ${porLigar.length >= 2 ? `
+      <div class="tabela-scroll"><table>
+        <thead><tr><th></th><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th>Observações</th></tr></thead>
+        <tbody>${porLigar.map(linhaEvento).join('')}</tbody>
+      </table></div>
+      <button class="btn btn-secundario" style="margin-top:.5rem" onclick="ligarEventosPorReceberCD()">🔗 Ligar os 2 eventos selecionados</button>
+    ` : '<p class="rodape-nota">Não há pelo menos 2 eventos em aberto este mês para ligar.</p>'}
+    ${ligacoesAtivas.length ? `
+      <h4 style="margin:1rem 0 .4rem">Ligações já feitas</h4>
+      <div class="tabela-scroll"><table>
+        <thead><tr><th>Evento A</th><th>Evento B</th><th>Justificação</th><th>Por</th><th></th></tr></thead>
+        <tbody>${ligacoesAtivas.map(l => `
+          <tr>
+            <td>${l.eventoA.dia} — ${l.eventoA.colaborador} (${formatarEuro(l.eventoA.valor)})</td>
+            <td>${l.eventoB.dia} — ${l.eventoB.colaborador} (${formatarEuro(l.eventoB.valor)})</td>
+            <td>${l.observacoes}</td>
+            <td>${l.ligadoPor || ''}</td>
+            <td><button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="desfazerLigacaoPorReceberCD('${l.id}')">↩ Desfazer</button></td>
+          </tr>`).join('')}</tbody>
+      </table></div>` : ''}`;
+}
+
+// Nunca mais do que 2 eventos seleccionados ao mesmo tempo — desmarca a
+// mais antiga das seleccionadas se o Master marcar uma terceira.
+function limitarSelecaoLigarPorReceber(alterada) {
+  const marcadas = [...document.querySelectorAll('.cd-evento-ligar:checked')];
+  if (marcadas.length > 2) {
+    const aDesmarcar = marcadas.find(c => c !== alterada);
+    if (aDesmarcar) aDesmarcar.checked = false;
+  }
+}
+
+async function ligarEventosPorReceberCD() {
+  const chaves = [...document.querySelectorAll('.cd-evento-ligar:checked')].map(c => c.value);
+  if (chaves.length !== 2) { alert('Escolhe exactamente 2 eventos (um de cada colaborador).'); return; }
+  const [eventoA, eventoB] = chaves.map(chave => CD_EVENTOS_POR_RECEBER.find(ev => ev.chave === chave));
+  if (!eventoA || !eventoB) { alert('Não foi possível identificar os eventos escolhidos — actualiza a página e tenta de novo.'); return; }
+  const observacoes = prompt(`Ligar o evento de ${eventoA.colaborador} (${eventoA.dia}, ${formatarEuro(eventoA.valor)}) ao de ${eventoB.colaborador} (${eventoB.dia}, ${formatarEuro(eventoB.valor)})?\n\nExplica o que se passou (fica registado, é obrigatório):`);
+  if (observacoes === null) return;
+  if (!observacoes.trim()) { alert('A justificação é obrigatória.'); return; }
+  const loja = document.getElementById('cd-loja').value;
+  const r = await chamarApi({ acao: 'ligarPorReceber', loja, dia: 'hoje', eventoA: { dia: eventoA.dia, colaborador: eventoA.colaborador }, eventoB: { dia: eventoB.dia, colaborador: eventoB.colaborador }, observacoes: observacoes.trim() });
+  if (!r.ok) { alert(r.erro || 'Erro ao ligar os eventos.'); return; }
+  await obterPainelCD();
+  await carregarSaldoLojaCaixaDia();
+  CD_PAINEL = null;
+}
+
+async function desfazerLigacaoPorReceberCD(id) {
+  if (!confirm('Desfazer esta ligação? Os dois eventos voltam a aparecer separados na lista "Por receber de clientes".')) return;
+  const r = await chamarApi({ acao: 'desfazerLigacaoPorReceber', id });
+  if (!r.ok) { alert(r.erro || 'Erro ao desfazer.'); return; }
+  await obterPainelCD();
+  await carregarSaldoLojaCaixaDia();
+  CD_PAINEL = null;
 }
 
 // Movimentos diversos do dia + 🗑 Anular (2026-10-01, pedido do Ricardo) —
