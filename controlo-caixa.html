@@ -2566,6 +2566,23 @@ function pedirConfirmacaoApuro() {
     if (!chave) { confEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a dívida antiga a liquidar (ou desmarca a opção).</div>'; return; }
     if (!obsLiquidar) { confEl.innerHTML = '<div class="alerta alerta-erro">A justificação da liquidação é obrigatória.</div>'; return; }
     const evL = CD_EVENTOS_PARA_LIQUIDAR.find(e => e.chave === chave);
+    // Validação prévia (2026-10-23): o servidor recusa ligar dois eventos
+    // com o MESMO sinal (os dois "por receber", ou os dois "recebido a
+    // mais") — ver lib/porReceberLigacoes.js. Sem isto, esta mensagem
+    // prometia uma liquidação que ia falhar a seguir, sem o colaborador
+    // perceber porquê (caso real: Susana apurou a MENOS que os
+    // documentos, logo o apuro dela é "por receber" — ligar isso à dívida
+    // de Reina, também "por receber", nunca ia ser aceite).
+    const valorAntigo = evL ? (Number(evL.valor) || 0) : 0;
+    if (Math.abs(emFalta) <= 0.01) {
+      confEl.innerHTML = '<div class="alerta alerta-erro">O teu apuro de hoje confere (não tens diferença nem a mais nem em falta) — não há nada para liquidar com uma dívida antiga. Desmarca a opção para gravar só o apuro.</div>';
+      return;
+    }
+    if (Math.abs(valorAntigo) > 0.01 && (emFalta > 0) === (valorAntigo > 0)) {
+      const sinalTxt = emFalta > 0 ? '"por receber" (apuraste a MENOS que os documentos)' : '"recebido a mais" (apuraste a MAIS que os documentos)';
+      confEl.innerHTML = `<div class="alerta alerta-erro">O teu apuro de hoje e a dívida antiga de ${evL ? evL.colaborador : ''} têm o MESMO sinal: as duas ficam ${sinalTxt}. O servidor vai recusar esta liquidação — ligar dois valores "por receber" (ou dois "recebido a mais") esconderia duas dívidas diferentes em vez de mostrar que é o mesmo dinheiro visto de dois lados. Isto só funciona quando um lado é quem RECEBEU/pagou a mais e o outro é a dívida em si, em sinais opostos. Desmarca a opção e grava o apuro à parte — a dívida antiga fica em aberto, por ligar mais tarde (ecrã "🔗 Ligar eventos") quando aparecer o lado oposto real.</div>`;
+      return;
+    }
     avisoLiquidar = `<br>Vai também liquidar <strong>${formatarEuro(valorLiquidarTxt || (evL ? (evL.restante != null ? evL.restante : Math.abs(evL.valor)) : 0))}</strong> da dívida antiga de ${evL ? evL.colaborador + ' (' + evL.dia + ')' : chave}.`;
   }
 
