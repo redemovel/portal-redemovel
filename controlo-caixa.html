@@ -528,6 +528,19 @@
         </div>
         <label class="form-label">Observações</label>
         <input type="text" class="form-input" id="apuro-observacoes" placeholder="Opcional">
+        <label class="form-label" style="margin-top:.75rem;display:flex;align-items:center;gap:.4rem;font-weight:400">
+          <input type="checkbox" id="apuro-liquidar-check" onchange="toggleLiquidarDivida()" style="width:auto">
+          Este apuro também liquida uma dívida antiga "por receber" de outro colaborador
+        </label>
+        <div id="apuro-liquidar-bloco" style="display:none;margin:.5rem 0 1rem;padding:.75rem;border:1px solid var(--borda,#ddd);border-radius:8px">
+          <p class="rodape-nota" style="margin-bottom:.5rem">Usa isto quando, hoje, recebeste o pagamento de uma dívida antiga de OUTRO colaborador (por isso o teu apuro não bate certo com os TEUS próprios documentos). Escolhe a dívida em aberto, confirma quanto este apuro liquida e explica — fica registado com o teu nome.</p>
+          <label class="form-label">Dívida antiga a liquidar</label>
+          <select class="form-input" id="apuro-liquidar-chave"><option value="">A carregar…</option></select>
+          <div class="filtros" style="margin-top:.5rem">
+            <div><label class="form-label">Valor a liquidar (€)</label><input type="number" class="form-input" id="apuro-liquidar-valor" step="0.01"></div>
+            <div><label class="form-label">Justificação</label><input type="text" class="form-input" id="apuro-liquidar-observacoes" placeholder="Obrigatório"></div>
+          </div>
+        </div>
         <div id="apuro-aviso-ja-apurado"></div>
         <button class="btn" id="btn-inserir-apuro" onclick="pedirConfirmacaoApuro()">Apurar</button>
         <div id="apuro-confirmacao"></div>
@@ -2223,20 +2236,24 @@ async function carregarLigarPorReceber() {
   const ligacoesAtivas = rLigacoes.ok ? rLigacoes.ligacoes.filter(l => !l.desfeita) : [];
   if (porLigar.length < 2 && !ligacoesAtivas.length) { el.innerHTML = ''; return; }
 
-  const linhaEvento = ev => `
+  const linhaEvento = ev => {
+    const restante = ev.restante != null ? ev.restante : Math.abs(ev.valor);
+    return `
     <tr>
       <td><input type="checkbox" class="cd-evento-ligar" value="${ev.chave}" onchange="limitarSelecaoLigarPorReceber(this)"></td>
       <td>${ev.dia}</td><td>${ev.colaborador}</td>
       <td style="text-align:right;color:${ev.valor > 0 ? 'inherit' : '#b3000a'}">${ev.valor > 0 ? '+' : ''}${formatarEuro(ev.valor)}</td>
+      <td style="text-align:right">${formatarEuro(restante)}</td>
       <td>${ev.observacoes || ''}</td>
     </tr>`;
+  };
 
   el.innerHTML = `
     <h3 style="margin:.9rem 0 .5rem">🔗 Ligar eventos "por receber" entre colaboradores diferentes</h3>
-    <p class="rodape-nota">Usa isto só quando o dinheiro de UM cliente foi mesmo declarado no apuro de OUTRO colaborador (ex.: o colega recebeu uma transferência que era de uma venda da colega do lado). Escolhe os dois eventos, explica o que se passou, e os dois deixam de aparecer separados na lista acima — o total da loja não muda, só a forma como é mostrado.</p>
+    <p class="rodape-nota">Usa isto só quando o dinheiro de UM cliente foi mesmo declarado no apuro de OUTRO colaborador (ex.: o colega recebeu uma transferência que era de uma venda da colega do lado). Escolhe os dois eventos, indica quanto desta ligação liquida (pode ser só parte — o que sobra fica "por ligar" para mais tarde) e explica o que se passou; o que ligares deixa de aparecer na lista acima — o total da loja não muda, só a forma como é mostrado.</p>
     ${porLigar.length >= 2 ? `
       <div class="tabela-scroll"><table>
-        <thead><tr><th></th><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th>Observações</th></tr></thead>
+        <thead><tr><th></th><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th style="text-align:right">Por ligar</th><th>Observações</th></tr></thead>
         <tbody>${porLigar.map(linhaEvento).join('')}</tbody>
       </table></div>
       <button class="btn btn-secundario" style="margin-top:.5rem" onclick="ligarEventosPorReceberCD()">🔗 Ligar os 2 eventos selecionados</button>
@@ -2244,11 +2261,12 @@ async function carregarLigarPorReceber() {
     ${ligacoesAtivas.length ? `
       <h4 style="margin:1rem 0 .4rem">Ligações já feitas</h4>
       <div class="tabela-scroll"><table>
-        <thead><tr><th>Evento A</th><th>Evento B</th><th>Justificação</th><th>Por</th><th></th></tr></thead>
+        <thead><tr><th>Evento A</th><th>Evento B</th><th style="text-align:right">Valor ligado</th><th>Justificação</th><th>Por</th><th></th></tr></thead>
         <tbody>${ligacoesAtivas.map(l => `
           <tr>
             <td>${l.eventoA.dia} — ${l.eventoA.colaborador} (${formatarEuro(l.eventoA.valor)})</td>
             <td>${l.eventoB.dia} — ${l.eventoB.colaborador} (${formatarEuro(l.eventoB.valor)})</td>
+            <td style="text-align:right">${formatarEuro(l.valorLigado != null ? l.valorLigado : Math.min(Math.abs(l.eventoA.valor), Math.abs(l.eventoB.valor)))}</td>
             <td>${l.observacoes}</td>
             <td>${l.ligadoPor || ''}</td>
             <td><button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="desfazerLigacaoPorReceberCD('${l.id}')">↩ Desfazer</button></td>
@@ -2271,11 +2289,19 @@ async function ligarEventosPorReceberCD() {
   if (chaves.length !== 2) { alert('Escolhe exactamente 2 eventos (um de cada colaborador).'); return; }
   const [eventoA, eventoB] = chaves.map(chave => CD_EVENTOS_POR_RECEBER.find(ev => ev.chave === chave));
   if (!eventoA || !eventoB) { alert('Não foi possível identificar os eventos escolhidos — actualiza a página e tenta de novo.'); return; }
-  const observacoes = prompt(`Ligar o evento de ${eventoA.colaborador} (${eventoA.dia}, ${formatarEuro(eventoA.valor)}) ao de ${eventoB.colaborador} (${eventoB.dia}, ${formatarEuro(eventoB.valor)})?\n\nExplica o que se passou (fica registado, é obrigatório):`);
+  const restanteA = eventoA.restante != null ? eventoA.restante : Math.abs(eventoA.valor);
+  const restanteB = eventoB.restante != null ? eventoB.restante : Math.abs(eventoB.valor);
+  const limite = Math.min(restanteA, restanteB);
+  const valorTexto = prompt(`Ligar o evento de ${eventoA.colaborador} (${eventoA.dia}, por ligar ${formatarEuro(restanteA)}) ao de ${eventoB.colaborador} (${eventoB.dia}, por ligar ${formatarEuro(restanteB)}).\n\nQuanto desta ligação liquida? (máximo ${formatarEuro(limite)} — deixa como está para ligar o valor máximo):`, limite.toFixed(2));
+  if (valorTexto === null) return;
+  const valorLigadoTexto = valorTexto.trim();
+  const valorLigado = valorLigadoTexto === '' ? undefined : Number(valorLigadoTexto.replace(',', '.'));
+  if (valorLigado !== undefined && (Number.isNaN(valorLigado) || valorLigado <= 0)) { alert('Valor inválido.'); return; }
+  const observacoes = prompt(`Explica o que se passou (fica registado, é obrigatório):`);
   if (observacoes === null) return;
   if (!observacoes.trim()) { alert('A justificação é obrigatória.'); return; }
   const loja = document.getElementById('cd-loja').value;
-  const r = await chamarApi({ acao: 'ligarPorReceber', loja, dia: 'hoje', eventoA: { dia: eventoA.dia, colaborador: eventoA.colaborador }, eventoB: { dia: eventoB.dia, colaborador: eventoB.colaborador }, observacoes: observacoes.trim() });
+  const r = await chamarApi({ acao: 'ligarPorReceber', loja, dia: 'hoje', eventoA: { dia: eventoA.dia, colaborador: eventoA.colaborador }, eventoB: { dia: eventoB.dia, colaborador: eventoB.colaborador }, valorLigado, observacoes: observacoes.trim() });
   if (!r.ok) { alert(r.erro || 'Erro ao ligar os eventos.'); return; }
   await obterPainelCD();
   await carregarSaldoLojaCaixaDia();
@@ -2426,6 +2452,44 @@ function mostrarResumoColaboradores() {
   }).join('') : '<tr><td colspan="7">Sem movimentos para esta loja/dia.</td></tr>';
 }
 
+// "Anexar e liquidar dívida antiga" (2026-10-23, pedido do Ricardo) —
+// dentro do PRÓPRIO apuro, qualquer colaborador pode dizer que o dinheiro
+// que está a declarar hoje é (também) o pagamento de uma dívida antiga de
+// OUTRO colaborador, em vez de só escrever isso em "Observações". Sem
+// restrição de papel: o servidor (lib/conferenciaColaborador.js) só liga o
+// evento escolhido ao apuro que está mesmo a ser gravado nesta chamada,
+// nunca a um par livre de eventos.
+let CD_EVENTOS_PARA_LIQUIDAR = [];
+async function toggleLiquidarDivida() {
+  const ligado = document.getElementById('apuro-liquidar-check').checked;
+  document.getElementById('apuro-liquidar-bloco').style.display = ligado ? '' : 'none';
+  if (ligado) await carregarEventosParaLiquidar();
+}
+
+async function carregarEventosParaLiquidar() {
+  const sel = document.getElementById('apuro-liquidar-chave');
+  sel.innerHTML = '<option value="">A carregar…</option>';
+  const loja = document.getElementById('cd-loja').value;
+  const dia = document.getElementById('cd-dia').value;
+  const colaborador = document.getElementById('apuro-colaborador').value.trim();
+  if (!loja || !dia) { sel.innerHTML = '<option value="">Escolhe a loja e o dia no topo da página</option>'; return; }
+  const r = await chamarApi({ acao: 'listarEventosPorReceber', loja, dia });
+  if (!r.ok) { sel.innerHTML = '<option value="">Erro ao carregar dívidas em aberto</option>'; return; }
+  // Nunca o próprio colaborador (não faz sentido ligar o apuro a uma
+  // dívida dele mesmo) nem um evento já sem saldo por ligar.
+  CD_EVENTOS_PARA_LIQUIDAR = r.eventos.filter(ev => !ev.ligado && ev.colaborador !== colaborador);
+  if (!CD_EVENTOS_PARA_LIQUIDAR.length) { sel.innerHTML = '<option value="">Não há dívidas em aberto de outros colaboradores</option>'; return; }
+  sel.innerHTML = '<option value="">Escolhe…</option>' + CD_EVENTOS_PARA_LIQUIDAR.map(ev => {
+    const restante = ev.restante != null ? ev.restante : Math.abs(ev.valor);
+    return `<option value="${ev.chave}">${ev.dia} — ${ev.colaborador} (por ligar ${formatarEuro(restante)})${ev.observacoes ? ' — ' + ev.observacoes : ''}</option>`;
+  }).join('');
+  sel.onchange = () => {
+    const ev = CD_EVENTOS_PARA_LIQUIDAR.find(e => e.chave === sel.value);
+    const restante = ev ? (ev.restante != null ? ev.restante : Math.abs(ev.valor)) : '';
+    document.getElementById('apuro-liquidar-valor').value = restante;
+  };
+}
+
 function preencherApuro(indice) {
   const l = ULTIMO_RESUMO_COLABORADORES[indice];
   if (!l) return;
@@ -2454,6 +2518,7 @@ function verificarJaApuradoHoje() {
     avisoEl.innerHTML = '';
     btn.textContent = 'Apurar';
   }
+  if (document.getElementById('apuro-liquidar-check').checked) carregarEventosParaLiquidar();
 }
 
 // Pedido do Ricardo: "apresentar uma mensagem com o que irá ser o resultado
@@ -2493,11 +2558,22 @@ function pedirConfirmacaoApuro() {
     ? `<br><strong style="color:#b3000a">${etiquetaApuroDiferenca(-emFalta)}</strong> face aos documentos (${formatarEuro(totalDocs)}).`
     : '';
 
+  let avisoLiquidar = '';
+  if (document.getElementById('apuro-liquidar-check').checked) {
+    const chave = document.getElementById('apuro-liquidar-chave').value;
+    const valorLiquidarTxt = document.getElementById('apuro-liquidar-valor').value;
+    const obsLiquidar = document.getElementById('apuro-liquidar-observacoes').value.trim();
+    if (!chave) { confEl.innerHTML = '<div class="alerta alerta-erro">Escolhe a dívida antiga a liquidar (ou desmarca a opção).</div>'; return; }
+    if (!obsLiquidar) { confEl.innerHTML = '<div class="alerta alerta-erro">A justificação da liquidação é obrigatória.</div>'; return; }
+    const evL = CD_EVENTOS_PARA_LIQUIDAR.find(e => e.chave === chave);
+    avisoLiquidar = `<br>Vai também liquidar <strong>${formatarEuro(valorLiquidarTxt || (evL ? (evL.restante != null ? evL.restante : Math.abs(evL.valor)) : 0))}</strong> da dívida antiga de ${evL ? evL.colaborador + ' (' + evL.dia + ')' : chave}.`;
+  }
+
   confEl.innerHTML = `
     <div class="alerta alerta-aviso">
       Vais gravar o apuro de <strong>${colaborador}</strong>, loja ${loja}, dia ${dia}:<br>
       ATM Multibanco ${formatarEuro(mb)} + ATM VISA ${formatarEuro(visa)} + Numerário ${formatarEuro(numerario)} + Transferência ${formatarEuro(transferencia)}
-      = <strong>Total apurado ${formatarEuro(total)}</strong>.${avisoDiferenca}<br><br>
+      = <strong>Total apurado ${formatarEuro(total)}</strong>.${avisoDiferenca}${avisoLiquidar}<br><br>
       Confirmas que estes são os valores finais?
       <div style="margin-top:.6rem">
         <button class="btn" onclick="confirmarGravarApuro()">✅ Confirmar e gravar</button>
@@ -2517,18 +2593,34 @@ async function confirmarGravarApuro() {
   const numerario = document.getElementById('apuro-numerario').value || 0;
   const transferencia = document.getElementById('apuro-transferencia').value || 0;
   const observacoes = document.getElementById('apuro-observacoes').value;
+  let liquidarDivida;
+  if (document.getElementById('apuro-liquidar-check').checked) {
+    liquidarDivida = {
+      chave: document.getElementById('apuro-liquidar-chave').value,
+      valor: document.getElementById('apuro-liquidar-valor').value || undefined,
+      observacoes: document.getElementById('apuro-liquidar-observacoes').value,
+    };
+  }
 
   confEl.innerHTML = '';
   resultadoEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gravar…</div>';
-  const r = await chamarApi({ acao: 'registarApuroColaborador', dados: { colaborador, loja, de: dia, ate: dia, atmMultibanco, atmVisa, numerario, transferencia, observacoes } });
+  const r = await chamarApi({ acao: 'registarApuroColaborador', dados: { colaborador, loja, de: dia, ate: dia, atmMultibanco, atmVisa, numerario, transferencia, observacoes, liquidarDivida } });
   if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
 
   const classe = r.confere ? 'alerta-ok' : 'alerta-erro';
   const texto = r.confere
     ? `✅ Confere — total apurado ${formatarEuro(r.totalApurado)} bate com os documentos.`
     : `${etiquetaApuroDiferenca(r.diferenca)} — apurado ${formatarEuro(r.totalApurado)}, documentos ${formatarEuro(r.totalDocumentos)}.`;
-  resultadoEl.innerHTML = `<div class="alerta ${classe}" style="${r.confere ? '' : 'font-weight:700'}">${texto}</div>`;
-  ['apuro-colaborador', 'apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
+  let textoLiquidacao = '';
+  if (r.liquidacao) {
+    textoLiquidacao = r.liquidacao.ok
+      ? `<div class="alerta alerta-ok" style="margin-top:.5rem">🔗 Dívida antiga liquidada: ${formatarEuro(r.liquidacao.valorLigado)}.</div>`
+      : `<div class="alerta alerta-erro" style="margin-top:.5rem">⚠️ O apuro foi gravado, mas a liquidação da dívida antiga falhou: ${r.liquidacao.erro || 'erro desconhecido'}.</div>`;
+  }
+  resultadoEl.innerHTML = `<div class="alerta ${classe}" style="${r.confere ? '' : 'font-weight:700'}">${texto}</div>${textoLiquidacao}`;
+  ['apuro-colaborador', 'apuro-mb', 'apuro-visa', 'apuro-numerario', 'apuro-transferencia', 'apuro-observacoes', 'apuro-liquidar-valor', 'apuro-liquidar-observacoes'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('apuro-liquidar-check').checked = false;
+  document.getElementById('apuro-liquidar-bloco').style.display = 'none';
   document.getElementById('apuro-aviso-ja-apurado').innerHTML = '';
   document.getElementById('btn-inserir-apuro').textContent = 'Apurar';
   // Actualiza o saldo por apurar (e quem já apurou hoje) e a Orientação
