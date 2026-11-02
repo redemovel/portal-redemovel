@@ -2339,11 +2339,34 @@ async function carregarDiversosDia() {
       <tbody>${r.movimentos.map(m => m.anulado
         ? `<tr style="color:#888"><td><s>${String(m.atualizadoEm).slice(11, 16)}</s></td><td><s>${m.tipoNome || m.tipo}</s></td>
              <td style="text-align:right"><s>${formatarEuro(m.valor)}</s></td><td><s>${m.observacoes || ''}</s></td><td>${m.registadoPor || ''}</td>
-             <td>Anulado por ${m.anuladoPor} — ${m.motivoAnulacao}</td></tr>`
+             <td>Anulado por ${m.anuladoPor} — ${m.motivoAnulacao}${m.corrigidoPorMovimento
+               ? ' · ✅ já corrigido'
+               : (podeAnular ? ` <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="corrigirDiversoCD('${m.id}', '${(m.tipoNome || m.tipo).replace(/'/g, "\\'")}', ${Number(m.valor) || 0})">✏️ Registar valor certo</button>` : '')}</td></tr>`
         : `<tr><td>${String(m.atualizadoEm).slice(11, 16)}</td><td>${m.tipoNome || m.tipo}</td>
              <td style="text-align:right">${formatarEuro(m.valor)}</td><td>${m.observacoes || ''}</td><td>${m.registadoPor || ''}</td>
-             <td>${podeAnular ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="anularDiversoCD('${m.id}', '${(m.tipoNome || m.tipo).replace(/'/g, "\\'")}', ${Number(m.valor) || 0})">🗑 Anular</button>` : ''}</td></tr>`).join('')}</tbody>
+             <td>${m.corrigeMovimento ? `<span class="rodape-nota">Corrigido por ${m.corrigidoPor} (era ${formatarEuro(m.valorAnterior)}) — ${m.motivoCorrecao || ''}</span> ` : ''}${podeAnular ? `<button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="corrigirDiversoCD('${m.id}', '${(m.tipoNome || m.tipo).replace(/'/g, "\\'")}', ${Number(m.valor) || 0})">✏️ Corrigir</button> <button class="btn btn-secundario" style="padding:.3rem .6rem;font-size:.72rem" onclick="anularDiversoCD('${m.id}', '${(m.tipoNome || m.tipo).replace(/'/g, "\\'")}', ${Number(m.valor) || 0})">🗑 Anular</button>` : ''}</td></tr>`).join('')}</tbody>
     </table></div>`;
+}
+
+// Corrigir (2026-11-02): anula o movimento errado (se ainda activo) e cria o
+// certo com a MESMA data/hora do original — nunca com a data de hoje. Também
+// disponível em movimentos já anulados, para repor o valor certo no dia
+// certo. Só Master, motivo obrigatório, só com o mês aberto (validado no
+// servidor).
+async function corrigirDiversoCD(id, tipoNome, valor) {
+  const novoValor = prompt(`Corrigir "${tipoNome}" de ${formatarEuro(valor)}.\n\nValor CERTO (€), sempre positivo — fica com a mesma data e hora do original:`);
+  if (novoValor === null) return;
+  if (!(Number(String(novoValor).replace(',', '.')) > 0)) { alert('Indica um valor positivo.'); return; }
+  const motivo = prompt('Motivo da correcção (fica registado):');
+  if (motivo === null) return;
+  if (!motivo.trim()) { alert('O motivo é obrigatório.'); return; }
+  const r = await chamarApi({ acao: 'corrigirMovimentoDiverso', id, valor: novoValor, motivo: motivo.trim() });
+  if (!r.ok) { alert(r.erro || 'Erro ao corrigir.'); return; }
+  await obterPainelCD();
+  await carregarSaldoLojaCaixaDia();
+  await carregarResumoDia();
+  CD_PAINEL = null;
+  atualizarTalaoDia();
 }
 
 async function anularDiversoCD(id, tipoNome, valor) {
