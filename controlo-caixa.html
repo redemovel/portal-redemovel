@@ -2898,10 +2898,18 @@ function mostrarCaixaMes() {
     const temSaldoPorDepositar = e.saldoFinalMes !== null && Math.abs(saldo) > 0.01;
     fechoHtml = `
       <p class="rodape-nota" style="margin-top:1rem">Saldo final do mês: <strong>${e.saldoFinalMes === null ? '—' : formatarEuro(saldo)}</strong>.</p>
-      ${temSaldoPorDepositar ? `
+      ${temSaldoPorDepositar && e.transitoAutomatico ? `
+        <div class="alerta alerta-ok">
+          ✅ O saldo de <strong>${formatarEuro(saldo)}</strong> já está coberto por depósito(s) registado(s) em ${nomeMesCM(proximoMesCM(e.mes))}:
+          <ul style="margin:.4rem 0 0 1.2rem">
+            ${e.transitoAutomatico.depositos.map(d => `<li>${d.data} — ${formatarEuro(d.valor)} (${d.registadoPor})</li>`).join('')}
+          </ul>
+          Ao fechar, o mês fica <strong>CONFORME</strong> e ligado a estes depósitos. A confirmação de que o dinheiro entrou no banco faz-se depois, contra o extracto.
+        </div>` : ''}
+      ${temSaldoPorDepositar && !e.transitoAutomatico ? `
         <div class="alerta alerta-aviso">
-          O saldo final não está em zero — normal para o(s) último(s) dia(s) do mês, cujo depósito só é feito já no mês seguinte.
-          Se for esse o caso, marca aqui como <strong>depósito em trânsito</strong> para o mês fechar CONFORME na mesma;
+          O saldo final não está em zero e ainda não há depósito(s) em ${nomeMesCM(proximoMesCM(e.mes))} que o cubram${(e.depositosMesSeguinte || []).length ? ` (encontrados: ${e.depositosMesSeguinte.map(d => d.data + ' — ' + formatarEuro(d.valor)).join(', ')})` : ''}.
+          Se o depósito vai ser feito, marca aqui como <strong>depósito em trânsito</strong> para o mês fechar CONFORME;
           se não marcares nada, o mês fecha como <strong>NÃO CONFERE</strong>.
           Em qualquer dos casos, este saldo passa para ${nomeMesCM(proximoMesCM(e.mes))} como transporte.
           <div class="filtros" style="margin-top:.6rem">
