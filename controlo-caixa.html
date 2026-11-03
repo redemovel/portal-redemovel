@@ -251,7 +251,15 @@
     table { font-size: .72rem; }
     th { position: static; }
     .tabela-scroll { max-height: none; overflow: visible; border: none; }
+    .tabela-creditos-banco { font-size: .85rem !important; }
   }
+  /* Créditos no banco por dia (2026-11-03) — tabela para a contabilidade
+     conferir contra o extracto: valores alinhados à direita, linha de
+     total destacada. */
+  .tabela-creditos-banco { width: 100%; border-collapse: collapse; }
+  .tabela-creditos-banco th, .tabela-creditos-banco td { padding: .3rem .5rem; border-bottom: 1px solid var(--gray-light); }
+  .tabela-creditos-banco th:not(:first-child), .tabela-creditos-banco td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tabela-creditos-banco tr.total td { font-weight: 800; border-top: 2px solid var(--text); border-bottom: none; }
 </style>
 </head>
 <body>
@@ -816,6 +824,18 @@
           <h2 id="relatorio-titulo-loja"></h2>
           <div id="relatorio-titulo-periodo" class="rodape-nota"></div>
         </div>
+
+        <!-- Créditos no banco por dia (2026-11-03, pedido do Ricardo): "uma
+             impressão para a contabilidade... por dia e por tipo de crédito
+             no banco para conferirem" — os mesmos valores dos vistos
+             diários do Caixa Mês (Multibanco, VISA, Depósitos,
+             Transferências), um dia por linha, só os dias com algum valor. -->
+        <h3>Créditos no banco por dia — para conferir com o extracto</h3>
+        <table class="tabela-creditos-banco">
+          <thead><tr><th>Dia</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transferências</th><th>Total do dia</th></tr></thead>
+          <tbody id="relatorio-corpo-creditos-banco"><tr><td colspan="6">A carregar…</td></tr></tbody>
+        </table>
+        <p class="rodape-nota" id="relatorio-nota-creditos-banco"></p>
 
         <h3>Conferência de Caixa — resumo da loja</h3>
         <div id="relatorio-conferencia-loja"></div>
@@ -2802,6 +2822,46 @@ async function carregarCaixaMes() {
   if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao carregar o Caixa Mês.') + '</div>'; CM_ESTADO = null; return; }
   CM_ESTADO = r;
   mostrarCaixaMes();
+  preencherCreditosBancoRelatorio();
+}
+
+// Créditos no banco por dia (2026-11-03) — tabela do relatório impresso
+// para a contabilidade, a partir dos mesmos totais diários dos vistos do
+// Caixa Mês (CM_ESTADO.dias), sem nenhuma leitura extra. Um dia por linha,
+// só os dias com algum valor; célula vazia quando o valor é 0. Um valor
+// ainda sem visto válido leva "*" e uma nota por baixo.
+function preencherCreditosBancoRelatorio() {
+  const corpo = document.getElementById('relatorio-corpo-creditos-banco');
+  const nota = document.getElementById('relatorio-nota-creditos-banco');
+  if (!corpo) return;
+  const e = CM_ESTADO;
+  if (!e || e.periodoTeste || !Array.isArray(e.dias)) {
+    corpo.innerHTML = '<tr><td colspan="6">' + (e && e.periodoTeste ? 'Mês do período de testes.' : 'Sem dados.') + '</td></tr>';
+    nota.textContent = '';
+    return;
+  }
+  const TIPOS = [['multibanco', 'totalMB'], ['visa', 'totalVISA'], ['depositos', 'totalDepositos'], ['transferencias', 'totalTransferencias']];
+  const dataPT = d => { const [a, m, dd] = String(d).split('-'); return `${dd}/${m}/${String(a).slice(2)}`; };
+  const totais = { totalMB: 0, totalVISA: 0, totalDepositos: 0, totalTransferencias: 0, dia: 0 };
+  let haPorConfirmar = false;
+  const dias = e.dias.filter(d => TIPOS.some(([, campo]) => Math.abs(Number(d[campo]) || 0) > 0.005));
+  const linhas = dias.map(d => {
+    let totalDia = 0;
+    const celulas = TIPOS.map(([tipo, campo]) => {
+      const v = Number(d[campo]) || 0;
+      if (Math.abs(v) <= 0.005) return '<td></td>';
+      totais[campo] += v; totalDia += v;
+      const visto = d.vistos && d.vistos[tipo] && d.vistos[tipo].vistoValido;
+      if (!visto) haPorConfirmar = true;
+      return `<td>${formatarEuro(v)}${visto ? '' : ' *'}</td>`;
+    }).join('');
+    totais.dia += totalDia;
+    return `<tr><td>${dataPT(d.dia)}</td>${celulas}<td>${formatarEuro(totalDia)}</td></tr>`;
+  });
+  corpo.innerHTML = linhas.length
+    ? linhas.join('') + `<tr class="total"><td>Total do mês</td>${TIPOS.map(([, campo]) => `<td>${formatarEuro(totais[campo])}</td>`).join('')}<td>${formatarEuro(totais.dia)}</td></tr>`
+    : '<tr><td colspan="6">Sem créditos no banco neste mês.</td></tr>';
+  nota.textContent = haPorConfirmar ? '* Valor ainda sem visto no Caixa Mês (por confirmar contra o extracto).' : '';
 }
 
 function mostrarCaixaMes() {
