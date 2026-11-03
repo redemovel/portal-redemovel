@@ -267,6 +267,11 @@
   .rel-contab-loja .resumo-grelha.duas { grid-template-columns: repeat(2, 1fr); }
   .rel-contab-loja .resumo-item .valor { font-size: 1.2rem; font-weight: 800; }
   .rel-contab-quebra { page-break-before: always; break-before: page; }
+  /* Listagens por tipo (dias × lojas): 7 colunas e até 31 linhas — tem de
+     caber numa folha A4 por tipo. */
+  .rel-contab-listagem .tabela-creditos-banco { table-layout: fixed; }
+  .rel-contab-listagem .tabela-creditos-banco th, .rel-contab-listagem .tabela-creditos-banco td { padding: .16rem .3rem; font-size: .8rem; }
+  .rel-contab-listagem .tabela-creditos-banco th:first-child, .rel-contab-listagem .tabela-creditos-banco td:first-child { width: 9%; }
   /* Quadro resumo de todas as lojas: 9 colunas — sem isto, os valores sem
      quebra de linha alargavam a tabela para além da folha e o Chrome
      encolhia a impressão INTEIRA (todas as páginas) para caber. */
@@ -2861,7 +2866,7 @@ async function carregarCaixaMes() {
 const NOMES_MESES_REL = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 function nomeMesRel(m) { const [a, n] = String(m).split('-').map(Number); return `${NOMES_MESES_REL[n - 1]}/${a}`; }
 
-function htmlRelatorioContabilidadeLoja(e) {
+function htmlRelatorioContabilidadeLoja(e, opcoes = {}) {
   if (!e || e.periodoTeste || !Array.isArray(e.dias)) {
     return `<p class="rodape-nota">${e && e.periodoTeste ? 'Mês do período de testes.' : 'Sem dados.'}</p>`;
   }
@@ -2888,11 +2893,11 @@ function htmlRelatorioContabilidadeLoja(e) {
     ? `<p class="rodape-nota">🔒 Mês fechado por ${e.fecho.fechadoPor || ''} — ${e.fecho.status === 'CONFORME' ? '✅ CONFORME' : '⚠️ NÃO CONFERE'}${e.fecho.depositoEmTransitoValor ? ` · Depósito em trânsito ${formatarEuro(e.fecho.depositoEmTransitoValor)} (${e.fecho.depositoEmTransitoData})` : ''}</p>`
     : '<p class="rodape-nota">⏳ Mês ainda não fechado.</p>';
   return `
-    <h3>Vistos diários (Multibanco, VISA, Depósitos bancários, Transferências)</h3>
+    ${opcoes.semDias ? '' : `<h3>Vistos diários (Multibanco, VISA, Depósitos bancários, Transferências)</h3>
     <table>
       <thead><tr><th>Dia</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transferências</th></tr></thead>
       <tbody>${linhasDias}</tbody>
-    </table>
+    </table>`}
     <h3>Totais do mês — rubricas confirmadas</h3>
     <div class="resumo-grelha">
       <div class="resumo-item"><div class="valor">${formatarEuro(conf('multibanco'))}</div><div class="rotulo">Multibanco — confirmado</div></div>
@@ -2950,10 +2955,66 @@ async function imprimirTodasLojasCM() {
   }
 
   const agora = new Date().toLocaleString('pt-PT');
+
+  // Listagens por tipo de crédito no banco (2026-11-03, pedido do Ricardo):
+  // "os dias de calendário seguidos com todos os movimentos desse dia" —
+  // uma tabela por tipo (Multibanco, VISA, Depósitos, Transferências), uma
+  // linha por CADA dia do mês (mesmo sem movimentos, a 0,00 €) e uma coluna
+  // por loja, mais o total do dia e o total do mês por loja. Ordem e nomes
+  // curtos das lojas como no exemplo do Ricardo. Um valor ainda sem visto
+  // leva "*".
+  const COLUNAS_LOJAS = [
+    ['Redemóvel - Av. Liberdade', 'Liberdade'], ['Redemóvel - Oliveira de Azeméis', 'OAZ'],
+    ['Redemóvel - CC 8ª Avenida', '8ª Avenida'], ['Redemóvel - Ovar', 'Ovar'], ['Redemóvel - Arouca', 'Arouca'],
+  ].filter(([nome]) => NOMES_LOJAS.includes(nome));
+  NOMES_LOJAS.forEach(nome => { if (!COLUNAS_LOJAS.some(([n]) => n === nome)) COLUNAS_LOJAS.push([nome, nome.replace(/^Redemóvel - /, '')]); });
+  const estadoPorLoja = {};
+  estados.forEach((e, i) => { estadoPorLoja[NOMES_LOJAS[i]] = e; });
+  const [anoMes, numMes] = mes.split('-').map(Number);
+  const nDias = new Date(anoMes, numMes, 0).getDate();
+  const diasDoMes = Array.from({ length: nDias }, (_, k) => `${mes}-${String(k + 1).padStart(2, '0')}`);
+  const TIPOS_LISTAGEM = [
+    ['multibanco', 'totalMB', 'Multibanco'], ['visa', 'totalVISA', 'VISA'],
+    ['depositos', 'totalDepositos', 'Depósitos bancários'], ['transferencias', 'totalTransferencias', 'Transferências recebidas'],
+  ];
+  let haPorConfirmar = false;
+  const listagens = TIPOS_LISTAGEM.map(([tipo, campo, titulo], idx) => {
+    const totaisLoja = COLUNAS_LOJAS.map(() => 0);
+    let totalGeral = 0;
+    const linhas = diasDoMes.map(dia => {
+      let totalDia = 0;
+      const celulas = COLUNAS_LOJAS.map(([nome], c) => {
+        const e = estadoPorLoja[nome];
+        const d = e && e.dias ? e.dias.find(x => x.dia === dia) : null;
+        const v = d ? (Number(d[campo]) || 0) : 0;
+        totaisLoja[c] += v; totalDia += v;
+        const semVisto = Math.abs(v) > 0.01 && !(d.vistos && d.vistos[tipo] && d.vistos[tipo].vistoValido);
+        if (semVisto) haPorConfirmar = true;
+        return `<td>${formatarEuro(v)}${semVisto ? ' *' : ''}</td>`;
+      }).join('');
+      totalGeral += totalDia;
+      const [, mm, dd] = dia.split('-');
+      return `<tr><td>${dd}/${mm}</td>${celulas}<td><strong>${formatarEuro(totalDia)}</strong></td></tr>`;
+    }).join('');
+    return `
+    <div class="cartao rel-contab-listagem ${idx > 0 ? 'rel-contab-quebra' : ''}">
+      <div class="rel-contab-cabecalho"><h2>${titulo}</h2><div class="rodape-nota">Todas as lojas · ${nomeMesRel(mes)} · Gerado em ${agora}</div></div>
+      <table class="tabela-creditos-banco">
+        <thead><tr><th>Data</th>${COLUNAS_LOJAS.map(([, curto]) => `<th>${curto}</th>`).join('')}<th>Total do dia</th></tr></thead>
+        <tbody>${linhas}
+          <tr class="total"><td>Total</td>${totaisLoja.map(v => `<td>${formatarEuro(v)}</td>`).join('')}<td>${formatarEuro(totalGeral)}</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+  }).join('');
+  const notaPorConfirmar = haPorConfirmar ? '<p class="rodape-nota">* Valor ainda sem visto no Caixa Mês da loja.</p>' : '';
+
+  // Quadros resumo por loja (totais confirmados, vistos mensais e saldo de
+  // numerário) — sem a tabela diária, que já está nas listagens acima.
   const paginasLojas = estados.map((e, i) => `
-    <div class="cartao rel-contab-loja ${i > 0 ? 'rel-contab-quebra' : ''}">
+    <div class="cartao rel-contab-loja rel-contab-quebra">
       <div class="rel-contab-cabecalho"><h2>${NOMES_LOJAS[i]}</h2><div class="rodape-nota">${nomeMesRel(mes)} · Gerado em ${agora}</div></div>
-      ${htmlRelatorioContabilidadeLoja(e)}
+      ${htmlRelatorioContabilidadeLoja(e, { semDias: true })}
     </div>`).join('');
 
   const somas = { mb: 0, visa: 0, dep: 0, transf: 0, carr: 0, gsv: 0, saldo: 0 };
@@ -2978,7 +3039,7 @@ async function imprimirTodasLojasCM() {
       <p class="rodape-nota">Multibanco, VISA, Depósitos e Transferências (Transf.): valores confirmados (com visto) no Caixa Mês de cada loja. Carreg.: Carregamentos/Pagamento de Faturas. Saldo numerário: saldo final de numerário do mês. Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.</p>
     </div>`;
 
-  contentor.innerHTML = paginasLojas + resumo;
+  contentor.innerHTML = listagens + notaPorConfirmar + paginasLojas + resumo;
   statusEl.innerHTML = '';
   // Durante a impressão só aparece este contentor — o relatório da loja
   // aberta fica escondido e volta no fim (afterprint).
