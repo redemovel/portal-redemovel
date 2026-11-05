@@ -284,9 +284,9 @@
      quebra de linha alargavam a tabela para além da folha e o Chrome
      encolhia a impressão INTEIRA (todas as páginas) para caber. */
   .rel-contab-resumo .tabela-creditos-banco { table-layout: fixed; }
-  .rel-contab-resumo .tabela-creditos-banco th, .rel-contab-resumo .tabela-creditos-banco td { white-space: normal; padding: .3rem .25rem; font-size: .78rem; }
-  .rel-contab-resumo .tabela-creditos-banco th:first-child, .rel-contab-resumo .tabela-creditos-banco td:first-child { width: 17%; }
-  .rel-contab-resumo .tabela-creditos-banco th:last-child, .rel-contab-resumo .tabela-creditos-banco td:last-child { width: 8%; text-align: center; }
+  .rel-contab-resumo .tabela-creditos-banco th, .rel-contab-resumo .tabela-creditos-banco td { white-space: normal; padding: .3rem .2rem; font-size: .68rem; }
+  .rel-contab-resumo .tabela-creditos-banco th:first-child, .rel-contab-resumo .tabela-creditos-banco td:first-child { width: 13%; }
+  .rel-contab-resumo .tabela-creditos-banco th:last-child, .rel-contab-resumo .tabela-creditos-banco td:last-child { width: 6%; text-align: center; }
   .rel-contab-cabecalho h2 { margin: 0; }
   @media print {
     .rel-contab-loja table, .rel-contab-resumo table { font-size: .8rem !important; }
@@ -2874,6 +2874,15 @@ async function carregarCaixaMes() {
 const NOMES_MESES_REL = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 function nomeMesRel(m) { const [a, n] = String(m).split('-').map(Number); return `${NOMES_MESES_REL[n - 1]}/${a}`; }
 
+// Total que a loja ainda tem de fazer entrar no banco (2026-11-05, pedido
+// do Ricardo): o saldo de numerário sozinho "esquece" o que foi faturado e
+// ainda não foi pago pelo cliente (Por receber) — ex. Ovar, novembro:
+// 431,38 € de numerário + 124,89 € por receber.
+function totalPorEntrarNoBanco(e) {
+  if (e.saldoFinalMes === null || e.saldoFinalMes === undefined) return null;
+  return Math.round(((Number(e.saldoFinalMes) || 0) + (Number(e.porReceberFinalMes) || 0)) * 100) / 100;
+}
+
 function htmlRelatorioContabilidadeLoja(e, opcoes = {}) {
   if (!e || e.periodoTeste || !Array.isArray(e.dias)) {
     return `<p class="rodape-nota">${e && e.periodoTeste ? 'Mês do período de testes.' : 'Sem dados.'}</p>`;
@@ -2930,8 +2939,12 @@ function htmlRelatorioContabilidadeLoja(e, opcoes = {}) {
         <tr><td>+ Numerário ainda por apurar (documentos Vodafone)</td><td style="text-align:right">${formatarEuro(nm.porApurarNumerario)}</td></tr>
         <tr><td>− Depósitos bancários do mês</td><td style="text-align:right">${formatarEuro(nm.depositos)}</td></tr>
         <tr><td>± Outras entradas/saídas de numerário</td><td style="text-align:right">${formatarEuro(nm.outrasEntradasSaidas)}</td></tr>
-        <tr style="font-weight:700;border-top:2px solid #333"><td>= Saldo final do mês</td>
+        <tr style="font-weight:700;border-top:2px solid #333"><td>= Saldo final de numerário do mês</td>
             <td style="text-align:right">${e.saldoFinalMes === null ? '—' : formatarEuro(e.saldoFinalMes)}</td></tr>
+        <tr style="color:#b3000a"><td>+ Por receber de clientes (faturado e ainda não pago — transporte ${formatarEuro((e.transporte && e.transporte.porReceber) || 0)} ${(e.numerarioMes.porReceber || 0) >= 0 ? '+' : '−'} ${formatarEuro(Math.abs(e.numerarioMes.porReceber || 0))} do mês)</td>
+            <td style="text-align:right">${e.porReceberFinalMes === null || e.porReceberFinalMes === undefined ? '—' : formatarEuro(e.porReceberFinalMes)}</td></tr>
+        <tr style="font-weight:800;border-top:2px solid #333"><td>= Total que a loja ainda tem de fazer entrar no banco</td>
+            <td style="text-align:right">${totalPorEntrarNoBanco(e) === null ? '—' : formatarEuro(totalPorEntrarNoBanco(e))}</td></tr>
       </tbody>
     </table>
     ${fecho}`;
@@ -3025,26 +3038,27 @@ async function imprimirTodasLojasCM() {
       ${htmlRelatorioContabilidadeLoja(e, { semDias: true })}
     </div>`).join('');
 
-  const somas = { mb: 0, visa: 0, dep: 0, transf: 0, carr: 0, gsv: 0, saldo: 0 };
+  const somas = { mb: 0, visa: 0, dep: 0, transf: 0, carr: 0, gsv: 0, saldo: 0, porReceber: 0, total: 0 };
   const conf = (e, tipo) => (e.totaisDiarios && e.totaisDiarios[tipo] ? e.totaisDiarios[tipo].confirmado : 0);
   const linhas = estados.map((e, i) => {
     const l = {
       mb: conf(e, 'multibanco'), visa: conf(e, 'visa'), dep: conf(e, 'depositos'), transf: conf(e, 'transferencias'),
       carr: e.totaisMensaisAtual.carregamentos, gsv: e.totaisMensaisAtual.gsv, saldo: e.saldoFinalMes || 0,
+      porReceber: e.porReceberFinalMes || 0, total: totalPorEntrarNoBanco(e) || 0,
     };
     Object.keys(somas).forEach(k => { somas[k] += l[k]; });
-    return `<tr><td>${NOMES_LOJAS[i]}</td><td>${formatarEuro(l.mb)}</td><td>${formatarEuro(l.visa)}</td><td>${formatarEuro(l.dep)}</td><td>${formatarEuro(l.transf)}</td><td>${formatarEuro(l.carr)}</td><td>${formatarEuro(l.gsv)}</td><td>${formatarEuro(l.saldo)}</td><td>${e.fecho && e.fecho.status === 'CONFORME' ? '✅' : '⚠️'}</td></tr>`;
+    return `<tr><td>${NOMES_LOJAS[i]}</td><td>${formatarEuro(l.mb)}</td><td>${formatarEuro(l.visa)}</td><td>${formatarEuro(l.dep)}</td><td>${formatarEuro(l.transf)}</td><td>${formatarEuro(l.carr)}</td><td>${formatarEuro(l.gsv)}</td><td>${formatarEuro(l.saldo)}</td><td>${formatarEuro(l.porReceber)}</td><td><strong>${formatarEuro(l.total)}</strong></td><td>${e.fecho && e.fecho.status === 'CONFORME' ? '✅' : '⚠️'}</td></tr>`;
   }).join('');
   const resumo = `
     <div class="cartao rel-contab-resumo rel-contab-quebra">
       <div class="rel-contab-cabecalho"><h2>Resumo — todas as lojas</h2><div class="rodape-nota">${nomeMesRel(mes)} · Gerado em ${agora}</div></div>
       <table class="tabela-creditos-banco">
-        <thead><tr><th>Loja</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transf.</th><th>Carreg.</th><th>GSV</th><th>Saldo numerário</th><th>Fecho</th></tr></thead>
+        <thead><tr><th>Loja</th><th>Multibanco</th><th>VISA</th><th>Depósitos</th><th>Transf.</th><th>Carreg.</th><th>GSV</th><th>Saldo numerário</th><th>Por receber</th><th>Total a entrar no banco</th><th>Fecho</th></tr></thead>
         <tbody>${linhas}
-          <tr class="total"><td>Total</td><td>${formatarEuro(somas.mb)}</td><td>${formatarEuro(somas.visa)}</td><td>${formatarEuro(somas.dep)}</td><td>${formatarEuro(somas.transf)}</td><td>${formatarEuro(somas.carr)}</td><td>${formatarEuro(somas.gsv)}</td><td>${formatarEuro(somas.saldo)}</td><td></td></tr>
+          <tr class="total"><td>Total</td><td>${formatarEuro(somas.mb)}</td><td>${formatarEuro(somas.visa)}</td><td>${formatarEuro(somas.dep)}</td><td>${formatarEuro(somas.transf)}</td><td>${formatarEuro(somas.carr)}</td><td>${formatarEuro(somas.gsv)}</td><td>${formatarEuro(somas.saldo)}</td><td>${formatarEuro(somas.porReceber)}</td><td>${formatarEuro(somas.total)}</td><td></td></tr>
         </tbody>
       </table>
-      <p class="rodape-nota">Multibanco, VISA, Depósitos e Transferências (Transf.): valores confirmados (com visto) no Caixa Mês de cada loja. Carreg.: Carregamentos/Pagamento de Faturas. Saldo numerário: saldo final de numerário do mês. Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.</p>
+      <p class="rodape-nota">Multibanco, VISA, Depósitos e Transferências (Transf.): valores confirmados (com visto) no Caixa Mês de cada loja. Carreg.: Carregamentos/Pagamento de Faturas. Saldo numerário: saldo final de numerário do mês (dinheiro ainda na loja). Por receber: faturado e ainda não pago pelo cliente. Total a entrar no banco = Saldo numerário + Por receber. Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — a anexar aos documentos enviados para a contabilidade.</p>
     </div>`;
 
   contentor.innerHTML = listagens + notaPorConfirmar + paginasLojas + resumo;
@@ -3101,6 +3115,8 @@ function mostrarCaixaMes() {
             <td style="text-align:right">${e.saldoFinalMes === null ? '—' : formatarEuro(e.saldoFinalMes)}</td></tr>
         ${e.porReceberFinalMes !== null && e.porReceberFinalMes !== undefined && (Math.abs(e.porReceberFinalMes) > 0.005 || Math.abs(t.porReceber || 0) > 0.005) ? `<tr style="color:#b3000a"><td>🧾 Por receber de clientes no fim do mês (transporte ${formatarEuro(t.porReceber || 0)} ${nm.porReceber >= 0 ? '+' : '−'} ${formatarEuro(Math.abs(nm.porReceber || 0))} do mês) — passa para o mês seguinte</td>
             <td style="text-align:right">${formatarEuro(e.porReceberFinalMes)}</td></tr>` : ''}
+        ${totalPorEntrarNoBanco(e) !== null && Math.abs(Number(e.porReceberFinalMes) || 0) > 0.005 ? `<tr style="font-weight:800;border-top:2px solid #333"><td>= Total que a loja ainda tem de fazer entrar no banco (numerário + por receber de clientes)</td>
+            <td style="text-align:right">${formatarEuro(totalPorEntrarNoBanco(e))}</td></tr>` : ''}
       </tbody>
     </table></div>
     <p class="rodape-nota">Só conta movimentos com data deste mês — fechar o mês uns dias depois não muda nada. Mesma regra do saldo "ao vivo": vale o apurado de quem já apurou e os documentos de quem ainda não apurou.</p>`;
