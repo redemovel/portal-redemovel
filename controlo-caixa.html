@@ -360,8 +360,8 @@
   <!-- ── Mapa Global (id interno "folha", ver nota acima) ── -->
   <div class="aba-conteudo" id="aba-folha" hidden>
     <div class="cartao">
-      <h2>💳 Saldo de numerário por loja</h2>
-      <p class="rodape-nota" style="margin-bottom:.75rem">Só dinheiro físico (numerário) — cartão/MB/digital nunca passa pela gaveta da loja, fica registado no Mapa Global mas não altera este saldo.</p>
+      <h2>💳 Saldo por loja — numerário e por receber</h2>
+      <p class="rodape-nota" style="margin-bottom:.75rem">Numerário: só dinheiro físico na gaveta da loja — cartão/MB/digital nunca passa pela gaveta. Por receber: documentos faturados que ainda aguardam pagamento do cliente. Total a entrar no banco = numerário + por receber.</p>
       <div class="resumo-grelha" id="resumo-saldos"><div class="resumo-item">A carregar…</div></div>
     </div>
     <div class="cartao">
@@ -3503,10 +3503,27 @@ async function carregarSaldos() {
   el.innerHTML = '<div class="resumo-item"><span class="spinner"></span>A carregar…</div>';
   const r = await obterSaldosLojas(false);
   if (!r.ok) { el.innerHTML = '<div class="resumo-item">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
+  // Por receber (2026-11-06, pedido do Ricardo): por baixo do numerário de
+  // cada loja, os documentos que aguardam pagamento do cliente e o total
+  // que a loja ainda tem de fazer entrar no banco; mais um cartão com o
+  // total de todas as lojas.
+  const somas = { num: 0, pr: 0 };
+  const cartao = (titulo, num, pr) => {
+    const total = Math.round((num + pr) * 100) / 100;
+    return `<div class="resumo-item">
+      <div class="valor">${formatarEuro(num)}</div>
+      <div class="rotulo">${titulo} — numerário</div>
+      <div style="margin-top:.45rem;font-size:.85rem;${Math.abs(pr) > 0.005 ? 'color:#b3000a;font-weight:700' : 'color:var(--text-muted)'}">🧾 Por receber: ${formatarEuro(pr)}</div>
+      <div style="margin-top:.2rem;font-size:.85rem;font-weight:800">Total a entrar no banco: ${formatarEuro(total)}</div>
+    </div>`;
+  };
   el.innerHTML = NOMES_LOJAS.map(loja => {
     const s = r.saldos.find(x => x.loja === loja);
-    return `<div class="resumo-item"><div class="valor">${formatarEuro(s ? s.saldoNumerario : 0)}</div><div class="rotulo">${loja.replace('Redemóvel - ', '')}</div></div>`;
-  }).join('');
+    const num = s ? Number(s.saldoNumerario) || 0 : 0;
+    const pr = s ? Number(s.porReceber) || 0 : 0;
+    somas.num += num; somas.pr += pr;
+    return cartao(loja.replace('Redemóvel - ', ''), num, pr);
+  }).join('') + cartao('Todas as lojas', Math.round(somas.num * 100) / 100, Math.round(somas.pr * 100) / 100);
 }
 
 async function carregarFolhaCaixa() {
