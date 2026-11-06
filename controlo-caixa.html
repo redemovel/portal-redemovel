@@ -292,6 +292,25 @@
     .rel-contab-loja table, .rel-contab-resumo table { font-size: .8rem !important; }
     .rel-contab-loja .resumo-item { border: 1px solid #ccc; }
   }
+  /* Painel "Numerário" do Mapa Global (2026-11-06, pedido do Ricardo:
+     lojas mais visíveis, layout mais explícito). */
+  .saldos-lojas { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .7rem; }
+  @media (max-width: 1000px) { .saldos-lojas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .saldos-lojas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .saldo-loja { background: var(--white); border: 1px solid var(--gray-light); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; text-align: center; }
+  .saldo-loja-nome { background: #e0f2f2; color: var(--teal-dark); font-size: 1.15rem; font-weight: 800; padding: .55rem .4rem; }
+  .saldo-loja-corpo { padding: .6rem .5rem .7rem; display: flex; flex-direction: column; gap: .5rem; flex: 1; }
+  .saldo-loja-linha { display: flex; flex-direction: column; align-items: center; gap: .05rem; }
+  .saldo-loja-linha span { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+  .saldo-loja-linha strong { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text); font-size: .95rem; }
+  .saldo-loja-linha.gaveta strong { font-size: 1.4rem; font-weight: 800; color: var(--teal-dark); }
+  .saldo-loja-linha.receber strong { color: var(--text-muted); font-weight: 600; }
+  .saldo-loja-linha.receber.tem span, .saldo-loja-linha.receber.tem strong { color: #b3000a; font-weight: 800; }
+  .saldo-loja-linha.banco { margin-top: auto; padding-top: .5rem; border-top: 1px dashed #c9dede; }
+  .saldo-loja-linha.banco span { color: var(--text); font-weight: 700; }
+  .saldo-loja-linha.banco strong { font-size: 1.1rem; font-weight: 800; }
+  .saldo-loja.total { border: 2px solid var(--teal); }
+  .saldo-loja.total .saldo-loja-nome { background: var(--teal); color: var(--white); }
 </style>
 </head>
 <body>
@@ -360,9 +379,9 @@
   <!-- ── Mapa Global (id interno "folha", ver nota acima) ── -->
   <div class="aba-conteudo" id="aba-folha" hidden>
     <div class="cartao">
-      <h2>💳 Saldo por loja — numerário e por receber</h2>
-      <p class="rodape-nota" style="margin-bottom:.75rem">Numerário: só dinheiro físico na gaveta da loja — cartão/MB/digital nunca passa pela gaveta. Por receber: documentos faturados que ainda aguardam pagamento do cliente. Total a entrar no banco = numerário + por receber.</p>
-      <div class="resumo-grelha" id="resumo-saldos"><div class="resumo-item">A carregar…</div></div>
+      <h2>💶 Numerário</h2>
+      <p class="rodape-nota" style="margin-bottom:1rem"><strong>Na gaveta</strong>: dinheiro físico na loja (cartão/MB/digital nunca passa pela gaveta). <strong>Por receber</strong>: documentos faturados que ainda aguardam pagamento do cliente. <strong>A entrar no banco</strong> = na gaveta + por receber.</p>
+      <div class="saldos-lojas" id="resumo-saldos"><div class="resumo-item">A carregar…</div></div>
     </div>
     <div class="cartao">
       <h2>Mapa Global — movimentos por loja</h2>
@@ -3500,30 +3519,38 @@ async function obterSaldosLojas(aceitarRecente) {
 
 async function carregarSaldos() {
   const el = document.getElementById('resumo-saldos');
-  el.innerHTML = '<div class="resumo-item"><span class="spinner"></span>A carregar…</div>';
+  el.innerHTML = '<div class="saldo-loja"><div class="saldo-loja-corpo"><span class="spinner"></span>A carregar…</div></div>';
   const r = await obterSaldosLojas(false);
   if (!r.ok) { el.innerHTML = '<div class="resumo-item">' + (r.erro || 'Erro ao carregar.') + '</div>'; return; }
-  // Por receber (2026-11-06, pedido do Ricardo): por baixo do numerário de
-  // cada loja, os documentos que aguardam pagamento do cliente e o total
-  // que a loja ainda tem de fazer entrar no banco; mais um cartão com o
-  // total de todas as lojas.
+  // Painel "Numerário" (2026-11-06, pedido do Ricardo): nome da loja bem
+  // visível no topo de cada cartão, nomes curtos e pela ordem pedida, e três
+  // linhas explícitas — na gaveta, por receber, a entrar no banco — mais um
+  // cartão com o total de todas as lojas.
+  const LOJAS_PAINEL = [
+    ['Redemóvel - Ovar', 'Ovar'], ['Redemóvel - Arouca', 'Arouca'], ['Redemóvel - Av. Liberdade', 'Liberdade'],
+    ['Redemóvel - CC 8ª Avenida', '8ª Avenida'], ['Redemóvel - Oliveira de Azeméis', 'OAZ'],
+  ];
+  NOMES_LOJAS.forEach(nome => { if (!LOJAS_PAINEL.some(([n]) => n === nome)) LOJAS_PAINEL.push([nome, nome.replace('Redemóvel - ', '')]); });
   const somas = { num: 0, pr: 0 };
-  const cartao = (titulo, num, pr) => {
+  const cartao = (titulo, num, pr, ehTotal) => {
     const total = Math.round((num + pr) * 100) / 100;
-    return `<div class="resumo-item">
-      <div class="valor">${formatarEuro(num)}</div>
-      <div class="rotulo">${titulo} — numerário</div>
-      <div style="margin-top:.45rem;font-size:.85rem;${Math.abs(pr) > 0.005 ? 'color:#b3000a;font-weight:700' : 'color:var(--text-muted)'}">🧾 Por receber: ${formatarEuro(pr)}</div>
-      <div style="margin-top:.2rem;font-size:.85rem;font-weight:800">Total a entrar no banco: ${formatarEuro(total)}</div>
+    const temPorReceber = Math.abs(pr) > 0.005;
+    return `<div class="saldo-loja${ehTotal ? ' total' : ''}">
+      <div class="saldo-loja-nome">${titulo}</div>
+      <div class="saldo-loja-corpo">
+        <div class="saldo-loja-linha gaveta"><span>Na gaveta</span><strong>${formatarEuro(num)}</strong></div>
+        <div class="saldo-loja-linha receber${temPorReceber ? ' tem' : ''}"><span>🧾 Por receber</span><strong>${formatarEuro(pr)}</strong></div>
+        <div class="saldo-loja-linha banco"><span>A entrar no banco</span><strong>${formatarEuro(total)}</strong></div>
+      </div>
     </div>`;
   };
-  el.innerHTML = NOMES_LOJAS.map(loja => {
+  el.innerHTML = LOJAS_PAINEL.map(([loja, curto]) => {
     const s = r.saldos.find(x => x.loja === loja);
     const num = s ? Number(s.saldoNumerario) || 0 : 0;
     const pr = s ? Number(s.porReceber) || 0 : 0;
     somas.num += num; somas.pr += pr;
-    return cartao(loja.replace('Redemóvel - ', ''), num, pr);
-  }).join('') + cartao('Todas as lojas', Math.round(somas.num * 100) / 100, Math.round(somas.pr * 100) / 100);
+    return cartao(curto, num, pr, false);
+  }).join('') + cartao('Todas as lojas', Math.round(somas.num * 100) / 100, Math.round(somas.pr * 100) / 100, true);
 }
 
 async function carregarFolhaCaixa() {
