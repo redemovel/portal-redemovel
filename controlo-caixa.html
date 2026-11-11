@@ -3998,7 +3998,7 @@ function formCorrigir(l) {
     <td colspan="7">
       <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;padding:.4rem 0">
         <div><label class="form-label" style="font-size:.68rem">Comissão real (€)</label>
-          <input type="number" step="0.01" min="0" max="${l.totalCIVA || ''}" class="form-input" style="font-size:.75rem;padding:.3rem;width:8rem" id="corrigir-valor-${l.id}"></div>
+          <input type="number" step="0.01" ${Number(l.totalCIVA) < 0 ? `min="${l.totalCIVA}" max="0" placeholder="ex.: -27,37"` : `min="0" max="${l.totalCIVA || ''}"`} class="form-input" style="font-size:.75rem;padding:.3rem;width:8rem" id="corrigir-valor-${l.id}"></div>
         <div style="flex:1;min-width:160px"><label class="form-label" style="font-size:.68rem">Motivo (obrigatório)</label>
           <input type="text" class="form-input" style="font-size:.75rem;padding:.3rem" id="corrigir-motivo-${l.id}"></div>
         <label style="font-size:.72rem;display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.4rem">
@@ -4068,8 +4068,11 @@ async function confirmarCorrecaoDocumento(id, refSAP) {
   const ensinarEl = document.getElementById('corrigir-ensinar-' + id);
   const comissaoValor = valorEl.value;
   const motivo = motivoEl.value;
-  if (comissaoValor === '' || Number(comissaoValor) < 0 || !Number.isFinite(Number(comissaoValor))) {
-    resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor da comissão real.</div>'; return;
+  // Devoluções (2026-11-11): a comissão de uma nota de crédito é o estorno,
+  // por isso pode ser negativa — o servidor valida o sinal contra o
+  // Total C/IVA do documento.
+  if (comissaoValor === '' || !Number.isFinite(Number(comissaoValor))) {
+    resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor da comissão real (numa devolução, negativo — ex.: -27,37).</div>'; return;
   }
   if (!motivo.trim()) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um motivo (fica registado para auditoria).</div>'; return; }
 
