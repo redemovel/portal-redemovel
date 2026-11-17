@@ -988,8 +988,8 @@
       <div id="ciclo-refs-aviso"></div>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Data</th><th>Tipo</th><th>Ref MB</th><th>Paga em</th><th>Valor pago</th><th>Documentos</th><th>Desvio (pago − documentos)</th></tr></thead>
-          <tbody id="ciclo-refs-corpo"><tr><td colspan="7">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Ref MB</th><th>Paga em</th><th>Valor pago</th><th>Documentos</th><th>Desvio (pago − documentos)</th><th></th></tr></thead>
+          <tbody id="ciclo-refs-corpo"><tr><td colspan="8">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
         </table>
       </div>
 
@@ -4199,14 +4199,14 @@ async function gerarRelatorioCicloUI() {
   if (!de || !ate) { statusEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (De/Até).</div>'; return; }
   statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
   corpo.innerHTML = '<tr><td colspan="11">A carregar…</td></tr>';
-  refsCorpo.innerHTML = '<tr><td colspan="7">A carregar…</td></tr>';
+  refsCorpo.innerHTML = '<tr><td colspan="8">A carregar…</td></tr>';
   resumoEl.innerHTML = ''; avisoEl.innerHTML = ''; refsResumo.innerHTML = ''; refsAviso.innerHTML = '';
 
   const [r, rr] = await Promise.all([
     chamarApi({ acao: 'relatorioCicloReferencias', dataInicio: de, dataFim: ate }),
     chamarApi({ acao: 'relatorioReferenciasLiquidadas', dataInicio: de, dataFim: ate }),
   ]);
-  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="11">—</td></tr>'; refsCorpo.innerHTML = '<tr><td colspan="7">—</td></tr>'; return; }
+  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="11">—</td></tr>'; refsCorpo.innerHTML = '<tr><td colspan="8">—</td></tr>'; return; }
   ULTIMO_RELATORIO_CICLO = r;
   ULTIMO_RELATORIO_REFS = rr.ok ? rr : null;
   statusEl.innerHTML = rr.ok ? '' : '<div class="alerta alerta-erro">Referências liquidadas: ' + (rr.erro || 'erro') + '</div>';
@@ -4226,10 +4226,9 @@ async function gerarRelatorioCicloUI() {
     if (tr.incompletas > 0) avisos.push(`⏳ ${tr.incompletas} referência(s) com documentos ainda por classificar — o desvio delas ainda pode mudar.`);
     if (rr.porPagar.length) avisos.push(`💳 ${rr.porPagar.length} referência(s) deste ciclo ainda por pagar (${formatarEuro(rr.porPagar.reduce((s, x) => s + x.montante, 0))}) — não entram no relatório: ${rr.porPagar.map(x => x.refMB).join(', ')}.`);
     refsAviso.innerHTML = avisos.map(a => `<div class="alerta alerta-aviso">${a}</div>`).join('');
-    refsCorpo.innerHTML = rr.referencias.length ? rr.referencias.map(linhaRefLiquidada).join('') + `<tr style="font-weight:800;border-top:2px solid #333"><td colspan="4">Total</td><td>${formatarEuro(tr.valorPago)}</td><td>${formatarEuro(tr.valorDocumentos)}</td><td style="color:${corDesvioRef(tr.desvio)}">${textoDesvioCiclo(tr.desvio)}</td></tr>`
-      : '<tr><td colspan="7">Sem referências pagas neste período.</td></tr>';
+    refsCorpo.innerHTML = rr.referencias.length ? htmlRefsAgrupadas(rr, false) : '<tr><td colspan="8">Sem referências pagas neste período.</td></tr>';
   } else {
-    refsCorpo.innerHTML = '<tr><td colspan="7">—</td></tr>';
+    refsCorpo.innerHTML = '<tr><td colspan="8">—</td></tr>';
   }
 
   // (B) Documentos do ciclo
@@ -4255,12 +4254,49 @@ async function gerarRelatorioCicloUI() {
 // inverso do desvio por documento, por isso a cor inverte.
 function corDesvioRef(v) { return corDesvioCiclo(v === null || v === undefined ? v : -v); }
 function dataPTCurta(iso) { const [a, m, d] = String(iso || '').slice(0, 10).split('-'); return a ? `${d}/${m}/${a}` : '—'; }
-function linhaRefLiquidada(x) {
+// Referências agrupadas por tipo (2026-11-17, pedido do Ricardo: "separa
+// as referências de carregamentos das do GSV criando os subtotais") —
+// Carregamentos primeiro, depois GSV, cada grupo com o seu subtotal, e o
+// total geral no fim. `paraImpressao` tira o botão e as cores fortes.
+const TIPOS_REF = [['carregamentos', 'Carregamentos / Pag. Faturas (Entidade 11470)'], ['gsv', 'GSV (Entidade 11814)']];
+function somarRefs(lista) {
+  const r2 = v => Math.round(v * 100) / 100;
+  return {
+    valorPago: r2(lista.reduce((s, x) => s + x.valorPago, 0)),
+    valorDocumentos: r2(lista.reduce((s, x) => s + (x.valorDocumentos || 0), 0)),
+    desvio: r2(lista.reduce((s, x) => s + (x.desvio || 0), 0)),
+  };
+}
+function htmlRefsAgrupadas(rr, paraImpressao) {
+  const cols = paraImpressao ? 7 : 8;
+  const cor = v => (paraImpressao ? 'inherit' : corDesvioRef(v));
+  const grupos = TIPOS_REF.map(([tp, nome]) => [nome, rr.referencias.filter(x => x.tipo === tp)])
+    .concat([['Outras', rr.referencias.filter(x => !TIPOS_REF.some(([tp]) => tp === x.tipo))]])
+    .filter(([, l]) => l.length);
+  const linhaSoma = (rotulo, soma, estilo) => `<tr style="${estilo}"><td colspan="4">${rotulo}</td><td>${formatarEuro(soma.valorPago)}</td><td>${formatarEuro(soma.valorDocumentos)}</td><td style="color:${cor(soma.desvio)}">${textoDesvioCiclo(soma.desvio)}</td>${paraImpressao ? '' : '<td></td>'}</tr>`;
+  const corpo = grupos.map(([nome, lista]) => `
+    <tr><td colspan="${cols}" style="font-weight:800;background:#e0f2f2;padding:.35rem .5rem">${nome}</td></tr>
+    ${lista.map(x => linhaRefLiquidada(x, paraImpressao)).join('')}
+    ${linhaSoma(`Subtotal ${nome.split(' (')[0]} (${lista.length} ref.)`, somarRefs(lista), 'font-weight:700;border-top:1px solid #333')}`).join('');
+  return corpo + linhaSoma('Total do mês', somarRefs(rr.referencias), 'font-weight:800;border-top:2px solid #333');
+}
+
+// Ver os documentos GSV de um dia na tabela de Reconciliação GSV, logo
+// abaixo — para investigar um desvio de uma referência.
+function verDocumentosDoDiaRef(dia) {
+  document.getElementById('filtro-de').value = dia;
+  document.getElementById('filtro-ate').value = dia;
+  const loja = document.getElementById('filtro-loja'); if (loja) loja.value = '';
+  carregarReconciliacao();
+  document.getElementById('corpo-reconciliacao').closest('.cartao').scrollIntoView({ behavior: 'smooth' });
+}
+
+function linhaRefLiquidada(x, paraImpressao) {
   const tipo = x.tipo === 'gsv' ? 'GSV' : x.tipo === 'carregamentos' ? 'Carregamentos' : x.tipo;
   const aviso = x.completo ? '' : ` <span title="${x.linhasSemClassificacao} linha(s) por classificar nesse dia">⏳</span>`;
   return `<tr><td>${dataPTCurta(x.dataReferencia)}</td><td>${tipo} (${x.entidade || ''})</td><td>${x.refMB}</td><td>${dataPTCurta(x.pagoEm)}</td>
     <td>${formatarEuro(x.valorPago)}</td><td>${x.valorDocumentos === null ? '—' : formatarEuro(x.valorDocumentos)}${aviso}</td>
-    <td style="color:${corDesvioRef(x.desvio)};font-weight:${x.desvio !== null && Math.abs(x.desvio) >= 0.005 ? 700 : 400}">${textoDesvioCiclo(x.desvio)}</td></tr>`;
+    <td style="color:${paraImpressao ? 'inherit' : corDesvioRef(x.desvio)};font-weight:${!paraImpressao && x.desvio !== null && Math.abs(x.desvio) >= 0.005 ? 700 : 400}">${textoDesvioCiclo(x.desvio)}</td>${paraImpressao ? '' : `<td>${x.tipo === 'gsv' ? `<button class="btn btn-secundario" style="padding:.25rem .55rem;font-size:.72rem;white-space:nowrap" onclick="verDocumentosDoDiaRef('${String(x.dataReferencia).slice(0, 10)}')">🔎 Documentos do dia</button>` : ''}</td>`}</tr>`;
 }
 
 // Cor do desvio (2026-11-17, pedido do Ricardo): desvio = comissão
@@ -4313,10 +4349,7 @@ function prepararImpressaoCiclo(r, rr, de, ate) {
   if (t.pendentes > 0) notas.push(`${t.pendentes} documento(s) GSV ainda sem comissão confirmada (${formatarEuro(t.totalFacturadoPendente)} facturado) — fora dos totais de comissão.`);
   if (rr.porPagar.length) notas.push(`${rr.porPagar.length} referência(s) do ciclo ainda por pagar (${formatarEuro(rr.porPagar.reduce((s, x) => s + x.montante, 0))}) — não incluídas.`);
   document.getElementById('ciclo-imp-pendentes').innerHTML = notas.map(n => `<p class="rodape-nota">⏳ ${n}</p>`).join('');
-  document.getElementById('ciclo-imp-corpo').innerHTML = rr.referencias.map(x => {
-    const tipo = x.tipo === 'gsv' ? 'GSV' : x.tipo === 'carregamentos' ? 'Carregamentos' : x.tipo;
-    return `<tr><td>${dataPTCurta(x.dataReferencia)}</td><td>${tipo} (${x.entidade || ''})</td><td>${x.refMB}</td><td>${dataPTCurta(x.pagoEm)}</td><td>${formatarEuro(x.valorPago)}</td><td>${x.valorDocumentos === null ? '—' : formatarEuro(x.valorDocumentos)}</td><td>${textoDesvioCiclo(x.desvio)}</td></tr>`;
-  }).join('') + `<tr class="total"><td colspan="4">Total do mês</td><td>${formatarEuro(tr.valorPago)}</td><td>${formatarEuro(tr.valorDocumentos)}</td><td>${textoDesvioCiclo(tr.desvio)}</td></tr>`;
+  document.getElementById('ciclo-imp-corpo').innerHTML = htmlRefsAgrupadas(rr, true);
   document.getElementById('ciclo-imprimivel').hidden = false;
 }
 
@@ -4332,12 +4365,16 @@ function exportarCicloCSV() {
   const rr = ULTIMO_RELATORIO_REFS;
   if (!rr) return;
   const tr = rr.totais;
-  const linhas = [
-    'Data;Tipo;Entidade;Referência;Paga em;Valor pago;Valor dos documentos;Desvio',
-    ...rr.referencias.map(x => [dataPTCurta(x.dataReferencia), x.tipo === 'gsv' ? 'GSV' : 'Carregamentos', x.entidade || '', x.refMB, dataPTCurta(x.pagoEm),
-      numCSV(x.valorPago), numCSV(x.valorDocumentos), numCSV(x.desvio)].join(';')),
-    ['Total', '', '', '', '', numCSV(tr.valorPago), numCSV(tr.valorDocumentos), numCSV(tr.desvio)].join(';'),
-  ];
+  const linhas = ['Data;Tipo;Entidade;Referência;Paga em;Valor pago;Valor dos documentos;Desvio'];
+  for (const [tp, nome] of TIPOS_REF) {
+    const lista = rr.referencias.filter(x => x.tipo === tp);
+    if (!lista.length) continue;
+    lista.forEach(x => linhas.push([dataPTCurta(x.dataReferencia), tp === 'gsv' ? 'GSV' : 'Carregamentos', x.entidade || '', x.refMB, dataPTCurta(x.pagoEm),
+      numCSV(x.valorPago), numCSV(x.valorDocumentos), numCSV(x.desvio)].join(';')));
+    const sb = somarRefs(lista);
+    linhas.push([`Subtotal ${nome.split(' (')[0]}`, '', '', '', '', numCSV(sb.valorPago), numCSV(sb.valorDocumentos), numCSV(sb.desvio)].join(';'));
+  }
+  linhas.push(['Total do mês', '', '', '', '', numCSV(tr.valorPago), numCSV(tr.valorDocumentos), numCSV(tr.desvio)].join(';'));
   descarregarCSV(linhas, `referencias-liquidadas_${rr.periodo.de}_a_${rr.periodo.ate}.csv`);
 }
 
