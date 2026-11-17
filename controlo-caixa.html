@@ -988,8 +988,8 @@
       <div id="ciclo-refs-aviso"></div>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Data</th><th>Tipo</th><th>Ref MB</th><th>Paga em</th><th>Valor pago</th><th>Documentos</th><th>Desvio (pago − documentos)</th><th></th></tr></thead>
-          <tbody id="ciclo-refs-corpo"><tr><td colspan="8">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Ref MB</th><th>Paga em</th><th>Valor pago</th><th>Documentos</th><th>Crédito / acerto</th><th>Desvio (pago − acerto − documentos)</th><th></th></tr></thead>
+          <tbody id="ciclo-refs-corpo"><tr><td colspan="9">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
         </table>
       </div>
 
@@ -1016,10 +1016,10 @@
         <div id="ciclo-imp-pendentes"></div>
         <h3>Referências liquidadas</h3>
         <table class="tabela-creditos-banco">
-          <thead><tr><th>Data</th><th>Tipo</th><th>Referência</th><th>Paga em</th><th>Valor pago</th><th>Valor dos documentos</th><th>Desvio</th></tr></thead>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Referência</th><th>Paga em</th><th>Valor pago</th><th>Valor dos documentos</th><th>Crédito / acerto</th><th>Desvio</th></tr></thead>
           <tbody id="ciclo-imp-corpo"></tbody>
         </table>
-        <p class="rodape-nota">Desvio = valor pago − valor dos documentos desse dia (GSV já líquido da comissão confirmada; Carregamentos/Pag. Faturas a 100%). Positivo = pago a mais; negativo = pago a menos. Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — para anexar/enviar à contabilidade.</p>
+        <p class="rodape-nota">Desvio = valor pago − crédito/acerto − valor dos documentos desse dia (GSV já líquido da comissão confirmada; Carregamentos/Pag. Faturas a 100%). Positivo = pago a mais; negativo = pago a menos. Crédito/acerto = valores acertados com a Vodafone fora das referências (ex.: encontro de contas), com o motivo indicado. Documento gerado automaticamente pelo Controlo de Caixa Redemóvel — para anexar/enviar à contabilidade.</p>
       </div>
     </div>
 
@@ -3526,8 +3526,12 @@ function estadoLinhaTexto(l) {
   // linhas de produto via Tabela Comercial (ver lib/comissoes.js,
   // tentarRepartirProporcionalmente) — é tão "Confirmada" como a comissão
   // de uma linha única; sem isto caía em "Estimada" por engano.
-  if (l.origemComissao === 'confirmada' || l.origemComissao === 'confirmada_repartida_proporcional') return 'Confirmada';
-  if (l.comissao !== null) return 'Estimada';
+  if (l.origemComissao === 'confirmada' || l.origemComissao === 'confirmada_repartida_proporcional' || l.origemComissao === 'confirmada_repartida_mesmo_produto') return 'Confirmada';
+  // 2026-11-17: rótulos para os casos que antes caíam em "Por classificar".
+  if (l.origemComissao === 'manual') return 'Corrigida';
+  if (l.origemComissao === 'sem_margem_manual') return 'Sem margem';
+  if (l.origemComissao === 'valor_zero' || (Number(l.totalCIVA) === 0 && l.comissao === 0)) return 'Sem valor (0 €)';
+  if (l.comissao !== null && l.comissao !== undefined) return 'Estimada';
   // 2026-10-19: Refª SAP sem margem nenhuma (Custos Administrativos,
   // Adiantamento de Reserva, Equip. Empréstimo — ver
   // margem.REFS_SAP_EXCLUIR_DA_MARGEM) nunca teve nem vai ter comissão,
@@ -3542,7 +3546,7 @@ function estadoLinhaTexto(l) {
   return 'Por classificar';
 }
 function estadoLinhaBadge(l) {
-  const classe = { Devolução: '', Ambíguo: 'badge-ambiguo', Confirmada: 'badge-ok', Estimada: 'badge-estimado', 'Por classificar': 'badge-atipico', 'Não comissionável': 'badge-neutro' };
+  const classe = { Devolução: '', Ambíguo: 'badge-ambiguo', Confirmada: 'badge-ok', Corrigida: 'badge-ok', Estimada: 'badge-estimado', 'Por classificar': 'badge-atipico', 'Não comissionável': 'badge-neutro', 'Sem margem': 'badge-neutro', 'Sem valor (0 €)': 'badge-neutro' };
   const texto = estadoLinhaTexto(l);
   const estilo = texto === 'Devolução' ? ' style="background:var(--gray-light);color:var(--text-muted)"' : '';
   return `<span class="badge ${classe[texto]}"${estilo}>${texto}</span>`;
@@ -4199,14 +4203,14 @@ async function gerarRelatorioCicloUI() {
   if (!de || !ate) { statusEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (De/Até).</div>'; return; }
   statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
   corpo.innerHTML = '<tr><td colspan="11">A carregar…</td></tr>';
-  refsCorpo.innerHTML = '<tr><td colspan="8">A carregar…</td></tr>';
+  refsCorpo.innerHTML = '<tr><td colspan="9">A carregar…</td></tr>';
   resumoEl.innerHTML = ''; avisoEl.innerHTML = ''; refsResumo.innerHTML = ''; refsAviso.innerHTML = '';
 
   const [r, rr] = await Promise.all([
     chamarApi({ acao: 'relatorioCicloReferencias', dataInicio: de, dataFim: ate }),
     chamarApi({ acao: 'relatorioReferenciasLiquidadas', dataInicio: de, dataFim: ate }),
   ]);
-  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="11">—</td></tr>'; refsCorpo.innerHTML = '<tr><td colspan="8">—</td></tr>'; return; }
+  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="11">—</td></tr>'; refsCorpo.innerHTML = '<tr><td colspan="9">—</td></tr>'; return; }
   ULTIMO_RELATORIO_CICLO = r;
   ULTIMO_RELATORIO_REFS = rr.ok ? rr : null;
   statusEl.innerHTML = rr.ok ? '' : '<div class="alerta alerta-erro">Referências liquidadas: ' + (rr.erro || 'erro') + '</div>';
@@ -4220,15 +4224,16 @@ async function gerarRelatorioCicloUI() {
       <div class="resumo-item"><div class="valor">${tr.referencias}</div><div class="rotulo">Referências liquidadas</div></div>
       <div class="resumo-item"><div class="valor">${formatarEuro(tr.valorPago)}</div><div class="rotulo">Total pago</div></div>
       <div class="resumo-item"><div class="valor">${formatarEuro(tr.valorDocumentos)}</div><div class="rotulo">Valor dos documentos</div></div>
-      <div class="resumo-item"><div class="valor" style="color:${corDesvioRef(tr.desvio)}">${textoDesvioCiclo(tr.desvio)}</div><div class="rotulo">Desvio mensal (pago − documentos)</div></div>
+      ${tr.acerto ? `<div class="resumo-item"><div class="valor">${formatarEuro(tr.acerto)}</div><div class="rotulo">Créditos / acertos fora das referências</div></div>` : ''}
+      <div class="resumo-item"><div class="valor" style="color:${corDesvioRef(tr.desvio)}">${textoDesvioCiclo(tr.desvio)}</div><div class="rotulo">Desvio mensal (pago − acertos − documentos)</div></div>
       ${porTipo}`;
     const avisos = [];
     if (tr.incompletas > 0) avisos.push(`⏳ ${tr.incompletas} referência(s) com documentos ainda por classificar — o desvio delas ainda pode mudar.`);
     if (rr.porPagar.length) avisos.push(`💳 ${rr.porPagar.length} referência(s) deste ciclo ainda por pagar (${formatarEuro(rr.porPagar.reduce((s, x) => s + x.montante, 0))}) — não entram no relatório: ${rr.porPagar.map(x => x.refMB).join(', ')}.`);
     refsAviso.innerHTML = avisos.map(a => `<div class="alerta alerta-aviso">${a}</div>`).join('');
-    refsCorpo.innerHTML = rr.referencias.length ? htmlRefsAgrupadas(rr, false) : '<tr><td colspan="8">Sem referências pagas neste período.</td></tr>';
+    refsCorpo.innerHTML = rr.referencias.length ? htmlRefsAgrupadas(rr, false) : '<tr><td colspan="9">Sem referências pagas neste período.</td></tr>';
   } else {
-    refsCorpo.innerHTML = '<tr><td colspan="8">—</td></tr>';
+    refsCorpo.innerHTML = '<tr><td colspan="9">—</td></tr>';
   }
 
   // (B) Documentos do ciclo
@@ -4264,16 +4269,17 @@ function somarRefs(lista) {
   return {
     valorPago: r2(lista.reduce((s, x) => s + x.valorPago, 0)),
     valorDocumentos: r2(lista.reduce((s, x) => s + (x.valorDocumentos || 0), 0)),
+    acerto: r2(lista.reduce((s, x) => s + (x.acerto || 0), 0)),
     desvio: r2(lista.reduce((s, x) => s + (x.desvio || 0), 0)),
   };
 }
 function htmlRefsAgrupadas(rr, paraImpressao) {
-  const cols = paraImpressao ? 7 : 8;
+  const cols = paraImpressao ? 8 : 9;
   const cor = v => (paraImpressao ? 'inherit' : corDesvioRef(v));
   const grupos = TIPOS_REF.map(([tp, nome]) => [nome, rr.referencias.filter(x => x.tipo === tp)])
     .concat([['Outras', rr.referencias.filter(x => !TIPOS_REF.some(([tp]) => tp === x.tipo))]])
     .filter(([, l]) => l.length);
-  const linhaSoma = (rotulo, soma, estilo) => `<tr style="${estilo}"><td colspan="4">${rotulo}</td><td>${formatarEuro(soma.valorPago)}</td><td>${formatarEuro(soma.valorDocumentos)}</td><td style="color:${cor(soma.desvio)}">${textoDesvioCiclo(soma.desvio)}</td>${paraImpressao ? '' : '<td></td>'}</tr>`;
+  const linhaSoma = (rotulo, soma, estilo) => `<tr style="${estilo}"><td colspan="4">${rotulo}</td><td>${formatarEuro(soma.valorPago)}</td><td>${formatarEuro(soma.valorDocumentos)}</td><td>${soma.acerto ? formatarEuro(soma.acerto) : '—'}</td><td style="color:${cor(soma.desvio)}">${textoDesvioCiclo(soma.desvio)}</td>${paraImpressao ? '' : '<td></td>'}</tr>`;
   const corpo = grupos.map(([nome, lista]) => `
     <tr><td colspan="${cols}" style="font-weight:800;background:#e0f2f2;padding:.35rem .5rem">${nome}</td></tr>
     ${lista.map(x => linhaRefLiquidada(x, paraImpressao)).join('')}
@@ -4294,9 +4300,37 @@ function verDocumentosDoDiaRef(dia) {
 function linhaRefLiquidada(x, paraImpressao) {
   const tipo = x.tipo === 'gsv' ? 'GSV' : x.tipo === 'carregamentos' ? 'Carregamentos' : x.tipo;
   const aviso = x.completo ? '' : ` <span title="${x.linhasSemClassificacao} linha(s) por classificar nesse dia">⏳</span>`;
+  const acertos = Array.isArray(x.acertos) ? x.acertos : [];
+  const celAcerto = acertos.length
+    ? `${formatarEuro(x.acerto)}<div class="rodape-nota" style="margin:0">${acertos.map(a => `${formatarEuro(a.valor)} — ${a.motivo}${paraImpressao ? '' : ` <a href="#" title="Remover este acerto" onclick="removerAcertoRefUI('${x.refMB}', '${a.id}'); return false;">✕</a>`}`).join('<br>')}</div>`
+    : '—';
+  const botoes = paraImpressao ? '' : `<td style="white-space:nowrap">${x.tipo === 'gsv' ? `<button class="btn btn-secundario" style="padding:.25rem .55rem;font-size:.72rem" onclick="verDocumentosDoDiaRef('${String(x.dataReferencia).slice(0, 10)}')">🔎 Documentos do dia</button> ` : ''}<button class="btn btn-secundario" style="padding:.25rem .55rem;font-size:.72rem" onclick="registarAcertoRefUI('${x.refMB}', ${Number(x.desvio) || 0})">± Acerto</button></td>`;
   return `<tr><td>${dataPTCurta(x.dataReferencia)}</td><td>${tipo} (${x.entidade || ''})</td><td>${x.refMB}</td><td>${dataPTCurta(x.pagoEm)}</td>
     <td>${formatarEuro(x.valorPago)}</td><td>${x.valorDocumentos === null ? '—' : formatarEuro(x.valorDocumentos)}${aviso}</td>
-    <td style="color:${paraImpressao ? 'inherit' : corDesvioRef(x.desvio)};font-weight:${!paraImpressao && x.desvio !== null && Math.abs(x.desvio) >= 0.005 ? 700 : 400}">${textoDesvioCiclo(x.desvio)}</td>${paraImpressao ? '' : `<td>${x.tipo === 'gsv' ? `<button class="btn btn-secundario" style="padding:.25rem .55rem;font-size:.72rem;white-space:nowrap" onclick="verDocumentosDoDiaRef('${String(x.dataReferencia).slice(0, 10)}')">🔎 Documentos do dia</button>` : ''}</td>`}</tr>`;
+    <td style="white-space:normal;max-width:15rem">${celAcerto}</td>
+    <td style="color:${paraImpressao ? 'inherit' : corDesvioRef(x.desvio)};font-weight:${!paraImpressao && x.desvio !== null && Math.abs(x.desvio) >= 0.005 ? 700 : 400}">${textoDesvioCiclo(x.desvio)}</td>${botoes}</tr>`;
+}
+
+// Acerto fora dos automatismos (2026-11-17, pedido do Ricardo): ex. um
+// crédito da Vodafone por encontro de contas que explica o desvio de uma
+// referência. Positivo = crédito recebido. Só Master; fica no relatório.
+async function registarAcertoRefUI(refMB, desvioAtual) {
+  const sugestao = Math.abs(desvioAtual) >= 0.005 ? String(desvioAtual.toFixed(2)).replace('.', ',') : '';
+  const valor = prompt(`Acerto na referência ${refMB}.\n\nValor (€) — positivo = crédito recebido da Vodafone fora das referências (ex.: encontro de contas); negativo = débito a mais.${sugestao ? `\nDesvio actual: ${sugestao} €` : ''}`, sugestao);
+  if (valor === null) return;
+  if (!Number.isFinite(Number(String(valor).replace(',', '.'))) || Number(String(valor).replace(',', '.')) === 0) { alert('Indica um valor diferente de zero.'); return; }
+  const motivo = prompt('Motivo (fica no relatório para a contabilidade) — ex.: "NC 8501371356 Adiantamento de Reserva creditada por encontro de contas":');
+  if (motivo === null) return;
+  if (!motivo.trim()) { alert('O motivo é obrigatório.'); return; }
+  const r = await chamarApi({ acao: 'registarAcertoReferencia', refMB, valor, motivo: motivo.trim() });
+  if (!r.ok) { alert(r.erro || 'Erro ao registar o acerto.'); return; }
+  gerarRelatorioCicloUI();
+}
+async function removerAcertoRefUI(refMB, acertoId) {
+  if (!confirm(`Remover este acerto da referência ${refMB}?`)) return;
+  const r = await chamarApi({ acao: 'removerAcertoReferencia', refMB, acertoId });
+  if (!r.ok) { alert(r.erro || 'Erro ao remover.'); return; }
+  gerarRelatorioCicloUI();
 }
 
 // Cor do desvio (2026-11-17, pedido do Ricardo): desvio = comissão
@@ -4339,6 +4373,7 @@ function prepararImpressaoCiclo(r, rr, de, ate) {
     <div class="resumo-item"><div class="valor">${tr.referencias}</div><div class="rotulo">Referências liquidadas</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(tr.valorPago)}</div><div class="rotulo">Total pago</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(tr.valorDocumentos)}</div><div class="rotulo">Valor dos documentos</div></div>
+    ${tr.acerto ? `<div class="resumo-item"><div class="valor">${formatarEuro(tr.acerto)}</div><div class="rotulo">Créditos / acertos fora das referências</div></div>` : ''}
     <div class="resumo-item"><div class="valor">${textoDesvioCiclo(tr.desvio)}</div><div class="rotulo">Desvio mensal</div></div>
     ${Object.entries(tr.porTipo).map(([tp, v]) => `<div class="resumo-item"><div class="valor">${formatarEuro(v.valorPago)}</div><div class="rotulo">${tipoTxt(tp)} — ${v.referencias} ref. · desvio ${textoDesvioCiclo(v.desvio)}</div></div>`).join('')}
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalFacturado)}</div><div class="rotulo">GSV facturado (${t.fechados} doc.)</div></div>
@@ -4365,16 +4400,16 @@ function exportarCicloCSV() {
   const rr = ULTIMO_RELATORIO_REFS;
   if (!rr) return;
   const tr = rr.totais;
-  const linhas = ['Data;Tipo;Entidade;Referência;Paga em;Valor pago;Valor dos documentos;Desvio'];
+  const linhas = ['Data;Tipo;Entidade;Referência;Paga em;Valor pago;Valor dos documentos;Crédito/acerto;Motivo do acerto;Desvio'];
   for (const [tp, nome] of TIPOS_REF) {
     const lista = rr.referencias.filter(x => x.tipo === tp);
     if (!lista.length) continue;
     lista.forEach(x => linhas.push([dataPTCurta(x.dataReferencia), tp === 'gsv' ? 'GSV' : 'Carregamentos', x.entidade || '', x.refMB, dataPTCurta(x.pagoEm),
-      numCSV(x.valorPago), numCSV(x.valorDocumentos), numCSV(x.desvio)].join(';')));
+      numCSV(x.valorPago), numCSV(x.valorDocumentos), x.acerto ? numCSV(x.acerto) : '', (x.acertos || []).map(a => a.motivo).join(' | ').replace(/;/g, ','), numCSV(x.desvio)].join(';')));
     const sb = somarRefs(lista);
-    linhas.push([`Subtotal ${nome.split(' (')[0]}`, '', '', '', '', numCSV(sb.valorPago), numCSV(sb.valorDocumentos), numCSV(sb.desvio)].join(';'));
+    linhas.push([`Subtotal ${nome.split(' (')[0]}`, '', '', '', '', numCSV(sb.valorPago), numCSV(sb.valorDocumentos), sb.acerto ? numCSV(sb.acerto) : '', '', numCSV(sb.desvio)].join(';'));
   }
-  linhas.push(['Total do mês', '', '', '', '', numCSV(tr.valorPago), numCSV(tr.valorDocumentos), numCSV(tr.desvio)].join(';'));
+  linhas.push(['Total do mês', '', '', '', '', numCSV(tr.valorPago), numCSV(tr.valorDocumentos), tr.acerto ? numCSV(tr.acerto) : '', '', numCSV(tr.desvio)].join(';'));
   descarregarCSV(linhas, `referencias-liquidadas_${rr.periodo.de}_a_${rr.periodo.ate}.csv`);
 }
 
