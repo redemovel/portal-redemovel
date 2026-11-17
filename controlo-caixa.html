@@ -1205,8 +1205,8 @@
       <div id="ciclo-pendentes-aviso"></div>
       <div class="tabela-scroll">
         <table>
-          <thead><tr><th>Nº Documento</th><th>Data</th><th>Loja</th><th>Colaborador</th><th>Produto</th><th>Facturado</th><th>Comissão confirmada</th><th>Valor líquido</th><th>Estimativa anterior</th><th>Desvio</th></tr></thead>
-          <tbody id="ciclo-corpo"><tr><td colspan="10">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
+          <thead><tr><th>Nº Documento</th><th>Data</th><th>Loja</th><th>Colaborador</th><th>Produto</th><th>Facturado</th><th>Comissão confirmada</th><th>Valor líquido</th><th>Estimativa anterior</th><th>Desvio</th><th></th></tr></thead>
+          <tbody id="ciclo-corpo"><tr><td colspan="11">Escolhe o período e clica em "Gerar relatório".</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -4159,11 +4159,11 @@ async function gerarRelatorioCicloUI() {
   btnExportar.hidden = true; btnImprimir.hidden = true;
   if (!de || !ate) { statusEl.innerHTML = '<div class="alerta alerta-erro">Indica o período (De/Até).</div>'; return; }
   statusEl.innerHTML = '<div class="alerta alerta-aviso"><span class="spinner"></span>A gerar…</div>';
-  corpo.innerHTML = '<tr><td colspan="10">A carregar…</td></tr>';
+  corpo.innerHTML = '<tr><td colspan="11">A carregar…</td></tr>';
   resumoEl.innerHTML = ''; avisoEl.innerHTML = '';
 
   const r = await chamarApi({ acao: 'relatorioCicloReferencias', dataInicio: de, dataFim: ate });
-  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="10">—</td></tr>'; return; }
+  if (!r.ok) { statusEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gerar o relatório.') + '</div>'; corpo.innerHTML = '<tr><td colspan="11">—</td></tr>'; return; }
   ULTIMO_RELATORIO_CICLO = r;
   statusEl.innerHTML = '';
 
@@ -4173,28 +4173,45 @@ async function gerarRelatorioCicloUI() {
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalFacturado)}</div><div class="rotulo">Total facturado</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalComissaoConfirmada)}</div><div class="rotulo">Comissão confirmada</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalLiquido)}</div><div class="rotulo">Valor líquido Vodafone</div></div>
-    <div class="resumo-item"><div class="valor" style="color:${Math.abs(t.totalDesvio) > 0.01 ? '#b3000a' : 'inherit'}">${formatarEuro(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa (${t.documentosComDesvio} doc.)</div></div>
+    <div class="resumo-item"><div class="valor" style="color:${corDesvioCiclo(t.totalDesvio)}">${textoDesvioCiclo(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa (${t.documentosComDesvio} doc.) — verde a nosso favor, vermelho contra nós</div></div>
   `;
 
   if (t.pendentes > 0) {
     avisoEl.innerHTML = `<div class="alerta alerta-aviso">⏳ ${t.pendentes} documento(s) ainda sem comissão confirmada pela Vodafone (${formatarEuro(t.totalFacturadoPendente)} facturado) — ficam de fora dos totais acima. O ciclo só está mesmo fechado quando este número for 0; costuma zerar depois de importar a "1ª Comissão" deste período.</div>`;
   }
 
-  corpo.innerHTML = r.documentos.length ? r.documentos.map(linhaCiclo).join('') : '<tr><td colspan="10">Sem documentos neste período.</td></tr>';
+  corpo.innerHTML = r.documentos.length ? r.documentos.map(linhaCiclo).join('') : '<tr><td colspan="11">Sem documentos neste período.</td></tr>';
   if (r.documentos.length) { btnExportar.hidden = false; btnImprimir.hidden = false; prepararImpressaoCiclo(r, de, ate); }
 }
 
+// Cor do desvio (2026-11-17, pedido do Ricardo): desvio = comissão
+// confirmada − estimativa. Positivo = a Vodafone deu-nos MAIS do que
+// esperávamos (a nosso favor, verde); negativo = deu MENOS (contra nós,
+// vermelho). Só um desvio de 0,00 € fica sem cor.
+function corDesvioCiclo(v) {
+  if (v === null || v === undefined || Math.abs(v) < 0.005) return 'inherit';
+  return v > 0 ? '#0a7a3d' : '#b3000a';
+}
+function textoDesvioCiclo(v) {
+  if (v === null || v === undefined) return '—';
+  return `${v >= 0.005 ? '+' : ''}${formatarEuro(v)}`;
+}
+
+// Nº Documento clicável + botão "Abrir / corrigir" (2026-11-17, pedido do
+// Ricardo: "aceder a cada documento e corrigir de imediato") — abre o
+// modal "Ver documento" com a correcção da comissão linha a linha.
 function linhaCiclo(d) {
   const dataCurta = (d.dataHora || '').slice(0, 10);
+  const linkDoc = `<a href="#" onclick="abrirModalDocumento('${d.nDocumento}', { corrigir: true }); return false;">${d.nDocumento}</a>`;
+  const botao = `<td><button class="btn btn-secundario" style="padding:.25rem .55rem;font-size:.72rem;white-space:nowrap" onclick="abrirModalDocumento('${d.nDocumento}', { corrigir: true })">✏️ Abrir / corrigir</button></td>`;
   if (d.pendente) {
-    return `<tr style="color:#92610a"><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
-      <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td colspan="2">⏳ por classificar</td><td colspan="2"></td></tr>`;
+    return `<tr style="color:#92610a"><td>${linkDoc}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
+      <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td colspan="2">⏳ por classificar</td><td colspan="2"></td>${botao}</tr>`;
   }
-  const corDesvio = d.desvio !== null && Math.abs(d.desvio) > 0.01 ? '#b3000a' : 'inherit';
-  return `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
-    <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}</td>
+  return `<tr><td>${linkDoc}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td>
+    <td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}${d.corrigidoManualmente ? ' <span title="Corrigida à mão (sem confirmação da Vodafone)">✍️</span>' : ''}</td>
     <td>${formatarEuro(d.valorLiquido)}</td><td>${d.comissaoEstimadaAnterior !== null ? formatarEuro(d.comissaoEstimadaAnterior) : '—'}</td>
-    <td style="color:${corDesvio}">${d.desvio !== null ? formatarEuro(d.desvio) : '—'}</td></tr>`;
+    <td style="color:${corDesvioCiclo(d.desvio)};font-weight:${d.desvio !== null && Math.abs(d.desvio) >= 0.005 ? 700 : 400}">${textoDesvioCiclo(d.desvio)}</td>${botao}</tr>`;
 }
 
 function prepararImpressaoCiclo(r, de, ate) {
@@ -4205,7 +4222,7 @@ function prepararImpressaoCiclo(r, de, ate) {
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalFacturado)}</div><div class="rotulo">Total facturado</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalComissaoConfirmada)}</div><div class="rotulo">Comissão confirmada</div></div>
     <div class="resumo-item"><div class="valor">${formatarEuro(t.totalLiquido)}</div><div class="rotulo">Valor líquido Vodafone</div></div>
-    <div class="resumo-item"><div class="valor">${formatarEuro(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa</div></div>
+    <div class="resumo-item"><div class="valor" style="color:${corDesvioCiclo(t.totalDesvio)}">${textoDesvioCiclo(t.totalDesvio)}</div><div class="rotulo">Desvio vs. estimativa</div></div>
   `;
   document.getElementById('ciclo-imp-pendentes').innerHTML = t.pendentes > 0
     ? `<div class="alerta alerta-aviso">⏳ ${t.pendentes} documento(s) ainda sem comissão confirmada (${formatarEuro(t.totalFacturadoPendente)}) — fora dos totais.</div>` : '';
@@ -4213,7 +4230,7 @@ function prepararImpressaoCiclo(r, de, ate) {
     const dataCurta = (d.dataHora || '').slice(0, 10);
     return d.pendente
       ? `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td><td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td colspan="2">por classificar</td><td></td></tr>`
-      : `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td><td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}</td><td>${formatarEuro(d.valorLiquido)}</td><td>${d.desvio !== null ? formatarEuro(d.desvio) : '—'}</td></tr>`;
+      : `<tr><td>${d.nDocumento}</td><td>${dataCurta}</td><td>${d.loja || ''}</td><td>${d.colaborador || ''}</td><td>${d.produto}</td><td>${formatarEuro(d.totalCIVA)}</td><td>${formatarEuro(d.comissaoConfirmada)}</td><td>${formatarEuro(d.valorLiquido)}</td><td style="color:${corDesvioCiclo(d.desvio)}">${textoDesvioCiclo(d.desvio)}</td></tr>`;
   }).join('');
   document.getElementById('ciclo-imprimivel').hidden = false;
 }
@@ -4266,7 +4283,7 @@ function linhasDocumentoParaTabela(linhas, mostrarNDocumento) {
   </table></div>`;
 }
 
-async function abrirModalDocumento(nDocumento) {
+async function abrirModalDocumento(nDocumento, opcoes = {}) {
   const modal = document.getElementById('modal-documento');
   const titulo = document.getElementById('modal-documento-titulo');
   const corpo = document.getElementById('modal-documento-corpo');
@@ -4291,7 +4308,51 @@ async function abrirModalDocumento(nDocumento) {
     <p class="rodape-nota" style="margin-bottom:.75rem">${primeira.loja || '—'} · ${primeira.colaborador || '—'} · ${primeira.dataHora || '—'}${primeira.tipo === 'Devoluções' ? ' · <strong style="color:#b3000a">Devolução</strong>' : ''}</p>
     ${linhasDocumentoParaTabela(r.linhas)}
     <p class="rodape-nota" style="margin-top:.75rem"><strong>Total do documento: ${formatarEuro(total)}</strong> (${r.linhas.length} linha(s))</p>
+    ${opcoes.corrigir && ehMaster() ? htmlCorrigirComissaoModal(r.linhas) : ''}
   `;
+}
+
+// Correcção da comissão dentro do modal (2026-11-17) — aberto a partir do
+// relatório do ciclo. Uma linha por produto comissionável, com a comissão
+// actual e de onde vem; grava com a mesma acção do "Corrigir" das
+// Referências (corrigirComissaoDocumentoGSV). Numa devolução a comissão é
+// o estorno (negativa). A comissão confirmada pela Vodafone continua
+// sempre a mandar no relatório.
+function htmlCorrigirComissaoModal(linhas) {
+  const comiss = linhas.filter(l => l.comissionavel !== false);
+  if (!comiss.length) return '<p class="rodape-nota">Este documento não tem produtos comissionáveis — não há comissão a corrigir.</p>';
+  const tem = v => v !== '' && v !== null && v !== undefined;
+  const origem = l => tem(l.comissaoConfirmada) ? `✅ confirmada Vodafone: ${formatarEuro(l.comissaoConfirmada)}`
+    : tem(l.comissaoManual) ? `✍️ corrigida à mão: ${formatarEuro(l.comissaoManual)}${l.comissaoManualMotivo ? ' — ' + l.comissaoManualMotivo : ''}`
+    : tem(l.comissaoEstimada) ? `≈ estimada: ${formatarEuro(l.comissaoEstimada)}` : '⏳ sem comissão';
+  return `<h3 style="margin-top:1rem">✏️ Corrigir a comissão</h3>
+    <p class="rodape-nota">A comissão confirmada pela Vodafone manda sempre. Uma correcção à mão fecha o documento no relatório do ciclo enquanto a Vodafone não confirmar nada.</p>
+    ${comiss.map(l => `<div style="border:1px solid var(--gray-light);border-radius:8px;padding:.6rem;margin-top:.5rem">
+      <div><strong>${l.refSAP || '—'}</strong> — ${l.descricaoSAP || ''}</div>
+      <div class="rodape-nota" style="margin:.2rem 0 .4rem">${origem(l)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end">
+        <div><label class="form-label">Comissão real (€)</label><input type="number" step="0.01" class="form-input" style="width:8rem" id="modal-corr-valor-${l.id}" placeholder="${Number(l.totalCIVA) < 0 ? 'ex.: -27,37' : 'ex.: 2,48'}"></div>
+        <div style="flex:1;min-width:12rem"><label class="form-label">Motivo (obrigatório)</label><input type="text" class="form-input" id="modal-corr-motivo-${l.id}"></div>
+        <label style="font-size:.75rem"><input type="checkbox" id="modal-corr-ensinar-${l.id}"> aplicar à Refª SAP ${l.refSAP || ''} para o futuro</label>
+        <button class="btn" onclick="gravarCorrecaoModal('${l.id}', '${l.nDocumento}')">Guardar</button>
+      </div>
+      <div id="modal-corr-resultado-${l.id}"></div>
+    </div>`).join('')}`;
+}
+
+async function gravarCorrecaoModal(id, nDocumento) {
+  const resultadoEl = document.getElementById('modal-corr-resultado-' + id);
+  const valor = document.getElementById('modal-corr-valor-' + id).value;
+  const motivo = document.getElementById('modal-corr-motivo-' + id).value;
+  const ensinarRegra = document.getElementById('modal-corr-ensinar-' + id).checked;
+  if (valor === '' || !Number.isFinite(Number(valor))) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica o valor da comissão (numa devolução, negativo).</div>'; return; }
+  if (!motivo.trim()) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">Indica um motivo (fica registado para auditoria).</div>'; return; }
+  resultadoEl.innerHTML = '<span class="spinner"></span> A gravar…';
+  const r = await chamarApi({ acao: 'corrigirComissaoDocumentoGSV', docId: id, comissaoValor: Number(valor), motivo: motivo.trim(), ensinarRegra });
+  if (!r.ok) { resultadoEl.innerHTML = '<div class="alerta alerta-erro">' + (r.erro || 'Erro ao gravar.') + '</div>'; return; }
+  // Recarrega o modal e, por trás, o relatório do ciclo (se estiver aberto).
+  await abrirModalDocumento(nDocumento, { corrigir: true });
+  if (document.getElementById('ciclo-de') && document.getElementById('ciclo-de').value && document.getElementById('ciclo-ate').value) gerarRelatorioCicloUI();
 }
 
 // Caixa Dia/Orientação — "🧾 Documentos" por colaborador: mostra as linhas
