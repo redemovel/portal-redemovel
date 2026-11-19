@@ -3561,7 +3561,7 @@ function renderLinhasReconciliacao(linhas) {
       <td>${formatarEuro(l.totalCIVA)}</td><td>${l.comissao !== null ? formatarEuro(l.comissao) : '—'}</td>
       <td>${l.origemComissao || '—'}</td><td>${l.valorLiquidoVodafone !== null ? formatarEuro(l.valorLiquidoVodafone) : '—'}</td>
       <td>${estadoLinhaBadge(l)}</td>
-      <td><button class="btn btn-secundario" style="padding:.25rem .6rem;font-size:.72rem" onclick="abrirModalDocumento('${l.nDocumento}')">Ver</button></td>
+      <td><button class="btn btn-secundario" style="padding:.25rem .6rem;font-size:.72rem" onclick="abrirModalDocumento('${l.nDocumento}', { corrigir: true })">${ehMaster() ? '✏️ Ver / corrigir' : 'Ver'}</button></td>
     </tr>`).join('');
 }
 
@@ -4056,7 +4056,7 @@ function detalheLinhasExcluidas(rec) {
   const corpo = linhas.map(l => `<tr>
     <td>${l.nDocumento || '—'}</td><td>${l.loja || '—'}</td><td>${l.colaborador || '—'}</td>
     <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
-    <td><button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${String(l.nDocumento || '').replace(/'/g, "\\'")}')">🧾 Ver documento</button></td>
+    <td><button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${String(l.nDocumento || '').replace(/'/g, "\\'")}', { corrigir: true })">🧾 Ver documento</button></td>
   </tr>`).join('');
   return `<details class="relatorio-detalhe" style="margin:.3rem 0 0;border:none;padding:0">
     <summary style="padding:.15rem 0;font-size:.74rem;color:var(--text-muted)">💤 ${rec.linhasExcluidas} linha(s) excluída(s) da margem (não comissionável)</summary>
@@ -4073,7 +4073,7 @@ function detalheLinhasExcluidas(rec) {
 // Comissão" mensal. Só visível para Master — a acção já recusa no servidor.
 function linhaCorrigir(l) {
   const nDocJs = String(l.nDocumento || '').replace(/'/g, "\\'");
-  const botaoVer = `<button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${nDocJs}')">🧾 Ver documento</button>`;
+  const botaoVer = `<button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="abrirModalDocumento('${nDocJs}', { corrigir: true })">🧾 Ver documento</button>`;
   if (!ehMaster()) return `<td>${botaoVer}</td>`;
   const idJs = String(l.id).replace(/'/g, "\\'");
   return `<td style="display:flex;gap:.3rem;flex-wrap:wrap">${botaoVer}<button class="btn btn-secundario" style="padding:.2rem .5rem;font-size:.7rem" onclick="mostrarFormCorrigir('${idJs}')">✏️ Corrigir</button></td>`;
@@ -4570,6 +4570,10 @@ async function gravarCorrecaoModal(id, nDocumento) {
   // Recarrega o modal e, por trás, o relatório do ciclo (se estiver aberto).
   await abrirModalDocumento(nDocumento, { corrigir: true });
   if (document.getElementById('ciclo-de') && document.getElementById('ciclo-de').value && document.getElementById('ciclo-ate').value) gerarRelatorioCicloUI();
+  // 2026-11-19: o modal também se abre (com correcção) a partir da
+  // Reconciliação GSV — se a tabela já estiver carregada, actualiza-a.
+  const corpoRec = document.getElementById('corpo-reconciliacao');
+  if (corpoRec && corpoRec.querySelector('button')) carregarReconciliacao();
 }
 
 // Caixa Dia/Orientação — "🧾 Documentos" por colaborador: mostra as linhas
