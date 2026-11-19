@@ -4112,8 +4112,22 @@ function badgeReconciliacao(ref) {
         <td>${l.refSAP || '—'}</td><td>${l.descricaoSAP || '—'}</td><td>${formatarEuro(l.totalCIVA)}</td>
         ${linhaCorrigir(l)}
       </tr>${formCorrigir(l)}`).join('');
+      // Comissão que fecha a referência (2026-11-19, pedido do Ricardo:
+      // "Poderia ter já mencionado o valor da diferença. dava-me alguma
+      // segurança"): o que falta explicar é montante − documentos já
+      // classificados; as linhas por classificar valem `faturadoPendente`
+      // (máximo possível − conhecido); para conferir, a comissão delas tem
+      // de ser a diferença entre esse faturado e o que falta.
+      const montante = Number(ref.montante) || 0;
+      const temIntervalo = rec.valorLiquidoMaximoPossivel !== undefined && rec.valorLiquidoMaximoPossivel !== null;
+      const faturadoPendente = temIntervalo ? Math.round((rec.valorLiquidoMaximoPossivel - rec.valorCalculado) * 100) / 100 : null;
+      const comissaoQueFecha = temIntervalo ? Math.round((rec.valorLiquidoMaximoPossivel - montante) * 100) / 100 : null;
+      const pct = faturadoPendente && Math.abs(faturadoPendente) > 0.005 ? (comissaoQueFecha / faturadoPendente * 100) : null;
+      const explicacao = temIntervalo
+        ? ` · já classificado: ${formatarEuro(rec.valorCalculado)} (faltam ${formatarEuro(Math.round((montante - rec.valorCalculado) * 100) / 100)}) · para conferir, a comissão destas linhas tem de ser <strong>${formatarEuro(comissaoQueFecha)}</strong>${pct !== null ? ` (≈ ${pct.toFixed(1).replace('.', ',')}% de ${formatarEuro(faturadoPendente)})` : ''}`
+        : '';
       return `<details class="relatorio-detalhe" style="margin:0;border:none;padding:0">
-        <summary style="padding:.15rem 0;font-size:.78rem;color:var(--text-muted)">⏳ a confirmar — ${rec.linhasSemClassificacao} linha(s) por classificar</summary>
+        <summary style="padding:.15rem 0;font-size:.78rem;color:var(--text-muted)">⏳ a confirmar — ${rec.linhasSemClassificacao} linha(s) por classificar${explicacao}</summary>
         <div class="tabela-scroll"><table style="margin:.4rem 0 .2rem">
           <thead><tr><th>Nº Doc.</th><th>Loja</th><th>Colaborador</th><th>Refª SAP</th><th>Descrição</th><th>Total C/IVA</th>${ehMaster() ? '<th></th>' : ''}</tr></thead>
           <tbody>${corpo || '<tr><td colspan="7">—</td></tr>'}</tbody>
