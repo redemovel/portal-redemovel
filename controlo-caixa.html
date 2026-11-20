@@ -2405,7 +2405,7 @@ async function carregarLigarPorReceber() {
     return `
     <tr>
       <td><input type="checkbox" class="cd-evento-ligar" value="${ev.chave}" onchange="limitarSelecaoLigarPorReceber(this)"></td>
-      <td>${ev.dia}</td><td>${ev.colaborador}</td>
+      <td>${ev.dia}${ev.mesAnterior ? ' <span class="rodape-nota">(mês anterior)</span>' : ''}</td><td>${ev.colaborador}</td>
       <td style="text-align:right;color:${ev.valor > 0 ? 'inherit' : '#b3000a'}">${ev.valor > 0 ? '+' : ''}${formatarEuro(ev.valor)}</td>
       <td style="text-align:right">${formatarEuro(restante)}</td>
       <td>${ev.observacoes || ''}</td>
@@ -2413,8 +2413,8 @@ async function carregarLigarPorReceber() {
   };
 
   el.innerHTML = `
-    <h3 style="margin:.9rem 0 .5rem">🔗 Ligar eventos "por receber" entre colaboradores diferentes</h3>
-    <p class="rodape-nota">Usa isto só quando o dinheiro de UM cliente foi mesmo declarado no apuro de OUTRO colaborador (ex.: o colega recebeu uma transferência que era de uma venda da colega do lado). Escolhe os dois eventos, indica quanto desta ligação liquida (pode ser só parte — o que sobra fica "por ligar" para mais tarde) e explica o que se passou; o que ligares deixa de aparecer na lista acima — o total da loja não muda, só a forma como é mostrado.</p>
+    <h3 style="margin:.9rem 0 .5rem">🔗 Ligar eventos "por receber"</h3>
+    <p class="rodape-nota">Usa isto quando o dinheiro de um cliente e a venda ficaram em eventos diferentes: declarado no apuro de OUTRO colaborador (ex.: o colega recebeu uma transferência que era de uma venda da colega do lado), noutro dia (ex.: pago hoje, faturado amanhã) ou noutro mês (dívida do mês anterior paga este mês). Escolhe os dois eventos, indica quanto desta ligação liquida (pode ser só parte — o que sobra fica "por ligar" para mais tarde) e explica o que se passou; o que ligares deixa de aparecer na lista acima — o total da loja não muda, só a forma como é mostrado.</p>
     ${porLigar.length >= 2 ? `
       <div class="tabela-scroll"><table>
         <thead><tr><th></th><th>Dia</th><th>Colaborador</th><th style="text-align:right">Valor</th><th style="text-align:right">Por ligar</th><th>Observações</th></tr></thead>
