@@ -3446,7 +3446,9 @@ async function carregarConfirmacoesRegras() {
 // "Continuar" está sempre visível (puxar, não empurrar).
 const DASH_ROLES = new Set(['master', 'coordenador', 'coordenador_lojas', 'assistente', 'assistente_loja']);
 let DASH_DADOS = null;
-let DASH_ESTADO = { mes: null, ambito: 'grupo', verComo: '', forcado: false };
+// Vista inicial do ranking por loja (pedido do Ricardo, 2026-11-21):
+// assistente vê a sua loja; coordenador/Master vêem "Por loja".
+let DASH_ESTADO = { mes: null, ambito: null, verComo: '', forcado: false };
 
 function dashTemAcesso() { return !!(SESSION && DASH_ROLES.has(String(SESSION.role || '').toLowerCase())); }
 function dashPct(v) { return v === null || v === undefined ? '—' : String(v).replace('.', ',') + '%'; }
@@ -3591,7 +3593,7 @@ function dashRender() {
   const kpis = alvo ? dashKpis(r, alvo) : '';
   const treinador = alvo && alvo.treinador && alvo.treinador.length
     ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>O que fazer a seguir</div></div><ul class="dash-treinador">${alvo.treinador.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
-    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = das tuas vendas de equipamento (telemóvel ou hotspot), quantas levaram pelo menos um acessório na mesma fatura. É o número que mais depende de ti em cada venda.</div></div>` : '');
+    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots), tal como a Vodafone o mede. Pode passar de 100%. Por baixo vês também quantas das tuas vendas levaram pelo menos um acessório.</div></div>` : '');
 
   const ranking = dashRankingHtml(r, alvo);
   const esquerda = treinador || (gestor && !alvo ? dashPorLojaHtml(r) : '');
@@ -3601,7 +3603,7 @@ function dashRender() {
   c.innerHTML = topo + hero + kpis +
     `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
     porAssociar + (r.conferencia ? dashConferenciaHtml(r.conferencia) : '') +
-    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = vendas (faturas) com equipamento que levaram pelo menos um acessório na mesma fatura. Acessórios = capas, carga e áudio; devoluções descontam nas unidades. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} vendas de equipamento no mês.</div>` +
+    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = acessórios ÷ equipamentos, em unidades, como a Vodafone o mede (pode passar de 100%). "Vendas com acessório" = faturas com equipamento que levaram pelo menos um acessório. Acessórios = capas, carga e áudio; devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
     dashBotaoContinuarHtml();
 }
 
@@ -3625,7 +3627,7 @@ function dashHeroPessoa(r, a) {
   const posG = a.posicaoGrupo ? `<b>${a.posicaoGrupo}.º</b><span>de ${r.totalNoRanking} no grupo</span>` : `<b>—</b><span>fora do ranking</span>`;
   const posL = a.posicaoLoja ? `<b>${a.posicaoLoja}.º</b><span>de ${a.totalLoja} em ${esc(dashLojaCurta(a.loja))}</span>` : `<b>—</b><span>${esc(dashLojaCurta(a.loja))}</span>`;
   return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Vendas com acessório</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div><div class="dash-barra-leg" style="margin-top:.3rem">${a.vendasComAcessorio} de ${a.vendas} vendas de equipamento</div></div>
+    <div><div class="dash-hero-lbl">Attach rate</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div><div class="dash-barra-leg" style="margin-top:.3rem">${a.acessorios} acessórios em ${a.equipamentos} equipamentos</div></div>
     <div>
       <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
       <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
@@ -3637,9 +3639,9 @@ function dashHeroPessoa(r, a) {
 function dashHeroGrupo(r) {
   const g = r.grupo || {};
   return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Vendas com acessório · grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
+    <div><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
     <div class="dash-hero-pos">
-      <div><b>${g.vendasComAcessorio || 0} / ${g.vendas || 0}</b><span>vendas com acessório</span></div>
+      <div><b>${dashPct(g.taxaVendasComAcessorio)}</b><span>vendas com acessório (${g.vendasComAcessorio || 0} de ${g.vendas || 0})</span></div>
       <div><b>${g.equipamentos || 0}</b><span>equipamentos</span></div>
       <div><b>${g.acessorios || 0}</b><span>acessórios</span></div>
       <div><b>${r.totalNoRanking}</b><span>no ranking</span></div>
@@ -3649,11 +3651,11 @@ function dashHeroGrupo(r) {
 
 function dashKpis(r, a) {
   const p = a.projecao;
-  const proj = p ? `<div class="dash-kpi"><div class="k">Ao ritmo atual</div><div class="v">${p.vendas} / ${p.acessorios}</div><div class="s">vendas de equip. / acessórios no fim do mês (projeção, não garantia)</div></div>`
+  const proj = p ? `<div class="dash-kpi"><div class="k">Ao ritmo atual</div><div class="v">${p.equipamentos} / ${p.acessorios}</div><div class="s">equip. / acess. no fim do mês (projeção, não garantia)</div></div>`
     : `<div class="dash-kpi"><div class="k">Mês fechado</div><div class="v">${dashPct(a.attachRate)}</div><div class="s">resultado final</div></div>`;
   return `<div class="dash-kpis">
-    <div class="dash-kpi"><div class="k">Vendas de equipamento</div><div class="v">${a.vendas}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
-    <div class="dash-kpi"><div class="k">Acessórios</div><div class="v">${a.acessorios}</div><div class="s">capas, carga e áudio (unidades)</div></div>
+    <div class="dash-kpi"><div class="k">Equipamentos</div><div class="v">${a.equipamentos}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
+    <div class="dash-kpi"><div class="k">Vendas com acessório</div><div class="v">${dashPct(a.taxaVendasComAcessorio)}</div><div class="s">${a.vendasComAcessorio} de ${a.vendas} vendas levaram pelo menos 1</div></div>
     <div class="dash-kpi"><div class="k">Valor em acessórios</div><div class="v" style="font-size:1.35rem">${dashEuro(a.valorAcessorios)}</div><div class="s">com IVA</div></div>
     ${proj}
   </div>`;
@@ -3667,14 +3669,14 @@ function dashBarraAttach(v) {
 function dashLinhaRanking(a, pos, alvo, mostrarLoja) {
   const eu = alvo && a.username === alvo.username;
   const fora = pos === null;
-  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.vendas}</td><td class="num">${a.vendasComAcessorio}</td></tr>`;
+  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
 }
 
 function dashRankingHtml(r, alvo) {
   const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
   const lojaAlvo = alvo ? alvo.loja : null;
   const lista = (r.ranking || []).slice();
-  let ambito = DASH_ESTADO.ambito;
+  let ambito = DASH_ESTADO.ambito || (gestor ? 'lojas' : 'loja');
   if (ambito === 'loja' && !lojaAlvo) ambito = gestor ? 'lojas' : 'grupo';
   if (ambito === 'lojas' && !gestor) ambito = 'grupo';
 
@@ -3682,7 +3684,7 @@ function dashRankingHtml(r, alvo) {
   if (lojaAlvo) tabsDef.push(['loja', dashLojaCurta(lojaAlvo)]);
   if (gestor) tabsDef.push(['lojas', 'Por loja']);
   const tabs = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
-  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Vendas</th><th class="num">c/ acess.</th></tr></thead>`;
+  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>`;
 
   let corpo;
   if (ambito === 'lojas') {
@@ -3718,22 +3720,25 @@ function dashResumoLojas(lista) {
   const lojas = {};
   lista.forEach(a => {
     const k = a.loja || '—';
-    const l = lojas[k] = lojas[k] || { vendas: 0, comAcessorio: 0, acessorios: 0, pessoas: 0 };
-    l.vendas += a.vendas || 0; l.comAcessorio += a.vendasComAcessorio || 0; l.acessorios += a.acessorios || 0; l.pessoas++;
+    const l = lojas[k] = lojas[k] || { equipamentos: 0, acessorios: 0, vendas: 0, comAcessorio: 0, pessoas: 0 };
+    l.equipamentos += a.equipamentos || 0; l.acessorios += a.acessorios || 0;
+    l.vendas += a.vendas || 0; l.comAcessorio += a.vendasComAcessorio || 0; l.pessoas++;
   });
   return Object.entries(lojas)
-    .map(([loja, l]) => ({ loja, ...l, rate: l.vendas > 0 ? Math.round((l.comAcessorio / l.vendas) * 1000) / 10 : null }))
-    .sort((a, b) => b.vendas - a.vendas);
+    .map(([loja, l]) => ({ loja, ...l,
+      rate: l.equipamentos > 0 ? Math.round((l.acessorios / l.equipamentos) * 1000) / 10 : null,
+      rateVendas: l.vendas > 0 ? Math.round((l.comAcessorio / l.vendas) * 1000) / 10 : null }))
+    .sort((a, b) => b.equipamentos - a.equipamentos);
 }
 
 function dashPorLojaHtml(r) {
   const linhas = dashResumoLojas(r.ranking || []).filter(l => l.loja !== '—');
   if (!linhas.length) return '';
   return `<div class="panel" style="overflow-x:auto">
-    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja · por volume de vendas</div></div>
-    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Vendas</th><th class="num">Attach</th><th class="num">c/ acess.</th><th class="num">Assist.</th></tr></thead>
-    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${l.vendas}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${l.comAcessorio}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
-    <div class="dash-nota">Ordenadas por número de vendas, não por attach: uma loja pequena com poucas vendas não é comparável com uma de cinco assistentes.</div>
+    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja · por volume</div></div>
+    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Equip.</th><th class="num">Attach</th><th class="num" title="Vendas com pelo menos 1 acessório">c/ acess.</th><th class="num">Assist.</th></tr></thead>
+    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${l.equipamentos}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${dashPct(l.rateVendas)}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+    <div class="dash-nota">Ordenadas por número de equipamentos, não por attach: uma loja pequena com poucas vendas não é comparável com uma de cinco assistentes.</div>
   </div>`;
 }
 
