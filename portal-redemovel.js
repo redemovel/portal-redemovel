@@ -3444,6 +3444,21 @@ async function carregarConfirmacoesRegras() {
 // Entrada forçada: depois de registar a entrada no ponto, um assistente que
 // não abre o dashboard há 2 dias ou mais é levado para cá; o botão
 // "Continuar" está sempre visível (puxar, não empurrar).
+// ── Cores da marca em todo o Portal (2026-11-21, pedido do Ricardo) ──────
+// O turquesa do logótipo é #12d6e0. Como fundo com texto branco (barra de
+// cima, botões, cabeçalhos) usa-se o mesmo tom mais escuro, para o texto
+// continuar legível; o turquesa puro fica para realces e barras. Sobrepõe as
+// variáveis :root do equipa-redemovel-v3.html sem mexer nesse ficheiro.
+(function aplicarCoresMarca() {
+  try {
+    if (document.getElementById('cores-marca')) return;
+    const st = document.createElement('style');
+    st.id = 'cores-marca';
+    st.textContent = ':root{--teal:#0b8e98;--teal-dark:#087680;--teal-light:#12d6e0;--teal-pale:#e2f9fb;--off-white:#f3fbfc;--gray-light:#e4f0f1;}';
+    document.head.appendChild(st);
+  } catch (_) {}
+})();
+
 const DASH_ROLES = new Set(['master', 'coordenador', 'coordenador_lojas', 'assistente', 'assistente_loja']);
 let DASH_DADOS = null;
 // Vista inicial do ranking por loja (pedido do Ricardo, 2026-11-21):
@@ -3471,7 +3486,7 @@ function dashGarantirEstilos() {
   st.textContent = `
   /* Cor da marca Redemóvel (turquesa do logótipo, #12d6e0), só neste painel.
      --dash-forte: versão mais escura do mesmo tom, para fundos com texto branco. */
-  #dash-assist { max-width:1100px; margin:0 auto; --dash-cor:#12d6e0; --dash-forte:#0b8e98; --dash-claro:#e2f9fb; --dash-texto:#087680; }
+  #dash-assist { max-width:1100px; margin:0 auto; --dash-cor:#12d6e0; --dash-forte:var(--teal); --dash-claro:var(--teal-pale); --dash-texto:var(--teal-dark); }
   .dash-topo { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
   .dash-controles { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
   .dash-controles .form-input { width:auto; padding:.45rem .7rem; font-size:.82rem; }
@@ -3569,6 +3584,7 @@ function dashContinuar() {
 
 function dashMudarMes(valor) { DASH_ESTADO.mes = valor || null; dashboardActivar(); }
 function dashMudarAmbito(a) { DASH_ESTADO.ambito = a; dashRender(); }
+function dashMudarOrdem(o) { DASH_ESTADO.ordem = o; dashRender(); }
 function dashMudarVerComo(u) { DASH_ESTADO.verComo = u; dashRender(); }
 
 function dashRender() {
@@ -3668,16 +3684,34 @@ function dashBarraAttach(v) {
   return `<div class="dash-mini"><i style="width:${larg}%"></i></div>`;
 }
 
-function dashLinhaRanking(a, pos, alvo, mostrarLoja) {
+// Ordenação do ranking (2026-11-21, pedido do Ricardo): por attach rate
+// (só quem tem a amostra mínima) ou por nº de telemóveis vendidos — para
+// quem vende 3 telemóveis com 3 acessórios não ficar sempre à frente de
+// quem vende 15.
+function dashOrdenar(pessoas, ordem, minEquip) {
+  const dentro = ordem === 'telemoveis'
+    ? pessoas.filter(a => a.telemoveis > 0).sort((x, y) => (y.telemoveis - x.telemoveis) || ((y.attachRate || 0) - (x.attachRate || 0)) || x.nome.localeCompare(y.nome, 'pt'))
+    : pessoas.filter(a => a.equipamentos >= minEquip).sort((x, y) => ((y.attachRate || 0) - (x.attachRate || 0)) || (y.equipamentos - x.equipamentos) || x.nome.localeCompare(y.nome, 'pt'));
+  const ids = new Set(dentro.map(a => a.username));
+  return { dentro, fora: pessoas.filter(a => !ids.has(a.username)) };
+}
+
+function dashLinhaRanking(a, pos, alvo, mostrarLoja, ordem) {
   const eu = alvo && a.username === alvo.username;
   const fora = pos === null;
-  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
+  const attach = `<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td>`;
+  const meio = ordem === 'telemoveis'
+    ? `<td class="num"><b>${a.telemoveis}</b></td>${attach}<td class="num">${a.acessorios}</td>`
+    : `${attach}<td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td>`;
+  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}${meio}</tr>`;
 }
 
 function dashRankingHtml(r, alvo) {
   const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
   const lojaAlvo = alvo ? alvo.loja : null;
   const lista = (r.ranking || []).slice();
+  const ordem = DASH_ESTADO.ordem === 'telemoveis' ? 'telemoveis' : 'attach';
+  const minEquip = r.minEquipamentosRanking || 3;
   let ambito = DASH_ESTADO.ambito || (gestor ? 'lojas' : 'loja');
   if (ambito === 'loja' && !lojaAlvo) ambito = gestor ? 'lojas' : 'grupo';
   if (ambito === 'lojas' && !gestor) ambito = 'grupo';
@@ -3685,34 +3719,40 @@ function dashRankingHtml(r, alvo) {
   const tabsDef = [['grupo', 'Grupo']];
   if (lojaAlvo) tabsDef.push(['loja', dashLojaCurta(lojaAlvo)]);
   if (gestor) tabsDef.push(['lojas', 'Por loja']);
-  const tabs = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
-  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>`;
+  const tabsAmbito = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
+  const tabsOrdem = `<div class="dash-tabs">${[['attach', 'Attach'], ['telemoveis', 'Telemóveis']].map(([k, t]) => `<button class="${ordem === k ? 'on' : ''}" onclick="dashMudarOrdem('${k}')">${t}</button>`).join('')}</div>`;
+  const colsMeio = ordem === 'telemoveis'
+    ? '<th class="num">Telem.</th><th class="num">Attach</th><th class="num">Acess.</th>'
+    : '<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th>';
+  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}${colsMeio}</tr></thead>`;
+  const linhas = (pessoas, mostrarLoja) => {
+    const { dentro, fora } = dashOrdenar(pessoas, ordem, minEquip);
+    return dentro.map((a, i) => dashLinhaRanking(a, i + 1, alvo, mostrarLoja, ordem)).join('') +
+      fora.map(a => dashLinhaRanking(a, null, alvo, mostrarLoja, ordem)).join('');
+  };
 
   let corpo;
   if (ambito === 'lojas') {
-    // Uma secção por loja, cada uma com os seus assistentes pela posição na
-    // loja. As lojas vão por VOLUME de vendas, não por attach: uma loja com
-    // 1 assistente e poucas vendas não deve "ganhar" a uma de 5 só por isso.
+    // Uma secção por loja (por volume), cada uma com os seus assistentes.
     const lojas = dashResumoLojas(lista).map(l => ({ ...l, pessoas: lista.filter(a => (a.loja || '—') === l.loja) }));
     corpo = `<table class="tbl dash-rank">${cab(false)}<tbody>${lojas.map(l => {
-      const dentro = l.pessoas.filter(a => a.posicaoLoja).sort((x, y) => x.posicaoLoja - y.posicaoLoja);
-      const fora = l.pessoas.filter(a => !a.posicaoLoja);
-      const nomeLoja = l.loja === '—' ? 'Sem vendas este mês' : dashLojaCurta(l.loja);
-      return `<tr class="dash-loja-hdr"><td colspan="2">${esc(nomeLoja)}</td><td class="num">${l.loja === '—' ? '' : dashPct(l.rate)}</td><td colspan="2"></td></tr>` +
-        dentro.map(a => dashLinhaRanking(a, a.posicaoLoja, alvo, false)).join('') +
-        fora.map(a => dashLinhaRanking(a, null, alvo, false)).join('');
+      const semVendas = l.loja === '—';
+      const nomeLoja = semVendas ? 'Sem vendas este mês' : dashLojaCurta(l.loja);
+      const resumo = semVendas ? '' : (ordem === 'telemoveis' ? `${l.telemoveis} telem. · ${dashPct(l.rate)}` : dashPct(l.rate));
+      return `<tr class="dash-loja-hdr"><td colspan="2">${esc(nomeLoja)}</td><td colspan="3" class="num">${resumo}</td></tr>` + linhas(l.pessoas, false);
     }).join('')}</tbody></table>`;
   } else {
     const porLoja = ambito === 'loja';
     const sel = porLoja ? lista.filter(a => a.loja === lojaAlvo) : lista;
-    const posDe = a => (porLoja ? a.posicaoLoja : a.posicaoGrupo);
-    const dentro = sel.filter(posDe).sort((x, y) => posDe(x) - posDe(y));
-    const fora = sel.filter(a => !posDe(a));
-    corpo = `<table class="tbl dash-rank">${cab(!porLoja)}<tbody>${dentro.map(a => dashLinhaRanking(a, posDe(a), alvo, !porLoja)).join('')}${fora.map(a => dashLinhaRanking(a, null, alvo, !porLoja)).join('')}</tbody></table>`;
+    corpo = `<table class="tbl dash-rank">${cab(!porLoja)}<tbody>${linhas(sel, !porLoja)}</tbody></table>`;
   }
+  const nota = ordem === 'telemoveis'
+    ? 'Ordenado pelo número de telemóveis vendidos no mês.'
+    : `Ordenado pelo attach rate. Entra no ranking quem tiver pelo menos ${minEquip} equipamentos no mês.`;
   return `<div class="panel" style="overflow-x:auto">
-    <div class="panel-header" style="flex-wrap:wrap;gap:.5rem"><div class="panel-title"><div class="dot"></div>Ranking · attach rate</div>${tabs}</div>
+    <div class="panel-header" style="flex-wrap:wrap;gap:.5rem"><div class="panel-title"><div class="dot"></div>Ranking</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${tabsOrdem}${tabsAmbito}</div></div>
     ${corpo}
+    <div class="dash-nota">${nota}</div>
   </div>`;
 }
 
@@ -3723,8 +3763,8 @@ function dashResumoLojas(lista) {
   const lojas = {};
   lista.forEach(a => {
     const k = a.loja || '—';
-    const l = lojas[k] = lojas[k] || { equipamentos: 0, acessorios: 0, vendas: 0, comAcessorio: 0, pessoas: 0 };
-    l.equipamentos += a.equipamentos || 0; l.acessorios += a.acessorios || 0;
+    const l = lojas[k] = lojas[k] || { equipamentos: 0, telemoveis: 0, acessorios: 0, vendas: 0, comAcessorio: 0, pessoas: 0 };
+    l.equipamentos += a.equipamentos || 0; l.telemoveis += a.telemoveis || 0; l.acessorios += a.acessorios || 0;
     l.vendas += a.vendas || 0; l.comAcessorio += a.vendasComAcessorio || 0; l.pessoas++;
   });
   return Object.entries(lojas)
@@ -3795,5 +3835,6 @@ window.dashboardActivar = dashboardActivar;
 window.dashContinuar = dashContinuar;
 window.dashMudarMes = dashMudarMes;
 window.dashMudarAmbito = dashMudarAmbito;
+window.dashMudarOrdem = dashMudarOrdem;
 window.dashMudarVerComo = dashMudarVerComo;
 window.dashAposEntrada = dashAposEntrada;
