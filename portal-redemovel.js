@@ -3518,6 +3518,7 @@ function dashGarantirEstilos() {
   .dash-rank .num { text-align:right; font-variant-numeric:tabular-nums; }
   .dash-nota { font-size:.75rem; color:var(--text-muted); margin-top:.6rem; line-height:1.5; }
   #dash-assist .panel-title .dot { background:var(--dash-cor); }
+  .dash-sub { font-size:.68rem; color:var(--text-muted); font-weight:400; white-space:nowrap; }
   .dash-attach { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; }
   .dash-attach span { min-width:3.2rem; text-align:right; }
   .dash-mini { width:70px; height:6px; background:var(--gray-light); border-radius:3px; overflow:hidden; }
@@ -3694,7 +3695,7 @@ function dashTel(a) { return a.telemoveis !== undefined && a.telemoveis !== null
 
 function dashOrdenar(pessoas, ordem, minEquip) {
   const dentro = ordem === 'telemoveis'
-    ? pessoas.filter(a => dashTel(a) > 0).sort((x, y) => (dashTel(y) - dashTel(x)) || ((y.attachRate || 0) - (x.attachRate || 0)) || x.nome.localeCompare(y.nome, 'pt'))
+    ? pessoas.filter(a => (a.equipamentos || 0) > 0).sort((x, y) => ((y.equipamentos || 0) - (x.equipamentos || 0)) || ((y.attachRate || 0) - (x.attachRate || 0)) || x.nome.localeCompare(y.nome, 'pt'))
     : pessoas.filter(a => a.equipamentos >= minEquip).sort((x, y) => ((y.attachRate || 0) - (x.attachRate || 0)) || (y.equipamentos - x.equipamentos) || x.nome.localeCompare(y.nome, 'pt'));
   const ids = new Set(dentro.map(a => a.username));
   return { dentro, fora: pessoas.filter(a => !ids.has(a.username)) };
@@ -3705,7 +3706,7 @@ function dashLinhaRanking(a, pos, alvo, mostrarLoja, ordem) {
   const fora = pos === null;
   const attach = `<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td>`;
   const meio = ordem === 'telemoveis'
-    ? `<td class="num"><b>${dashTel(a)}</b></td>${attach}<td class="num">${a.acessorios}</td>`
+    ? `<td class="num"><b>${a.equipamentos}</b>${a.hotspots ? `<div class="dash-sub">${dashTel(a)} telem. + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}</div>` : ''}</td>${attach}<td class="num">${a.acessorios}</td>`
     : `${attach}<td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td>`;
   return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}${meio}</tr>`;
 }
@@ -3726,7 +3727,7 @@ function dashRankingHtml(r, alvo) {
   const tabsAmbito = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
   const tabsOrdem = `<div class="dash-tabs">${[['attach', 'Attach'], ['telemoveis', 'Telemóveis']].map(([k, t]) => `<button class="${ordem === k ? 'on' : ''}" onclick="dashMudarOrdem('${k}')">${t}</button>`).join('')}</div>`;
   const colsMeio = ordem === 'telemoveis'
-    ? '<th class="num">Telem.</th><th class="num">Attach</th><th class="num">Acess.</th>'
+    ? '<th class="num">Equip.</th><th class="num">Attach</th><th class="num">Acess.</th>'
     : '<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th>';
   const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}${colsMeio}</tr></thead>`;
   const linhas = (pessoas, mostrarLoja) => {
@@ -3742,7 +3743,7 @@ function dashRankingHtml(r, alvo) {
     corpo = `<table class="tbl dash-rank">${cab(false)}<tbody>${lojas.map(l => {
       const semVendas = l.loja === '—';
       const nomeLoja = semVendas ? 'Sem vendas este mês' : dashLojaCurta(l.loja);
-      const resumo = semVendas ? '' : (ordem === 'telemoveis' ? `${l.telemoveis} telem. · ${dashPct(l.rate)}` : dashPct(l.rate));
+      const resumo = semVendas ? '' : (ordem === 'telemoveis' ? `${l.equipamentos} equip. · ${dashPct(l.rate)}` : dashPct(l.rate));
       return `<tr class="dash-loja-hdr"><td colspan="2">${esc(nomeLoja)}</td><td colspan="3" class="num">${resumo}</td></tr>` + linhas(l.pessoas, false);
     }).join('')}</tbody></table>`;
   } else {
@@ -3751,7 +3752,7 @@ function dashRankingHtml(r, alvo) {
     corpo = `<table class="tbl dash-rank">${cab(!porLoja)}<tbody>${linhas(sel, !porLoja)}</tbody></table>`;
   }
   const nota = ordem === 'telemoveis'
-    ? 'Ordenado pelo número de telemóveis vendidos no mês.'
+    ? 'Ordenado pelo número de equipamentos vendidos no mês (telemóveis + hotspots, os mesmos que contam no attach rate).'
     : `Ordenado pelo attach rate. Entra no ranking quem tiver pelo menos ${minEquip} equipamentos no mês.`;
   return `<div class="panel" style="overflow-x:auto">
     <div class="panel-header" style="flex-wrap:wrap;gap:.5rem"><div class="panel-title"><div class="dot"></div>Ranking</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${tabsOrdem}${tabsAmbito}</div></div>
