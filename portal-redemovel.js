@@ -3688,9 +3688,13 @@ function dashBarraAttach(v) {
 // (só quem tem a amostra mínima) ou por nº de telemóveis vendidos — para
 // quem vende 3 telemóveis com 3 acessórios não ficar sempre à frente de
 // quem vende 15.
+// Servidor antigo (antes de 21/11) não envia `telemoveis` no ranking: usa
+// os equipamentos, para nunca mostrar "undefined".
+function dashTel(a) { return a.telemoveis !== undefined && a.telemoveis !== null ? a.telemoveis : (a.equipamentos || 0); }
+
 function dashOrdenar(pessoas, ordem, minEquip) {
   const dentro = ordem === 'telemoveis'
-    ? pessoas.filter(a => a.telemoveis > 0).sort((x, y) => (y.telemoveis - x.telemoveis) || ((y.attachRate || 0) - (x.attachRate || 0)) || x.nome.localeCompare(y.nome, 'pt'))
+    ? pessoas.filter(a => dashTel(a) > 0).sort((x, y) => (dashTel(y) - dashTel(x)) || ((y.attachRate || 0) - (x.attachRate || 0)) || x.nome.localeCompare(y.nome, 'pt'))
     : pessoas.filter(a => a.equipamentos >= minEquip).sort((x, y) => ((y.attachRate || 0) - (x.attachRate || 0)) || (y.equipamentos - x.equipamentos) || x.nome.localeCompare(y.nome, 'pt'));
   const ids = new Set(dentro.map(a => a.username));
   return { dentro, fora: pessoas.filter(a => !ids.has(a.username)) };
@@ -3701,7 +3705,7 @@ function dashLinhaRanking(a, pos, alvo, mostrarLoja, ordem) {
   const fora = pos === null;
   const attach = `<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td>`;
   const meio = ordem === 'telemoveis'
-    ? `<td class="num"><b>${a.telemoveis}</b></td>${attach}<td class="num">${a.acessorios}</td>`
+    ? `<td class="num"><b>${dashTel(a)}</b></td>${attach}<td class="num">${a.acessorios}</td>`
     : `${attach}<td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td>`;
   return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}${meio}</tr>`;
 }
@@ -3764,7 +3768,7 @@ function dashResumoLojas(lista) {
   lista.forEach(a => {
     const k = a.loja || '—';
     const l = lojas[k] = lojas[k] || { equipamentos: 0, telemoveis: 0, acessorios: 0, vendas: 0, comAcessorio: 0, pessoas: 0 };
-    l.equipamentos += a.equipamentos || 0; l.telemoveis += a.telemoveis || 0; l.acessorios += a.acessorios || 0;
+    l.equipamentos += a.equipamentos || 0; l.telemoveis += dashTel(a); l.acessorios += a.acessorios || 0;
     l.vendas += a.vendas || 0; l.comAcessorio += a.vendasComAcessorio || 0; l.pessoas++;
   });
   return Object.entries(lojas)
