@@ -3498,12 +3498,20 @@ function dashGarantirEstilos() {
   .dash-rank tr.fora td { color:var(--text-muted); }
   .dash-rank .num { text-align:right; font-variant-numeric:tabular-nums; }
   .dash-nota { font-size:.75rem; color:var(--text-muted); margin-top:.6rem; line-height:1.5; }
+  .dash-attach { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; }
+  .dash-attach span { min-width:3.2rem; text-align:right; }
+  .dash-mini { width:70px; height:6px; background:var(--gray-light); border-radius:3px; overflow:hidden; }
+  .dash-mini i { display:block; height:100%; background:var(--teal); border-radius:3px; }
+  .dash-rank tr.eu .dash-mini i { background:#d97706; }
+  .dash-rank tr.dash-loja-hdr td { background:var(--teal-pale) !important; color:var(--teal); font-weight:800; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  .dash-lojas-clic tr[data-loja] { cursor:pointer; }
   @media(max-width:800px) {
     .dash-grid2 { grid-template-columns:1fr; }
     .dash-kpis { grid-template-columns:repeat(2,1fr); }
     .dash-hero { grid-template-columns:1fr; gap:.9rem; }
     .dash-hero-num { font-size:3rem; }
     .dash-rank .col-loja { display:none; }
+    .dash-mini { display:none; }
   }`;
   document.head.appendChild(st);
 }
@@ -3587,7 +3595,8 @@ function dashRender() {
 
   const ranking = dashRankingHtml(r, alvo);
   const esquerda = treinador || (gestor && !alvo ? dashPorLojaHtml(r) : '');
-  const porAssociar = r.porAssociar && r.porAssociar.length ? dashPorAssociarHtml(r.porAssociar) : '';
+  const porAssociar = (r.porAssociar && r.porAssociar.length ? dashPorAssociarHtml(r.porAssociar) : '') +
+    (r.foraDoPainel && r.foraDoPainel.length ? dashForaDoPainelHtml(r.foraDoPainel) : '');
 
   c.innerHTML = topo + hero + kpis +
     `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
@@ -3649,24 +3658,59 @@ function dashKpis(r, a) {
   </div>`;
 }
 
+function dashBarraAttach(v) {
+  const larg = Math.max(0, Math.min(100, Number(v) || 0));
+  return `<div class="dash-mini"><i style="width:${larg}%"></i></div>`;
+}
+
+function dashLinhaRanking(a, pos, alvo, mostrarLoja) {
+  const eu = alvo && a.username === alvo.username;
+  const fora = pos === null;
+  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
+}
+
 function dashRankingHtml(r, alvo) {
   const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
   const lojaAlvo = alvo ? alvo.loja : null;
-  const porLoja = DASH_ESTADO.ambito === 'loja' && lojaAlvo;
-  let lista = (r.ranking || []).slice();
-  if (porLoja) lista = lista.filter(a => a.loja === lojaAlvo);
-  const dentro = lista.filter(a => (porLoja ? a.posicaoLoja : a.posicaoGrupo)).sort((x, y) => (porLoja ? x.posicaoLoja - y.posicaoLoja : x.posicaoGrupo - y.posicaoGrupo));
-  const fora = lista.filter(a => !(porLoja ? a.posicaoLoja : a.posicaoGrupo));
-  const linha = (a, foraRank) => {
-    const pos = foraRank ? '—' : (porLoja ? a.posicaoLoja : a.posicaoGrupo) + '.º';
-    const eu = alvo && a.username === alvo.username;
-    return `<tr class="${eu ? 'eu' : ''}${foraRank ? ' fora' : ''}"><td>${pos}</td><td>${esc(a.nome)}</td>${porLoja ? '' : `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>`}<td class="num">${dashPct(a.attachRate)}</td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
-  };
-  const tabs = lojaAlvo ? `<div class="dash-tabs"><button class="${porLoja ? '' : 'on'}" onclick="dashMudarAmbito('grupo')">Grupo</button><button class="${porLoja ? 'on' : ''}" onclick="dashMudarAmbito('loja')">${esc(dashLojaCurta(lojaAlvo))}</button></div>` : '';
+  const lista = (r.ranking || []).slice();
+  let ambito = DASH_ESTADO.ambito;
+  if (ambito === 'loja' && !lojaAlvo) ambito = gestor ? 'lojas' : 'grupo';
+  if (ambito === 'lojas' && !gestor) ambito = 'grupo';
+
+  const tabsDef = [['grupo', 'Grupo']];
+  if (lojaAlvo) tabsDef.push(['loja', dashLojaCurta(lojaAlvo)]);
+  if (gestor) tabsDef.push(['lojas', 'Por loja']);
+  const tabs = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
+  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>`;
+
+  let corpo;
+  if (ambito === 'lojas') {
+    // Uma secção por loja (ordenadas pelo attach rate da loja), cada uma com
+    // os seus assistentes pela posição na loja.
+    const porLoja = {};
+    lista.forEach(a => { const k = a.loja || '—'; (porLoja[k] = porLoja[k] || []).push(a); });
+    const lojas = Object.entries(porLoja).map(([loja, pessoas]) => {
+      const eq = pessoas.reduce((t, a) => t + a.equipamentos, 0), ac = pessoas.reduce((t, a) => t + a.acessorios, 0);
+      return { loja, pessoas, rate: eq > 0 ? Math.round((ac / eq) * 1000) / 10 : null };
+    }).sort((x, y) => (y.rate ?? -1) - (x.rate ?? -1));
+    corpo = `<table class="tbl dash-rank">${cab(false)}<tbody>${lojas.map(l => {
+      const dentro = l.pessoas.filter(a => a.posicaoLoja).sort((x, y) => x.posicaoLoja - y.posicaoLoja);
+      const fora = l.pessoas.filter(a => !a.posicaoLoja);
+      return `<tr class="dash-loja-hdr"><td colspan="2">${esc(dashLojaCurta(l.loja))}</td><td class="num">${dashPct(l.rate)}</td><td colspan="2"></td></tr>` +
+        dentro.map(a => dashLinhaRanking(a, a.posicaoLoja, alvo, false)).join('') +
+        fora.map(a => dashLinhaRanking(a, null, alvo, false)).join('');
+    }).join('')}</tbody></table>`;
+  } else {
+    const porLoja = ambito === 'loja';
+    const sel = porLoja ? lista.filter(a => a.loja === lojaAlvo) : lista;
+    const posDe = a => (porLoja ? a.posicaoLoja : a.posicaoGrupo);
+    const dentro = sel.filter(posDe).sort((x, y) => posDe(x) - posDe(y));
+    const fora = sel.filter(a => !posDe(a));
+    corpo = `<table class="tbl dash-rank">${cab(!porLoja)}<tbody>${dentro.map(a => dashLinhaRanking(a, posDe(a), alvo, !porLoja)).join('')}${fora.map(a => dashLinhaRanking(a, null, alvo, !porLoja)).join('')}</tbody></table>`;
+  }
   return `<div class="panel" style="overflow-x:auto">
-    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Ranking · attach rate</div>${tabs}</div>
-    <table class="tbl dash-rank"><thead><tr><th>#</th><th>Nome</th>${porLoja ? '' : '<th class="col-loja">Loja</th>'}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>
-    <tbody>${dentro.map(a => linha(a, false)).join('')}${fora.map(a => linha(a, true)).join('')}</tbody></table>
+    <div class="panel-header" style="flex-wrap:wrap;gap:.5rem"><div class="panel-title"><div class="dot"></div>Ranking · attach rate</div>${tabs}</div>
+    ${corpo}
   </div>`;
 }
 
@@ -3686,7 +3730,19 @@ function dashPorLojaHtml(r) {
   return `<div class="panel" style="overflow-x:auto">
     <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja</div></div>
     <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th><th class="num">Assist.</th></tr></thead>
-    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${dashPct(l.rate)}</td><td class="num">${l.equipamentos}</td><td class="num">${l.acessorios}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${l.equipamentos}</td><td class="num">${l.acessorios}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+// Vendas que ficaram atribuídas a quem não está no painel (coordenador,
+// Master, utilizador inactivo...). Só o Master vê — serve para perceber
+// quando um assistente aparece com menos vendas do que devia.
+function dashForaDoPainelHtml(lista) {
+  return `<div class="panel" style="margin-bottom:1rem;overflow-x:auto">
+    <div class="panel-header"><div class="panel-title"><div class="dot" style="background:var(--warning)"></div>Vendas atribuídas a quem não está no ranking</div><span class="panel-badge">${lista.length}</span></div>
+    <div class="dash-nota" style="margin:0 0 .6rem 0">Se alguma destas pessoas é na verdade um assistente (ou o nome é de um utilizador antigo), corrige o perfil ou o nome alternativo no Portal / Controlo de Caixa → 👤 Colaboradores.</div>
+    <table class="tbl"><thead><tr><th>Nome</th><th>Utilizador</th><th>Perfil</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>
+    <tbody>${lista.map(p => `<tr><td>${esc(p.nome)}${p.ativo ? '' : ' <span style="color:var(--danger);font-size:.72rem;font-weight:700">inactivo</span>'}</td><td>${esc(p.username)}</td><td>${esc(p.role || '—')}</td><td class="num">${p.equipamentos}</td><td class="num">${p.acessorios}</td></tr>`).join('')}</tbody></table>
   </div>`;
 }
 
