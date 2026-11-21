@@ -3526,6 +3526,15 @@ function dashGarantirEstilos() {
   .dash-rank tr.eu .dash-mini i { background:#d97706; }
   .dash-rank tr.dash-loja-hdr td { background:var(--dash-claro) !important; color:var(--dash-texto); font-weight:800; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
   .dash-lojas-clic tr[data-loja] { cursor:pointer; }
+  .dash-hist-svg text { font-family:'Outfit',sans-serif; }
+  .dash-hist-svg .ax { font-size:11px; fill:var(--text-muted); font-variant-numeric:tabular-nums; }
+  .dash-hist-svg .ti { font-size:12.5px; font-weight:700; fill:var(--text); }
+  .dash-hist-svg .lg { font-size:11.5px; fill:var(--text-muted); }
+  .dash-hist-svg .lb { font-size:12px; font-weight:700; fill:var(--text); }
+  .dash-hist-svg .lb.mu { font-weight:500; fill:var(--text-muted); }
+  .dash-tip { position:absolute; pointer-events:none; background:var(--white); border:1px solid var(--gray-light); border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:.55rem .7rem; font-size:.78rem; color:var(--text); line-height:1.55; white-space:nowrap; z-index:5; }
+  .dash-tip i { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:.4rem; vertical-align:baseline; }
+  .dash-tip i.trac { height:0; border-top:2px dashed #8a9a9c; border-radius:0; width:12px; vertical-align:middle; }
   @media(max-width:800px) {
     .dash-grid2 { grid-template-columns:1fr; }
     .dash-kpis { grid-template-columns:repeat(2,1fr); }
@@ -3586,7 +3595,7 @@ function dashContinuar() {
 function dashMudarMes(valor) { DASH_ESTADO.mes = valor || null; dashboardActivar(); }
 function dashMudarAmbito(a) { DASH_ESTADO.ambito = a; dashRender(); }
 function dashMudarOrdem(o) { DASH_ESTADO.ordem = o; dashRender(); }
-function dashMudarVerComo(u) { DASH_ESTADO.verComo = u; dashRender(); }
+function dashMudarVerComo(u) { DASH_ESTADO.verComo = u; DASH_ESTADO.histLoja = ''; dashRender(); }
 
 function dashRender() {
   const r = DASH_DADOS, c = dashContentor();
@@ -3620,11 +3629,12 @@ function dashRender() {
   const porAssociar = (r.porAssociar && r.porAssociar.length ? dashPorAssociarHtml(r.porAssociar) : '') +
     (r.foraDoPainel && r.foraDoPainel.length ? dashForaDoPainelHtml(r.foraDoPainel) : '');
 
-  c.innerHTML = topo + hero + kpis +
+  c.innerHTML = topo + hero + kpis + dashHistHtml(r) +
     `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
     porAssociar + (r.conferencia ? dashConferenciaHtml(r.conferencia) : '') +
     `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = acessórios ÷ equipamentos, em unidades, como a Vodafone o mede (pode passar de 100%). Acessórios = capas, carga e áudio; devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
     dashBotaoContinuarHtml();
+  dashHistDesenhar();
 }
 
 function dashOpcoesMes(r) {
@@ -3822,6 +3832,204 @@ function dashPorAssociarHtml(linhas) {
     <tbody>${linhas.slice(0, 50).map(l => `<tr><td>${dashDataCurta(l.dia)}</td><td>${esc(dashLojaCurta(l.loja))}</td><td>${esc(l.colaborador)}</td><td>${esc(l.nDocumento)}</td><td>${esc(l.descricaoSAP)}</td></tr>`).join('')}</tbody></table>
   </div>`;
 }
+
+// ── Gráfico dos últimos 12 meses (2026-11-21, pedido do Ricardo) ─────────
+// Dois gráficos empilhados com o mesmo eixo dos meses (nunca dois eixos y):
+// em cima o attach rate (linha da pessoa/loja vs. tracejado cinzento do
+// grupo); em baixo equipamentos e acessórios em unidades (barras lado a
+// lado). Cores validadas (daltonismo/contraste): turquesa #0098a6 e âmbar
+// #d97706. Tooltip ao passar/tocar em cada mês; "Ver tabela" como
+// alternativa acessível. Só unidades e attach — nunca comissões.
+const DASH_COR_A = '#0098a6', DASH_COR_B = '#d97706', DASH_COR_REF = '#8a9a9c';
+const DASH_MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function dashMesCurto(m, comAno) { const [a, mm] = m.split('-').map(Number); return DASH_MESES_CURTOS[mm - 1] + (comAno ? ' ' + String(a).slice(2) : ''); }
+function dashMudarHistLoja(l) { DASH_ESTADO.histLoja = l; dashHistDesenhar(); }
+function dashHistTabela() { DASH_ESTADO.histTabela = !DASH_ESTADO.histTabela; dashHistDesenhar(); }
+
+// Série a mostrar: { nome, ref (grupo para comparar ou null), pontos[] }.
+function dashHistSerie() {
+  const r = DASH_DADOS;
+  const h = (r && r.historico) || [];
+  const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
+  const grupo = m => (m.semDados ? null : m.grupo);
+  let nome, val;
+  if (gestor && DASH_ESTADO.verComo) {
+    const a = (r.detalhe || []).find(x => x.username === DASH_ESTADO.verComo);
+    nome = a ? a.nome.split(' ')[0] : 'Assistente';
+    val = m => (m.pessoas && m.pessoas[DASH_ESTADO.verComo]) || null;
+  } else if (!gestor) {
+    nome = 'Tu'; val = m => m.eu || null;
+  } else if (DASH_ESTADO.histLoja) {
+    nome = dashLojaCurta(DASH_ESTADO.histLoja);
+    val = m => (m.lojas && m.lojas[DASH_ESTADO.histLoja]) || null;
+  } else {
+    return { nome: 'Grupo', ref: false, pontos: h.map(m => ({ mes: m.mes, semDados: !!m.semDados, v: grupo(m), g: null })) };
+  }
+  return { nome, ref: true, pontos: h.map(m => ({ mes: m.mes, semDados: !!m.semDados, v: m.semDados ? null : val(m), g: grupo(m) })) };
+}
+
+function dashHistHtml(r) {
+  if (!r.historico || !r.historico.length) return '';
+  const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
+  let selLoja = '';
+  if (gestor && !DASH_ESTADO.verComo) {
+    const lojas = new Set();
+    r.historico.forEach(m => Object.keys(m.lojas || {}).forEach(l => lojas.add(l)));
+    selLoja = `<select class="form-input" style="width:auto;padding:.3rem .6rem;font-size:.78rem" onchange="dashMudarHistLoja(this.value)"><option value="">Grupo</option>${[...lojas].sort().map(l => `<option value="${esc(l)}"${l === DASH_ESTADO.histLoja ? ' selected' : ''}>${esc(dashLojaCurta(l))}</option>`).join('')}</select>`;
+  }
+  return `<div class="panel" style="margin-bottom:1rem">
+    <div class="panel-header" style="flex-wrap:wrap;gap:.5rem"><div class="panel-title"><div class="dot"></div>Últimos 12 meses</div>
+      <div style="display:flex;gap:.5rem;align-items:center">${selLoja}<div class="dash-tabs"><button id="dash-hist-btn" onclick="dashHistTabela()">Ver tabela</button></div></div></div>
+    <div id="dash-hist" style="position:relative"></div>
+  </div>`;
+}
+
+function dashNiceMax(v, passo) { return Math.max(passo, Math.ceil((v || 0) / passo) * passo); }
+
+function dashHistDesenhar() {
+  const alvo = document.getElementById('dash-hist');
+  if (!alvo || !DASH_DADOS) return;
+  const s = dashHistSerie();
+  const btn = document.getElementById('dash-hist-btn');
+  if (btn) { btn.textContent = DASH_ESTADO.histTabela ? 'Ver gráfico' : 'Ver tabela'; btn.className = DASH_ESTADO.histTabela ? 'on' : ''; }
+  const comDados = s.pontos.filter(p => !p.semDados);
+  const primeiro = comDados.length ? comDados[0].mes : null;
+  const notaInicio = s.pontos.some(p => p.semDados) && primeiro
+    ? `<div class="dash-nota" style="margin-top:.2rem">Os dados começam em ${dashMesCurto(primeiro, true).replace(' ', ' de 20')} (arranque do Controlo de Caixa); os meses anteriores ficam vazios e vão enchendo com o tempo.</div>` : '';
+
+  if (DASH_ESTADO.histTabela) {
+    const linhas = s.pontos.filter(p => !p.semDados).reverse().map(p => {
+      const v = p.v || {};
+      return `<tr><td>${dashMesCurto(p.mes, true)}</td><td class="num">${dashPct(v.attachRate)}</td>${s.ref ? `<td class="num">${dashPct(p.g && p.g.attachRate)}</td>` : ''}<td class="num">${v.equipamentos ?? 0}</td><td class="num">${v.acessorios ?? 0}</td></tr>`;
+    }).join('');
+    alvo.innerHTML = `<div style="overflow-x:auto"><table class="tbl dash-rank"><thead><tr><th>Mês</th><th class="num">Attach ${esc(s.nome)}</th>${s.ref ? '<th class="num">Attach grupo</th>' : ''}<th class="num">Equip.</th><th class="num">Acess.</th></tr></thead><tbody>${linhas}</tbody></table></div>` + notaInicio;
+    return;
+  }
+
+  const W = Math.max(300, alvo.clientWidth || 700);
+  const estreito = W < 520;
+  const M = { l: 40, r: estreito ? 12 : 92, t: 34 };
+  const H1 = 150, GAP = 58, H2 = 120, B = 22;
+  const pw = W - M.l - M.r;
+  const n = s.pontos.length, bw = pw / n;
+  const x = i => M.l + bw * (i + 0.5);
+  const rates = [];
+  s.pontos.forEach(p => { if (p.v && p.v.attachRate !== null && p.v.attachRate !== undefined) rates.push(p.v.attachRate); if (p.g && p.g.attachRate !== null && p.g.attachRate !== undefined) rates.push(p.g.attachRate); });
+  const yMax1 = dashNiceMax(Math.max(100, ...rates), 25);
+  const y1 = v => M.t + H1 - (v / yMax1) * H1;
+  const top2 = M.t + H1 + GAP;
+  const vols = []; s.pontos.forEach(p => { if (p.v) vols.push(p.v.equipamentos || 0, p.v.acessorios || 0); });
+  const passo2 = Math.max(...vols, 0) > 50 ? 25 : (Math.max(...vols, 0) > 20 ? 10 : 5);
+  const yMax2 = dashNiceMax(Math.max(...vols, 0), passo2);
+  const y2 = v => top2 + H2 - (v / yMax2) * H2;
+  const Htot = top2 + H2 + B;
+  const fmt = v => String(v).replace('.', ',');
+  const t = (xx, yy, txt, extra) => `<text x="${xx}" y="${yy}" ${extra || ''}>${txt}</text>`;
+  let g = '';
+
+  // Grelhas e eixos (recessivos).
+  const passo1 = yMax1 > 150 ? 50 : 25;
+  for (let v = 0; v <= yMax1; v += passo1) g += `<line x1="${M.l}" x2="${M.l + pw}" y1="${y1(v)}" y2="${y1(v)}" stroke="#e4ecee" stroke-width="1"/>` + t(M.l - 6, y1(v) + 3.5, fmt(v) + '%', 'text-anchor="end" class="ax"');
+  if (yMax1 > 100) g += `<line x1="${M.l}" x2="${M.l + pw}" y1="${y1(100)}" y2="${y1(100)}" stroke="#c9d6d8" stroke-width="1" stroke-dasharray="2 3"/>`;
+  for (let v = 0; v <= yMax2; v += passo2) g += `<line x1="${M.l}" x2="${M.l + pw}" y1="${y2(v)}" y2="${y2(v)}" stroke="#e4ecee" stroke-width="1"/>` + t(M.l - 6, y2(v) + 3.5, v, 'text-anchor="end" class="ax"');
+  // Meses.
+  s.pontos.forEach((p, i) => {
+    const mostra = !estreito || i % 2 === (n - 1) % 2;
+    if (mostra) g += t(x(i), Htot - 6, dashMesCurto(p.mes, i === 0 || p.mes.endsWith('-01')), `text-anchor="middle" class="ax"${p.semDados ? ' style="opacity:.55"' : ''}`);
+  });
+
+  // Barras: equipamentos e acessórios lado a lado, 2px de folga, ponta arredondada.
+  const bLarg = Math.min(18, (bw - 10) / 2);
+  const barra = (cx, v, cor) => {
+    if (!v || v <= 0) return '';
+    const hh = Math.max(2, y2(0) - y2(v)), r = Math.min(4, bLarg / 2, hh);
+    const x0 = cx, y0 = y2(0) - hh;
+    return `<path d="M${x0},${y2(0)} V${y0 + r} Q${x0},${y0} ${x0 + r},${y0} H${x0 + bLarg - r} Q${x0 + bLarg},${y0} ${x0 + bLarg},${y0 + r} V${y2(0)} Z" fill="${cor}"/>`;
+  };
+  s.pontos.forEach((p, i) => {
+    if (!p.v) return;
+    g += barra(x(i) - bLarg - 1, p.v.equipamentos, DASH_COR_A) + barra(x(i) + 1, p.v.acessorios, DASH_COR_B);
+  });
+
+  // Linhas do attach (quebram nos meses sem dados).
+  const linha = (get, cor, tracejado) => {
+    let d = '', pts = '';
+    s.pontos.forEach((p, i) => {
+      const v = get(p);
+      if (v === null || v === undefined) { d += ' '; return; }
+      d += (d.endsWith(' ') || !d ? 'M' : 'L') + x(i) + ',' + y1(v);
+      pts += `<circle cx="${x(i)}" cy="${y1(v)}" r="${tracejado ? 3 : 4}" fill="${tracejado ? '#fff' : cor}" stroke="${tracejado ? cor : '#fff'}" stroke-width="2"/>`;
+    });
+    return `<path d="${d.trim()}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${tracejado ? ' stroke-dasharray="5 4"' : ''}/>` + pts;
+  };
+  const getV = p => (p.v ? p.v.attachRate : null), getG = p => (p.g ? p.g.attachRate : null);
+  if (s.ref) g += linha(getG, DASH_COR_REF, true);
+  g += linha(getV, DASH_COR_A, false);
+
+  // Rótulos directos no último mês com dados (largura grande) — só nome e valor final.
+  const ultimoIdx = (get) => { for (let i = n - 1; i >= 0; i--) { const v = get(s.pontos[i]); if (v !== null && v !== undefined) return i; } return -1; };
+  if (!estreito) {
+    const iv = ultimoIdx(getV), ig = s.ref ? ultimoIdx(getG) : -1;
+    let yv = iv >= 0 ? y1(getV(s.pontos[iv])) : null, yg = ig >= 0 ? y1(getG(s.pontos[ig])) : null;
+    if (yv !== null && yg !== null && Math.abs(yv - yg) < 14) { if (yv <= yg) { yv -= 7; yg += 7; } else { yv += 7; yg -= 7; } }
+    if (yv !== null) g += t(M.l + pw + 8, yv + 4, `${esc(s.nome)} ${fmt(getV(s.pontos[iv]))}%`, 'class="lb"');
+    if (yg !== null) g += t(M.l + pw + 8, yg + 4, `Grupo ${fmt(getG(s.pontos[ig]))}%`, 'class="lb mu"');
+  }
+  // Títulos e legendas dos dois gráficos (dentro do SVG, alinhados à esquerda).
+  const cabecalho = (yy, titulo, itens) => {
+    let out = t(M.l - 34, yy, esc(titulo), 'class="ti"'), xx = M.l - 34 + titulo.length * 7.4 + 16;
+    if (estreito) { yy += 16; xx = M.l - 34; }
+    itens.forEach(([nome, cor, trac]) => {
+      out += trac ? `<line x1="${xx}" x2="${xx + 16}" y1="${yy - 4}" y2="${yy - 4}" stroke="${cor}" stroke-width="2" stroke-dasharray="5 3"/>`
+                  : `<rect x="${xx}" y="${yy - 9}" width="10" height="10" rx="2" fill="${cor}"/>`;
+      out += t(xx + (trac ? 21 : 14), yy, esc(nome), 'class="lg"');
+      xx += (trac ? 21 : 14) + nome.length * 6.4 + 14;
+    });
+    return out;
+  };
+  g += cabecalho(estreito ? 4 : 14, 'Attach rate', [[s.nome, DASH_COR_A]].concat(s.ref ? [['Grupo', DASH_COR_REF, true]] : []));
+  g += cabecalho(top2 - (estreito ? 34 : 20), 'Equipamentos e acessórios', [['Equipamentos', DASH_COR_A], ['Acessórios', DASH_COR_B]]);
+
+  // Alvos de hover: uma coluna por mês, a toda a altura.
+  let hits = '';
+  s.pontos.forEach((p, i) => { hits += `<rect x="${M.l + bw * i}" y="0" width="${bw}" height="${Htot - B}" fill="transparent" data-i="${i}"/>`; });
+
+  alvo.innerHTML = `
+    <svg class="dash-hist-svg" width="${W}" height="${Htot}" viewBox="0 0 ${W} ${Htot}" role="img" aria-label="Attach rate, equipamentos e acessórios nos últimos 12 meses" style="display:block;overflow:visible">
+      <line id="dash-hist-cruz" x1="0" x2="0" y1="${M.t}" y2="${top2 + H2}" stroke="#9fb3b6" stroke-width="1" style="display:none"/>
+      ${g}${hits}
+    </svg>
+    <div id="dash-hist-tip" class="dash-tip" style="display:none"></div>` + notaInicio;
+
+  const svg = alvo.querySelector('svg'), tip = alvo.querySelector('#dash-hist-tip'), cruz = alvo.querySelector('#dash-hist-cruz');
+  const mostrar = i => {
+    const p = s.pontos[i];
+    cruz.setAttribute('x1', x(i)); cruz.setAttribute('x2', x(i)); cruz.style.display = '';
+    const v = p.v || {};
+    tip.innerHTML = p.semDados
+      ? `<b>${dashMesCurto(p.mes, true)}</b><div>Sem dados (antes do arranque)</div>`
+      : `<b>${dashMesCurto(p.mes, true)}</b>
+         <div><i style="background:${DASH_COR_A}"></i>${esc(s.nome)}: <b>${dashPct(v.attachRate)}</b></div>
+         ${s.ref ? `<div><i class="trac"></i>Grupo: ${dashPct(p.g && p.g.attachRate)}</div>` : ''}
+         <div><i style="background:${DASH_COR_A}"></i>${v.equipamentos ?? 0} equipamentos</div>
+         <div><i style="background:${DASH_COR_B}"></i>${v.acessorios ?? 0} acessórios</div>`;
+    tip.style.display = '';
+    const tw = tip.offsetWidth;
+    let left = x(i) + 12; if (left + tw > W) left = x(i) - tw - 12;
+    tip.style.left = Math.max(0, left) + 'px'; tip.style.top = (M.t + 30) + 'px';
+  };
+  const esconder = () => { tip.style.display = 'none'; cruz.style.display = 'none'; };
+  svg.querySelectorAll('rect[data-i]').forEach(rc => {
+    rc.addEventListener('mouseenter', () => mostrar(Number(rc.dataset.i)));
+    rc.addEventListener('click', () => mostrar(Number(rc.dataset.i)));
+  });
+  svg.addEventListener('mouseleave', esconder);
+}
+
+let DASH_HIST_RESIZE = null;
+window.addEventListener('resize', () => { clearTimeout(DASH_HIST_RESIZE); DASH_HIST_RESIZE = setTimeout(() => { if (document.getElementById('dash-hist')) dashHistDesenhar(); }, 150); });
+window.dashMudarHistLoja = dashMudarHistLoja;
+window.dashHistTabela = dashHistTabela;
 
 // Depois de uma entrada no ponto bem-sucedida: abre o dashboard se o
 // assistente não o vê há 2 dias ou mais. Nunca bloqueia nem atrasa o registo.
