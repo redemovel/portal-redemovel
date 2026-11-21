@@ -3591,7 +3591,7 @@ function dashRender() {
   const kpis = alvo ? dashKpis(r, alvo) : '';
   const treinador = alvo && alvo.treinador && alvo.treinador.length
     ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>O que fazer a seguir</div></div><ul class="dash-treinador">${alvo.treinador.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
-    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots). É o número que mais depende de ti em cada venda.</div></div>` : '');
+    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = das tuas vendas de equipamento (telemóvel ou hotspot), quantas levaram pelo menos um acessório na mesma fatura. É o número que mais depende de ti em cada venda.</div></div>` : '');
 
   const ranking = dashRankingHtml(r, alvo);
   const esquerda = treinador || (gestor && !alvo ? dashPorLojaHtml(r) : '');
@@ -3600,8 +3600,8 @@ function dashRender() {
 
   c.innerHTML = topo + hero + kpis +
     `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
-    porAssociar +
-    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
+    porAssociar + (r.conferencia ? dashConferenciaHtml(r.conferencia) : '') +
+    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = vendas (faturas) com equipamento que levaram pelo menos um acessório na mesma fatura. Acessórios = capas, carga e áudio; devoluções descontam nas unidades. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} vendas de equipamento no mês.</div>` +
     dashBotaoContinuarHtml();
 }
 
@@ -3625,7 +3625,7 @@ function dashHeroPessoa(r, a) {
   const posG = a.posicaoGrupo ? `<b>${a.posicaoGrupo}.º</b><span>de ${r.totalNoRanking} no grupo</span>` : `<b>—</b><span>fora do ranking</span>`;
   const posL = a.posicaoLoja ? `<b>${a.posicaoLoja}.º</b><span>de ${a.totalLoja} em ${esc(dashLojaCurta(a.loja))}</span>` : `<b>—</b><span>${esc(dashLojaCurta(a.loja))}</span>`;
   return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Attach rate</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div></div>
+    <div><div class="dash-hero-lbl">Vendas com acessório</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div><div class="dash-barra-leg" style="margin-top:.3rem">${a.vendasComAcessorio} de ${a.vendas} vendas de equipamento</div></div>
     <div>
       <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
       <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
@@ -3637,8 +3637,9 @@ function dashHeroPessoa(r, a) {
 function dashHeroGrupo(r) {
   const g = r.grupo || {};
   return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
+    <div><div class="dash-hero-lbl">Vendas com acessório · grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
     <div class="dash-hero-pos">
+      <div><b>${g.vendasComAcessorio || 0} / ${g.vendas || 0}</b><span>vendas com acessório</span></div>
       <div><b>${g.equipamentos || 0}</b><span>equipamentos</span></div>
       <div><b>${g.acessorios || 0}</b><span>acessórios</span></div>
       <div><b>${r.totalNoRanking}</b><span>no ranking</span></div>
@@ -3648,11 +3649,11 @@ function dashHeroGrupo(r) {
 
 function dashKpis(r, a) {
   const p = a.projecao;
-  const proj = p ? `<div class="dash-kpi"><div class="k">Ao ritmo atual</div><div class="v">${p.equipamentos} / ${p.acessorios}</div><div class="s">equip. / acess. no fim do mês (projeção, não garantia)</div></div>`
+  const proj = p ? `<div class="dash-kpi"><div class="k">Ao ritmo atual</div><div class="v">${p.vendas} / ${p.acessorios}</div><div class="s">vendas de equip. / acessórios no fim do mês (projeção, não garantia)</div></div>`
     : `<div class="dash-kpi"><div class="k">Mês fechado</div><div class="v">${dashPct(a.attachRate)}</div><div class="s">resultado final</div></div>`;
   return `<div class="dash-kpis">
-    <div class="dash-kpi"><div class="k">Equipamentos</div><div class="v">${a.equipamentos}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
-    <div class="dash-kpi"><div class="k">Acessórios</div><div class="v">${a.acessorios}</div><div class="s">capas, carga e áudio</div></div>
+    <div class="dash-kpi"><div class="k">Vendas de equipamento</div><div class="v">${a.vendas}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
+    <div class="dash-kpi"><div class="k">Acessórios</div><div class="v">${a.acessorios}</div><div class="s">capas, carga e áudio (unidades)</div></div>
     <div class="dash-kpi"><div class="k">Valor em acessórios</div><div class="v" style="font-size:1.35rem">${dashEuro(a.valorAcessorios)}</div><div class="s">com IVA</div></div>
     ${proj}
   </div>`;
@@ -3666,7 +3667,7 @@ function dashBarraAttach(v) {
 function dashLinhaRanking(a, pos, alvo, mostrarLoja) {
   const eu = alvo && a.username === alvo.username;
   const fora = pos === null;
-  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
+  return `<tr class="${eu ? 'eu' : ''}${fora ? ' fora' : ''}"><td>${fora ? '—' : pos + '.º'}</td><td>${esc(a.nome)}</td>${mostrarLoja ? `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>` : ''}<td class="num"><div class="dash-attach">${dashBarraAttach(a.attachRate)}<span>${dashPct(a.attachRate)}</span></div></td><td class="num">${a.vendas}</td><td class="num">${a.vendasComAcessorio}</td></tr>`;
 }
 
 function dashRankingHtml(r, alvo) {
@@ -3681,18 +3682,14 @@ function dashRankingHtml(r, alvo) {
   if (lojaAlvo) tabsDef.push(['loja', dashLojaCurta(lojaAlvo)]);
   if (gestor) tabsDef.push(['lojas', 'Por loja']);
   const tabs = tabsDef.length > 1 ? `<div class="dash-tabs">${tabsDef.map(([k, t]) => `<button class="${ambito === k ? 'on' : ''}" onclick="dashMudarAmbito('${k}')">${esc(t)}</button>`).join('')}</div>` : '';
-  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>`;
+  const cab = mostrarLoja => `<thead><tr><th>#</th><th>Nome</th>${mostrarLoja ? '<th class="col-loja">Loja</th>' : ''}<th class="num">Attach</th><th class="num">Vendas</th><th class="num">c/ acess.</th></tr></thead>`;
 
   let corpo;
   if (ambito === 'lojas') {
-    // Uma secção por loja (ordenadas pelo attach rate da loja), cada uma com
-    // os seus assistentes pela posição na loja.
-    const porLoja = {};
-    lista.forEach(a => { const k = a.loja || '—'; (porLoja[k] = porLoja[k] || []).push(a); });
-    const lojas = Object.entries(porLoja).map(([loja, pessoas]) => {
-      const eq = pessoas.reduce((t, a) => t + a.equipamentos, 0), ac = pessoas.reduce((t, a) => t + a.acessorios, 0);
-      return { loja, pessoas, rate: eq > 0 ? Math.round((ac / eq) * 1000) / 10 : null };
-    }).sort((x, y) => (y.rate ?? -1) - (x.rate ?? -1));
+    // Uma secção por loja, cada uma com os seus assistentes pela posição na
+    // loja. As lojas vão por VOLUME de vendas, não por attach: uma loja com
+    // 1 assistente e poucas vendas não deve "ganhar" a uma de 5 só por isso.
+    const lojas = dashResumoLojas(lista).map(l => ({ ...l, pessoas: lista.filter(a => (a.loja || '—') === l.loja) }));
     corpo = `<table class="tbl dash-rank">${cab(false)}<tbody>${lojas.map(l => {
       const dentro = l.pessoas.filter(a => a.posicaoLoja).sort((x, y) => x.posicaoLoja - y.posicaoLoja);
       const fora = l.pessoas.filter(a => !a.posicaoLoja);
@@ -3716,21 +3713,39 @@ function dashRankingHtml(r, alvo) {
 
 // Coordenador/Master, vista do grupo: attach rate por loja (soma dos
 // assistentes cuja loja principal é essa).
-function dashPorLojaHtml(r) {
+// Totais por loja (loja principal de cada assistente), ordenados por volume.
+function dashResumoLojas(lista) {
   const lojas = {};
-  (r.ranking || []).forEach(a => {
-    if (!a.loja) return;
-    const l = lojas[a.loja] = lojas[a.loja] || { equipamentos: 0, acessorios: 0, pessoas: 0 };
-    l.equipamentos += a.equipamentos; l.acessorios += a.acessorios; l.pessoas++;
+  lista.forEach(a => {
+    const k = a.loja || '—';
+    const l = lojas[k] = lojas[k] || { vendas: 0, comAcessorio: 0, acessorios: 0, pessoas: 0 };
+    l.vendas += a.vendas || 0; l.comAcessorio += a.vendasComAcessorio || 0; l.acessorios += a.acessorios || 0; l.pessoas++;
   });
-  const linhas = Object.entries(lojas)
-    .map(([loja, l]) => ({ loja, ...l, rate: l.equipamentos > 0 ? Math.round((l.acessorios / l.equipamentos) * 1000) / 10 : null }))
-    .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
+  return Object.entries(lojas)
+    .map(([loja, l]) => ({ loja, ...l, rate: l.vendas > 0 ? Math.round((l.comAcessorio / l.vendas) * 1000) / 10 : null }))
+    .sort((a, b) => b.vendas - a.vendas);
+}
+
+function dashPorLojaHtml(r) {
+  const linhas = dashResumoLojas(r.ranking || []).filter(l => l.loja !== '—');
   if (!linhas.length) return '';
   return `<div class="panel" style="overflow-x:auto">
-    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja</div></div>
-    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th><th class="num">Assist.</th></tr></thead>
-    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${l.equipamentos}</td><td class="num">${l.acessorios}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja · por volume de vendas</div></div>
+    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Vendas</th><th class="num">Attach</th><th class="num">c/ acess.</th><th class="num">Assist.</th></tr></thead>
+    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${l.vendas}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${l.comAcessorio}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+    <div class="dash-nota">Ordenadas por número de vendas, não por attach: uma loja pequena com poucas vendas não é comparável com uma de cinco assistentes.</div>
+  </div>`;
+}
+
+// Conferência das contagens (só Master): quantas linhas há no ficheiro e
+// porque é que algumas não entram — para bater com outras folhas.
+function dashConferenciaHtml(conf) {
+  const linha = (nome, c) => c ? `<tr><td>${nome}</td><td class="num">${c.linhas}</td><td class="num">${c.aZero ? '−' + c.aZero : 0}</td><td class="num">${c.devolucoes ? '−' + (2 * c.devolucoes) + ' (' + c.devolucoes + ')' : 0}</td><td class="num">${c.semColaborador ? '−' + c.semColaborador : 0}</td><td class="num">${c.foraDoPainel ? '−' + c.foraDoPainel : 0}</td><td class="num"><b>${c.contadas}</b></td></tr>` : '';
+  return `<div class="panel" style="margin-bottom:1rem;overflow-x:auto">
+    <div class="panel-header"><div class="panel-title"><div class="dot" style="background:var(--gray-mid)"></div>Conferência das contagens (unidades)</div></div>
+    <table class="tbl"><thead><tr><th></th><th class="num">Linhas no ficheiro</th><th class="num">A 0 €</th><th class="num">Devoluções</th><th class="num">Sem colaborador</th><th class="num">Fora do ranking</th><th class="num">Contadas</th></tr></thead>
+    <tbody>${linha('Equipamentos', conf.equipamentos)}${linha('Acessórios', conf.acessorios)}</tbody></table>
+    <div class="dash-nota">Uma devolução é uma linha no ficheiro, mas desconta uma unidade — por isso vale −2 em relação a uma contagem simples de linhas. "A 0 €" são ofertas (documento a 0 €). Só o Master vê este quadro.</div>
   </div>`;
 }
 
