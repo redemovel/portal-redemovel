@@ -3469,19 +3469,21 @@ function dashGarantirEstilos() {
   const st = document.createElement('style');
   st.id = 'dash-estilos';
   st.textContent = `
-  #dash-assist { max-width:1100px; margin:0 auto; }
+  /* Cor da marca Redemóvel (turquesa do logótipo, #12d6e0), só neste painel.
+     --dash-forte: versão mais escura do mesmo tom, para fundos com texto branco. */
+  #dash-assist { max-width:1100px; margin:0 auto; --dash-cor:#12d6e0; --dash-forte:#0b8e98; --dash-claro:#e2f9fb; --dash-texto:#087680; }
   .dash-topo { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
   .dash-controles { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
   .dash-controles .form-input { width:auto; padding:.45rem .7rem; font-size:.82rem; }
-  .dash-continuar { background:var(--teal); color:#fff; border:none; border-radius:10px; padding:.65rem 1.2rem; font-family:'Outfit',sans-serif; font-weight:700; font-size:.9rem; cursor:pointer; }
-  .dash-hero { background:var(--teal); color:#fff; border-radius:16px; padding:1.4rem 1.5rem; display:grid; grid-template-columns:auto 1fr; gap:1.5rem; align-items:center; margin-bottom:1rem; }
+  .dash-continuar { background:var(--dash-forte); color:#fff; border:none; border-radius:10px; padding:.65rem 1.2rem; font-family:'Outfit',sans-serif; font-weight:700; font-size:.9rem; cursor:pointer; }
+  .dash-hero { background:var(--dash-forte); color:#fff; border-radius:16px; padding:1.4rem 1.5rem; display:grid; grid-template-columns:auto 1fr; gap:1.5rem; align-items:center; margin-bottom:1rem; }
   .dash-hero-num { font-size:3.4rem; font-weight:800; line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
   .dash-hero-lbl { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:.75; margin-bottom:.35rem; }
   .dash-hero-pos { display:flex; gap:1.25rem; flex-wrap:wrap; }
   .dash-hero-pos div b { font-size:1.6rem; font-weight:800; display:block; line-height:1.1; }
   .dash-hero-pos div span { font-size:.75rem; opacity:.75; }
   .dash-barra { position:relative; height:8px; background:rgba(255,255,255,.2); border-radius:4px; margin-top:.9rem; }
-  .dash-barra i { position:absolute; left:0; top:0; bottom:0; background:#fff; border-radius:4px; }
+  .dash-barra i { position:absolute; left:0; top:0; bottom:0; background:var(--dash-cor); border-radius:4px; }
   .dash-barra em { position:absolute; top:-4px; width:2px; height:16px; background:#ffd166; }
   .dash-barra-leg { font-size:.7rem; opacity:.75; margin-top:.35rem; }
   .dash-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; margin-bottom:1rem; }
@@ -3490,22 +3492,23 @@ function dashGarantirEstilos() {
   .dash-kpi .v { font-size:1.6rem; font-weight:800; color:var(--text); margin-top:.25rem; font-variant-numeric:tabular-nums; }
   .dash-kpi .s { font-size:.72rem; color:var(--text-muted); margin-top:.1rem; }
   .dash-treinador { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
-  .dash-treinador li { background:var(--teal-pale); border-radius:10px; padding:.65rem .85rem; font-size:.88rem; color:var(--text); line-height:1.45; }
+  .dash-treinador li { background:var(--dash-claro); border-radius:10px; padding:.65rem .85rem; font-size:.88rem; color:var(--text); line-height:1.45; }
   .dash-grid2 { display:grid; grid-template-columns:1fr 1.3fr; gap:1rem; margin-bottom:1rem; }
   .dash-tabs { display:flex; gap:.35rem; }
   .dash-tabs button { border:1px solid var(--gray-light); background:var(--white); color:var(--text-muted); border-radius:8px; padding:.3rem .7rem; font-family:'Outfit',sans-serif; font-size:.75rem; font-weight:600; cursor:pointer; }
-  .dash-tabs button.on { background:var(--teal); border-color:var(--teal); color:#fff; }
+  .dash-tabs button.on { background:var(--dash-forte); border-color:var(--dash-forte); color:#fff; }
   .dash-rank td, .dash-rank th { white-space:nowrap; }
   .dash-rank tr.eu td { background:#fff7d6 !important; font-weight:700; }
   .dash-rank tr.fora td { color:var(--text-muted); }
   .dash-rank .num { text-align:right; font-variant-numeric:tabular-nums; }
   .dash-nota { font-size:.75rem; color:var(--text-muted); margin-top:.6rem; line-height:1.5; }
+  #dash-assist .panel-title .dot { background:var(--dash-cor); }
   .dash-attach { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; }
   .dash-attach span { min-width:3.2rem; text-align:right; }
   .dash-mini { width:70px; height:6px; background:var(--gray-light); border-radius:3px; overflow:hidden; }
-  .dash-mini i { display:block; height:100%; background:var(--teal); border-radius:3px; }
+  .dash-mini i { display:block; height:100%; background:var(--dash-cor); border-radius:3px; }
   .dash-rank tr.eu .dash-mini i { background:#d97706; }
-  .dash-rank tr.dash-loja-hdr td { background:var(--teal-pale) !important; color:var(--teal); font-weight:800; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  .dash-rank tr.dash-loja-hdr td { background:var(--dash-claro) !important; color:var(--dash-texto); font-weight:800; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
   .dash-lojas-clic tr[data-loja] { cursor:pointer; }
   @media(max-width:800px) {
     .dash-grid2 { grid-template-columns:1fr; }
@@ -3593,7 +3596,7 @@ function dashRender() {
   const kpis = alvo ? dashKpis(r, alvo) : '';
   const treinador = alvo && alvo.treinador && alvo.treinador.length
     ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>O que fazer a seguir</div></div><ul class="dash-treinador">${alvo.treinador.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
-    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots), tal como a Vodafone o mede. Pode passar de 100%. Por baixo vês também quantas das tuas vendas levaram pelo menos um acessório.</div></div>` : '');
+    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots), tal como a Vodafone o mede. Pode passar de 100%.</div></div>` : '');
 
   const ranking = dashRankingHtml(r, alvo);
   const esquerda = treinador || (gestor && !alvo ? dashPorLojaHtml(r) : '');
@@ -3603,7 +3606,7 @@ function dashRender() {
   c.innerHTML = topo + hero + kpis +
     `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
     porAssociar + (r.conferencia ? dashConferenciaHtml(r.conferencia) : '') +
-    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = acessórios ÷ equipamentos, em unidades, como a Vodafone o mede (pode passar de 100%). "Vendas com acessório" = faturas com equipamento que levaram pelo menos um acessório. Acessórios = capas, carga e áudio; devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
+    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = acessórios ÷ equipamentos, em unidades, como a Vodafone o mede (pode passar de 100%). Acessórios = capas, carga e áudio; devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
     dashBotaoContinuarHtml();
 }
 
@@ -3631,7 +3634,7 @@ function dashHeroPessoa(r, a) {
     <div>
       <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
       <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
-      <div class="dash-barra-leg">Barra branca: tu · traço amarelo: média do grupo (${dashPct(grupoRate)})</div>
+      <div class="dash-barra-leg">Barra: tu · traço amarelo: média do grupo (${dashPct(grupoRate)})</div>
     </div>
   </div>`;
 }
@@ -3641,7 +3644,6 @@ function dashHeroGrupo(r) {
   return `<div class="dash-hero">
     <div><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
     <div class="dash-hero-pos">
-      <div><b>${dashPct(g.taxaVendasComAcessorio)}</b><span>vendas com acessório (${g.vendasComAcessorio || 0} de ${g.vendas || 0})</span></div>
       <div><b>${g.equipamentos || 0}</b><span>equipamentos</span></div>
       <div><b>${g.acessorios || 0}</b><span>acessórios</span></div>
       <div><b>${r.totalNoRanking}</b><span>no ranking</span></div>
@@ -3655,7 +3657,7 @@ function dashKpis(r, a) {
     : `<div class="dash-kpi"><div class="k">Mês fechado</div><div class="v">${dashPct(a.attachRate)}</div><div class="s">resultado final</div></div>`;
   return `<div class="dash-kpis">
     <div class="dash-kpi"><div class="k">Equipamentos</div><div class="v">${a.equipamentos}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
-    <div class="dash-kpi"><div class="k">Vendas com acessório</div><div class="v">${dashPct(a.taxaVendasComAcessorio)}</div><div class="s">${a.vendasComAcessorio} de ${a.vendas} vendas levaram pelo menos 1</div></div>
+    <div class="dash-kpi"><div class="k">Acessórios</div><div class="v">${a.acessorios}</div><div class="s">capas, carga e áudio</div></div>
     <div class="dash-kpi"><div class="k">Valor em acessórios</div><div class="v" style="font-size:1.35rem">${dashEuro(a.valorAcessorios)}</div><div class="s">com IVA</div></div>
     ${proj}
   </div>`;
@@ -3695,7 +3697,8 @@ function dashRankingHtml(r, alvo) {
     corpo = `<table class="tbl dash-rank">${cab(false)}<tbody>${lojas.map(l => {
       const dentro = l.pessoas.filter(a => a.posicaoLoja).sort((x, y) => x.posicaoLoja - y.posicaoLoja);
       const fora = l.pessoas.filter(a => !a.posicaoLoja);
-      return `<tr class="dash-loja-hdr"><td colspan="2">${esc(dashLojaCurta(l.loja))}</td><td class="num">${dashPct(l.rate)}</td><td colspan="2"></td></tr>` +
+      const nomeLoja = l.loja === '—' ? 'Sem vendas este mês' : dashLojaCurta(l.loja);
+      return `<tr class="dash-loja-hdr"><td colspan="2">${esc(nomeLoja)}</td><td class="num">${l.loja === '—' ? '' : dashPct(l.rate)}</td><td colspan="2"></td></tr>` +
         dentro.map(a => dashLinhaRanking(a, a.posicaoLoja, alvo, false)).join('') +
         fora.map(a => dashLinhaRanking(a, null, alvo, false)).join('');
     }).join('')}</tbody></table>`;
@@ -3736,8 +3739,8 @@ function dashPorLojaHtml(r) {
   if (!linhas.length) return '';
   return `<div class="panel" style="overflow-x:auto">
     <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja · por volume</div></div>
-    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Equip.</th><th class="num">Attach</th><th class="num" title="Vendas com pelo menos 1 acessório">c/ acess.</th><th class="num">Assist.</th></tr></thead>
-    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${l.equipamentos}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${dashPct(l.rateVendas)}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Equip.</th><th class="num">Attach</th><th class="num">Acess.</th><th class="num">Assist.</th></tr></thead>
+    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${l.equipamentos}</td><td class="num"><div class="dash-attach">${dashBarraAttach(l.rate)}<span>${dashPct(l.rate)}</span></div></td><td class="num">${l.acessorios}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
     <div class="dash-nota">Ordenadas por número de equipamentos, não por attach: uma loja pequena com poucas vendas não é comparável com uma de cinco assistentes.</div>
   </div>`;
 }
