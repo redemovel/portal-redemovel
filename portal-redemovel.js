@@ -320,6 +320,9 @@ function showView(id, btn) {
   document.getElementById('view-'+id).classList.add('active');
   if (btn) { document.querySelectorAll('.nav-item:not(.soon)').forEach(n=>n.classList.remove('active')); btn.classList.add('active'); }
   try { sessionStorage.setItem('rmView', id); } catch(_) {}
+  // 2026-11-21: Dashboard de Atividade dos Assistentes (fim deste ficheiro).
+  if (id==='dashboard') { try { dashboardActivar(); } catch(e) { console.error('dashboard:', e); } }
+  else if (typeof DASH_ESTADO !== 'undefined') DASH_ESTADO.forcado = false;
 }
 
 // ═══════════════════════════════════════
@@ -593,11 +596,11 @@ function startClock() {
   tick();
   setInterval(tick, 1000);
 }
-function setPageDate() { document.getElementById('page-date').textContent=new Date().toLocaleDateString('pt-PT',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+function setPageDate() { if (!document.getElementById('page-date')) return; document.getElementById('page-date').textContent=new Date().toLocaleDateString('pt-PT',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
 function buildChart() {
   const data=[{day:'Seg',val:9800},{day:'Ter',val:11200},{day:'Qua',val:15800},{day:'Qui',val:8400},{day:'Sex',val:13200},{day:'Sáb',val:10600},{day:'Hj',val:12480}];
   const max=Math.max(...data.map(d=>d.val));
-  const container=document.getElementById('chart-bars'); container.innerHTML='';
+  const container=document.getElementById('chart-bars'); if (!container) return; container.innerHTML='';
   data.forEach((d,i)=>{ const pct=Math.round((d.val/max)*80); const wrap=document.createElement('div'); wrap.className='chart-bar-wrap'; const bar=document.createElement('div'); bar.className='chart-bar'+(i===data.length-1?' active':''); bar.style.height=pct+'%'; bar.title=`€ ${d.val.toLocaleString('pt-PT')}`; const label=document.createElement('span'); label.className='chart-label'; label.textContent=d.day; bar.appendChild(label); wrap.appendChild(bar); container.appendChild(wrap); });
 }
 
@@ -920,6 +923,7 @@ async function assRegistarEntradaLocalManual(localId, justificativa) {
     else { const el=document.getElementById('ass-ok'); el.textContent='✅ Registo efectuado com sucesso.'; el.style.display='block'; setTimeout(()=>{el.style.display='none';},4000); }
   }
   try { await assCarregarPonto(); } catch(e) { console.error('Erro a recarregar:', e); }
+  if (r && r.ok) dashAposEntrada();
 }
 
 // assAcao — versão única com feedback visual e protecção anti-duplo-clique
@@ -994,6 +998,8 @@ async function assAcao(tipo) {
   }
   // Recarregar SEMPRE, independentemente de ok/erro — garante UI sincronizada
   try { await assCarregarPonto(); } catch(e) { console.error('Erro a recarregar:', e); }
+  // 2026-11-21: entrada forçada no Dashboard (2 dias ou mais sem o abrir).
+  if (tipo==='entrada' && r && r.ok) dashAposEntrada();
 }
 
 function assAtualizarUI() {
@@ -3425,3 +3431,290 @@ async function carregarConfirmacoesRegras() {
   const total = COLABORADORES_CACHE.length, feitos = confirmadosSet.size;
   container.innerHTML = `<div style="margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted)">${feitos} de ${total} colaborador(es) confirmaram a leitura da versão actual.</div><table class="tbl"><thead><tr><th>Colaborador</th><th>Estado</th></tr></thead><tbody>${linhas}</tbody></table>`;
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  DASHBOARD DE ATIVIDADE — ASSISTENTES DE LOJA (2026-11-21)
+// ═══════════════════════════════════════════════════════════════════════════
+// Os números vêm do Controlo de Caixa (Faturação GSV), acção
+// `dashboardAssistentes` no serviço Cloud Run da caixa — com as mesmas
+// credenciais que o portal já tem em memória. Mede atividade em UNIDADES:
+// equipamentos (telemóveis + hotspots), acessórios e attach rate.
+// ⛔ Nunca mostra comissões — o servidor nem sequer as envia.
+// Entrada forçada: depois de registar a entrada no ponto, um assistente que
+// não abre o dashboard há 2 dias ou mais é levado para cá; o botão
+// "Continuar" está sempre visível (puxar, não empurrar).
+const DASH_ROLES = new Set(['master', 'coordenador', 'coordenador_lojas', 'assistente', 'assistente_loja']);
+let DASH_DADOS = null;
+let DASH_ESTADO = { mes: null, ambito: 'grupo', verComo: '', forcado: false };
+
+function dashTemAcesso() { return !!(SESSION && DASH_ROLES.has(String(SESSION.role || '').toLowerCase())); }
+function dashPct(v) { return v === null || v === undefined ? '—' : String(v).replace('.', ',') + '%'; }
+function dashEuro(v) { return (Number(v) || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' }); }
+function dashLojaCurta(l) {
+  const s = String(l || '');
+  if (/Ovar/i.test(s)) return 'Ovar';
+  if (/Arouca/i.test(s)) return 'Arouca';
+  if (/Liberdade/i.test(s)) return 'Liberdade';
+  if (/8/.test(s) && /Avenida/i.test(s)) return '8ª Avenida';
+  if (/Azem/i.test(s)) return 'OAZ';
+  return s.replace(/^Redemóvel\s*-\s*/i, '') || '—';
+}
+function dashDataCurta(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '—'; }
+
+function dashGarantirEstilos() {
+  if (document.getElementById('dash-estilos')) return;
+  const st = document.createElement('style');
+  st.id = 'dash-estilos';
+  st.textContent = `
+  #dash-assist { max-width:1100px; margin:0 auto; }
+  .dash-topo { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+  .dash-controles { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  .dash-controles .form-input { width:auto; padding:.45rem .7rem; font-size:.82rem; }
+  .dash-continuar { background:var(--teal); color:#fff; border:none; border-radius:10px; padding:.65rem 1.2rem; font-family:'Outfit',sans-serif; font-weight:700; font-size:.9rem; cursor:pointer; }
+  .dash-hero { background:var(--teal); color:#fff; border-radius:16px; padding:1.4rem 1.5rem; display:grid; grid-template-columns:auto 1fr; gap:1.5rem; align-items:center; margin-bottom:1rem; }
+  .dash-hero-num { font-size:3.4rem; font-weight:800; line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+  .dash-hero-lbl { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:.75; margin-bottom:.35rem; }
+  .dash-hero-pos { display:flex; gap:1.25rem; flex-wrap:wrap; }
+  .dash-hero-pos div b { font-size:1.6rem; font-weight:800; display:block; line-height:1.1; }
+  .dash-hero-pos div span { font-size:.75rem; opacity:.75; }
+  .dash-barra { position:relative; height:8px; background:rgba(255,255,255,.2); border-radius:4px; margin-top:.9rem; }
+  .dash-barra i { position:absolute; left:0; top:0; bottom:0; background:#fff; border-radius:4px; }
+  .dash-barra em { position:absolute; top:-4px; width:2px; height:16px; background:#ffd166; }
+  .dash-barra-leg { font-size:.7rem; opacity:.75; margin-top:.35rem; }
+  .dash-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; margin-bottom:1rem; }
+  .dash-kpi { background:var(--white); border:1px solid var(--gray-light); border-radius:12px; padding:.9rem 1rem; }
+  .dash-kpi .k { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-muted); }
+  .dash-kpi .v { font-size:1.6rem; font-weight:800; color:var(--text); margin-top:.25rem; font-variant-numeric:tabular-nums; }
+  .dash-kpi .s { font-size:.72rem; color:var(--text-muted); margin-top:.1rem; }
+  .dash-treinador { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
+  .dash-treinador li { background:var(--teal-pale); border-radius:10px; padding:.65rem .85rem; font-size:.88rem; color:var(--text); line-height:1.45; }
+  .dash-grid2 { display:grid; grid-template-columns:1fr 1.3fr; gap:1rem; margin-bottom:1rem; }
+  .dash-tabs { display:flex; gap:.35rem; }
+  .dash-tabs button { border:1px solid var(--gray-light); background:var(--white); color:var(--text-muted); border-radius:8px; padding:.3rem .7rem; font-family:'Outfit',sans-serif; font-size:.75rem; font-weight:600; cursor:pointer; }
+  .dash-tabs button.on { background:var(--teal); border-color:var(--teal); color:#fff; }
+  .dash-rank td, .dash-rank th { white-space:nowrap; }
+  .dash-rank tr.eu td { background:#fff7d6 !important; font-weight:700; }
+  .dash-rank tr.fora td { color:var(--text-muted); }
+  .dash-rank .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .dash-nota { font-size:.75rem; color:var(--text-muted); margin-top:.6rem; line-height:1.5; }
+  @media(max-width:800px) {
+    .dash-grid2 { grid-template-columns:1fr; }
+    .dash-kpis { grid-template-columns:repeat(2,1fr); }
+    .dash-hero { grid-template-columns:1fr; gap:.9rem; }
+    .dash-hero-num { font-size:3rem; }
+    .dash-rank .col-loja { display:none; }
+  }`;
+  document.head.appendChild(st);
+}
+
+function dashContentor() {
+  const v = document.getElementById('view-dashboard');
+  if (!v) return null;
+  let c = document.getElementById('dash-assist');
+  if (!c) {
+    // Esconde o "Dashboard em desenvolvimento" (1.º filho) mas mantém os
+    // elementos ocultos page-date/chart-bars de que o arranque precisa.
+    const placeholder = v.firstElementChild;
+    if (placeholder && placeholder.id !== 'page-date') placeholder.style.display = 'none';
+    c = document.createElement('div');
+    c.id = 'dash-assist';
+    v.insertBefore(c, v.firstChild);
+  }
+  return c;
+}
+
+async function dashboardActivar(opcoes) {
+  if (!dashTemAcesso()) return; // outros perfis continuam a ver o placeholder
+  dashGarantirEstilos();
+  const c = dashContentor();
+  if (!c) return;
+  if (opcoes && opcoes.forcado) DASH_ESTADO.forcado = true;
+  c.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-muted)">A carregar o teu mês…</div>';
+  let r;
+  try {
+    r = await fetchComRetry(CAIXA_API_URL, { acao: 'dashboardAssistentes', username: SESSION.username, password: SESSION.password, mes: DASH_ESTADO.mes || undefined }, 2);
+  } catch (e) { r = { ok: false, erro: 'Erro de ligação. Tenta outra vez.' }; }
+  if (!r || !r.ok) {
+    c.innerHTML = `<div class="panel" style="text-align:center;color:var(--danger)">${esc((r && r.erro) || 'Não foi possível carregar o dashboard.')}</div>${dashBotaoContinuarHtml()}`;
+    return;
+  }
+  DASH_DADOS = r;
+  if (!DASH_ESTADO.mes) DASH_ESTADO.mes = r.mes;
+  dashRender();
+}
+
+function dashBotaoContinuarHtml() {
+  return DASH_ESTADO.forcado ? '<div style="text-align:center;margin-top:1rem"><button class="dash-continuar" onclick="dashContinuar()">Continuar para a Assiduidade →</button></div>' : '';
+}
+
+function dashContinuar() {
+  DASH_ESTADO.forcado = false;
+  const btn = document.querySelector(`.nav-item[onclick*="'assiduidade'"]`);
+  showView('assiduidade', btn);
+}
+
+function dashMudarMes(valor) { DASH_ESTADO.mes = valor || null; dashboardActivar(); }
+function dashMudarAmbito(a) { DASH_ESTADO.ambito = a; dashRender(); }
+function dashMudarVerComo(u) { DASH_ESTADO.verComo = u; dashRender(); }
+
+function dashRender() {
+  const r = DASH_DADOS, c = dashContentor();
+  if (!r || !c) return;
+  const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
+  let alvo = r.eu || null;
+  if (gestor && DASH_ESTADO.verComo) alvo = (r.detalhe || []).find(a => a.username === DASH_ESTADO.verComo) || null;
+  const mesesOpc = dashOpcoesMes(r);
+
+  const topo = `
+  <div class="dash-topo">
+    <div>
+      <div class="page-title">${alvo ? (alvo === r.eu ? 'O meu mês' : esc(alvo.nome)) : 'Atividade das lojas'}</div>
+      <div class="page-subtitle">${esc(r.mesNome)} · dados de vendas até ${dashDataCurta(r.ultimoDiaComDados)}${r.diasFalta ? ` · faltam ${r.diasFalta} dia${r.diasFalta === 1 ? '' : 's'}` : ''}</div>
+    </div>
+    <div class="dash-controles">
+      ${gestor ? `<select class="form-input" onchange="dashMudarVerComo(this.value)"><option value="">Grupo (todos)</option>${(r.detalhe || []).map(a => `<option value="${esc(a.username)}"${a.username === DASH_ESTADO.verComo ? ' selected' : ''}>${esc(a.nome)}</option>`).join('')}</select>` : ''}
+      <select class="form-input" onchange="dashMudarMes(this.value)">${mesesOpc}</select>
+      ${DASH_ESTADO.forcado ? '<button class="dash-continuar" onclick="dashContinuar()">Continuar →</button>' : ''}
+    </div>
+  </div>`;
+
+  const hero = alvo ? dashHeroPessoa(r, alvo) : dashHeroGrupo(r);
+  const kpis = alvo ? dashKpis(r, alvo) : '';
+  const treinador = alvo && alvo.treinador && alvo.treinador.length
+    ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>O que fazer a seguir</div></div><ul class="dash-treinador">${alvo.treinador.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
+    : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots). É o número que mais depende de ti em cada venda.</div></div>` : '');
+
+  const ranking = dashRankingHtml(r, alvo);
+  const esquerda = treinador || (gestor && !alvo ? dashPorLojaHtml(r) : '');
+  const porAssociar = r.porAssociar && r.porAssociar.length ? dashPorAssociarHtml(r.porAssociar) : '';
+
+  c.innerHTML = topo + hero + kpis +
+    `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
+    porAssociar +
+    `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
+    dashBotaoContinuarHtml();
+}
+
+function dashOpcoesMes(r) {
+  const opc = [];
+  let [a, m] = r.hoje.slice(0, 7).split('-').map(Number);
+  for (let i = 0; i < 12; i++) {
+    const v = `${a}-${String(m).padStart(2, '0')}`;
+    if (v < '2026-10') break;
+    const nome = new Date(Date.UTC(a, m - 1, 15)).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    opc.push(`<option value="${v}"${v === r.mes ? ' selected' : ''}>${nome}</option>`);
+    m--; if (m === 0) { m = 12; a--; }
+  }
+  return opc.join('');
+}
+
+function dashHeroPessoa(r, a) {
+  const grupoRate = r.grupo && r.grupo.attachRate;
+  const larg = Math.max(0, Math.min(100, Number(a.attachRate) || 0));
+  const marca = grupoRate === null || grupoRate === undefined ? '' : `<em style="left:${Math.min(100, grupoRate)}%"></em>`;
+  const posG = a.posicaoGrupo ? `<b>${a.posicaoGrupo}.º</b><span>de ${r.totalNoRanking} no grupo</span>` : `<b>—</b><span>fora do ranking</span>`;
+  const posL = a.posicaoLoja ? `<b>${a.posicaoLoja}.º</b><span>de ${a.totalLoja} em ${esc(dashLojaCurta(a.loja))}</span>` : `<b>—</b><span>${esc(dashLojaCurta(a.loja))}</span>`;
+  return `<div class="dash-hero">
+    <div><div class="dash-hero-lbl">Attach rate</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div></div>
+    <div>
+      <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
+      <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
+      <div class="dash-barra-leg">Barra branca: tu · traço amarelo: média do grupo (${dashPct(grupoRate)})</div>
+    </div>
+  </div>`;
+}
+
+function dashHeroGrupo(r) {
+  const g = r.grupo || {};
+  return `<div class="dash-hero">
+    <div><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
+    <div class="dash-hero-pos">
+      <div><b>${g.equipamentos || 0}</b><span>equipamentos</span></div>
+      <div><b>${g.acessorios || 0}</b><span>acessórios</span></div>
+      <div><b>${r.totalNoRanking}</b><span>no ranking</span></div>
+    </div>
+  </div>`;
+}
+
+function dashKpis(r, a) {
+  const p = a.projecao;
+  const proj = p ? `<div class="dash-kpi"><div class="k">Ao ritmo atual</div><div class="v">${p.equipamentos} / ${p.acessorios}</div><div class="s">equip. / acess. no fim do mês (projeção, não garantia)</div></div>`
+    : `<div class="dash-kpi"><div class="k">Mês fechado</div><div class="v">${dashPct(a.attachRate)}</div><div class="s">resultado final</div></div>`;
+  return `<div class="dash-kpis">
+    <div class="dash-kpi"><div class="k">Equipamentos</div><div class="v">${a.equipamentos}</div><div class="s">${a.telemoveis} telemóve${a.telemoveis === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}</div></div>
+    <div class="dash-kpi"><div class="k">Acessórios</div><div class="v">${a.acessorios}</div><div class="s">capas, carga e áudio</div></div>
+    <div class="dash-kpi"><div class="k">Valor em acessórios</div><div class="v" style="font-size:1.35rem">${dashEuro(a.valorAcessorios)}</div><div class="s">com IVA</div></div>
+    ${proj}
+  </div>`;
+}
+
+function dashRankingHtml(r, alvo) {
+  const gestor = r.perfil === 'master' || r.perfil === 'coordenador';
+  const lojaAlvo = alvo ? alvo.loja : null;
+  const porLoja = DASH_ESTADO.ambito === 'loja' && lojaAlvo;
+  let lista = (r.ranking || []).slice();
+  if (porLoja) lista = lista.filter(a => a.loja === lojaAlvo);
+  const dentro = lista.filter(a => (porLoja ? a.posicaoLoja : a.posicaoGrupo)).sort((x, y) => (porLoja ? x.posicaoLoja - y.posicaoLoja : x.posicaoGrupo - y.posicaoGrupo));
+  const fora = lista.filter(a => !(porLoja ? a.posicaoLoja : a.posicaoGrupo));
+  const linha = (a, foraRank) => {
+    const pos = foraRank ? '—' : (porLoja ? a.posicaoLoja : a.posicaoGrupo) + '.º';
+    const eu = alvo && a.username === alvo.username;
+    return `<tr class="${eu ? 'eu' : ''}${foraRank ? ' fora' : ''}"><td>${pos}</td><td>${esc(a.nome)}</td>${porLoja ? '' : `<td class="col-loja">${esc(dashLojaCurta(a.loja))}</td>`}<td class="num">${dashPct(a.attachRate)}</td><td class="num">${a.equipamentos}</td><td class="num">${a.acessorios}</td></tr>`;
+  };
+  const tabs = lojaAlvo ? `<div class="dash-tabs"><button class="${porLoja ? '' : 'on'}" onclick="dashMudarAmbito('grupo')">Grupo</button><button class="${porLoja ? 'on' : ''}" onclick="dashMudarAmbito('loja')">${esc(dashLojaCurta(lojaAlvo))}</button></div>` : '';
+  return `<div class="panel" style="overflow-x:auto">
+    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Ranking · attach rate</div>${tabs}</div>
+    <table class="tbl dash-rank"><thead><tr><th>#</th><th>Nome</th>${porLoja ? '' : '<th class="col-loja">Loja</th>'}<th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th></tr></thead>
+    <tbody>${dentro.map(a => linha(a, false)).join('')}${fora.map(a => linha(a, true)).join('')}</tbody></table>
+  </div>`;
+}
+
+// Coordenador/Master, vista do grupo: attach rate por loja (soma dos
+// assistentes cuja loja principal é essa).
+function dashPorLojaHtml(r) {
+  const lojas = {};
+  (r.ranking || []).forEach(a => {
+    if (!a.loja) return;
+    const l = lojas[a.loja] = lojas[a.loja] || { equipamentos: 0, acessorios: 0, pessoas: 0 };
+    l.equipamentos += a.equipamentos; l.acessorios += a.acessorios; l.pessoas++;
+  });
+  const linhas = Object.entries(lojas)
+    .map(([loja, l]) => ({ loja, ...l, rate: l.equipamentos > 0 ? Math.round((l.acessorios / l.equipamentos) * 1000) / 10 : null }))
+    .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
+  if (!linhas.length) return '';
+  return `<div class="panel" style="overflow-x:auto">
+    <div class="panel-header"><div class="panel-title"><div class="dot"></div>Por loja</div></div>
+    <table class="tbl dash-rank"><thead><tr><th>Loja</th><th class="num">Attach</th><th class="num">Equip.</th><th class="num">Acess.</th><th class="num">Assist.</th></tr></thead>
+    <tbody>${linhas.map(l => `<tr><td>${esc(dashLojaCurta(l.loja))}</td><td class="num">${dashPct(l.rate)}</td><td class="num">${l.equipamentos}</td><td class="num">${l.acessorios}</td><td class="num">${l.pessoas}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+function dashPorAssociarHtml(linhas) {
+  return `<div class="panel" style="margin-bottom:1rem;overflow-x:auto">
+    <div class="panel-header"><div class="panel-title"><div class="dot" style="background:var(--warning)"></div>Linhas sem colaborador associado</div><span class="panel-badge">${linhas.length}</span></div>
+    <div class="dash-nota" style="margin:0 0 .6rem 0">Não contam para ninguém. Associa o código do vendedor em Controlo de Caixa → 👤 Colaboradores. Só o Master vê esta lista.</div>
+    <table class="tbl"><thead><tr><th>Dia</th><th>Loja</th><th>Vendedor no ficheiro</th><th>Documento</th><th>Produto</th></tr></thead>
+    <tbody>${linhas.slice(0, 50).map(l => `<tr><td>${dashDataCurta(l.dia)}</td><td>${esc(dashLojaCurta(l.loja))}</td><td>${esc(l.colaborador)}</td><td>${esc(l.nDocumento)}</td><td>${esc(l.descricaoSAP)}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+// Depois de uma entrada no ponto bem-sucedida: abre o dashboard se o
+// assistente não o vê há 2 dias ou mais. Nunca bloqueia nem atrasa o registo.
+async function dashAposEntrada() {
+  if (!dashTemAcesso()) return;
+  try {
+    const r = await fetchComRetry(CAIXA_API_URL, { acao: 'dashboardVerificarVisita', username: SESSION.username, password: SESSION.password }, 1);
+    if (!r || !r.ok || !r.mostrar) return;
+    const btn = document.querySelector(`.nav-item[onclick*="'dashboard'"]`);
+    DASH_ESTADO.forcado = true;
+    showView('dashboard', btn);
+  } catch (_) { /* sem dashboard, segue a vida */ }
+}
+
+window.dashboardActivar = dashboardActivar;
+window.dashContinuar = dashContinuar;
+window.dashMudarMes = dashMudarMes;
+window.dashMudarAmbito = dashMudarAmbito;
+window.dashMudarVerComo = dashMudarVerComo;
+window.dashAposEntrada = dashAposEntrada;
