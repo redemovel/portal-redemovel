@@ -3515,6 +3515,11 @@ function dashGarantirEstilos() {
   .dash-treinador li.t-alerta { background:#fff4e0; border-left-color:#d97706; }
   .dash-treinador li.t-ritmo { background:#eef2fb; border-left-color:#4f6fb5; }
   .dash-treinador li.t-dica { background:var(--off-white); border-left-color:var(--gray-mid, #b8c4c6); color:var(--text-muted); font-size:.84rem; }
+  .dash-hero-duplo { grid-template-columns:1fr 1fr; gap:0; padding:0; overflow:hidden; }
+  .dash-metade { display:grid; grid-template-columns:auto 1fr; gap:1.25rem; align-items:center; padding:1.3rem 1.5rem; }
+  .dash-metade + .dash-metade { border-left:1px solid rgba(255,255,255,.22); background:rgba(0,0,0,.06); }
+  .dash-metade .dash-conq { grid-column:1 / -1; margin-top:0; }
+  .dash-metade-num .dash-hero-num { font-size:3rem; }
   .dash-conq { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.8rem; }
   .dash-conq span { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:.22rem .65rem; font-size:.74rem; font-weight:700; white-space:nowrap; }
   .dash-grid2 { display:grid; grid-template-columns:1fr 1.3fr; gap:1rem; margin-bottom:1rem; }
@@ -3548,6 +3553,9 @@ function dashGarantirEstilos() {
     .dash-grid2 { grid-template-columns:1fr; }
     .dash-kpis { grid-template-columns:repeat(2,1fr); }
     .dash-hero { grid-template-columns:1fr; gap:.9rem; }
+    .dash-hero-duplo { gap:0; }
+    .dash-metade { grid-template-columns:1fr; gap:.7rem; }
+    .dash-metade + .dash-metade { border-left:none; border-top:1px solid rgba(255,255,255,.22); }
     .dash-hero-num { font-size:3rem; }
     .dash-rank .col-loja { display:none; }
     .dash-mini { display:none; }
@@ -3669,36 +3677,93 @@ function dashTreinadorHtml(a, proprio) {
     <ul class="dash-treinador">${a.treinadorV2.map(m => `<li class="t-${esc(m.tipo)}"><span class="ic">${esc(m.icone)}</span><span>${esc(m.texto)}</span></li>`).join('')}</ul>
     ${proprio ? '' : '<div class="dash-nota">É exatamente o que este assistente vê no seu painel.</div>'}</div>`;
 }
-function dashConquistasHtml(a) {
-  if (!a.conquistas || !a.conquistas.length) return '';
-  return `<div class="dash-conq">${a.conquistas.map(c => `<span title="${esc(c.texto)}">${esc(c.icone)} ${esc(c.titulo)}</span>`).join('')}</div>`;
+
+// Cabeçalho dividido a meio (2026-11-22, pedido do Ricardo): à esquerda o
+// attach (qualidade), à direita a quantidade (equipamentos), cada um com a
+// sua posição no grupo e na loja, barra face ao grupo e conquistas.
+const DASH_CONQ_VOLUME = new Set(['Mais volume', 'Mais volume na loja', 'Mais acessórios', 'Mais volume que o mês passado', 'Recorde de volume']);
+function dashConquistasHtml(lista) {
+  if (!lista || !lista.length) return '';
+  return `<div class="dash-conq">${lista.map(c => `<span title="${esc(c.texto)}">${esc(c.icone)} ${esc(c.titulo)}</span>`).join('')}</div>`;
+}
+// Posição por volume (empates ficam no mesmo lugar), entre quem vendeu algo.
+function dashPosVolume(pessoas, a) {
+  const comVendas = pessoas.filter(x => (x.equipamentos || 0) > 0);
+  if (!(a.equipamentos > 0)) return { pos: null, total: comVendas.length };
+  return { pos: comVendas.filter(x => x.equipamentos > a.equipamentos).length + 1, total: comVendas.length };
 }
 
 function dashHeroPessoa(r, a) {
+  const conq = a.conquistas || [];
+  const conqAttach = conq.filter(c => !DASH_CONQ_VOLUME.has(c.titulo));
+  const conqVolume = conq.filter(c => DASH_CONQ_VOLUME.has(c.titulo));
+  const loja = dashLojaCurta(a.loja);
+
+  // Attach
   const grupoRate = r.grupo && r.grupo.attachRate;
   const larg = Math.max(0, Math.min(100, Number(a.attachRate) || 0));
   const marca = grupoRate === null || grupoRate === undefined ? '' : `<em style="left:${Math.min(100, grupoRate)}%"></em>`;
   const posG = a.posicaoGrupo ? `<b>${a.posicaoGrupo}.º</b><span>de ${r.totalNoRanking} no grupo</span>` : `<b>—</b><span>fora do ranking</span>`;
-  const posL = a.posicaoLoja ? `<b>${a.posicaoLoja}.º</b><span>de ${a.totalLoja} em ${esc(dashLojaCurta(a.loja))}</span>` : `<b>—</b><span>${esc(dashLojaCurta(a.loja))}</span>`;
-  return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Attach rate</div><div class="dash-hero-num">${dashPct(a.attachRate)}</div><div class="dash-barra-leg" style="margin-top:.3rem">${a.acessorios} acessórios em ${a.equipamentos} equipamentos</div></div>
-    <div>
-      <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
-      <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
-      <div class="dash-barra-leg">Barra: tu · traço amarelo: média do grupo (${dashPct(grupoRate)})</div>
-      ${dashConquistasHtml(a)}
+  const posL = a.posicaoLoja ? `<b>${a.posicaoLoja}.º</b><span>de ${a.totalLoja} em ${esc(loja)}</span>` : `<b>—</b><span>${esc(loja)}</span>`;
+
+  // Quantidade
+  const todos = r.ranking || [];
+  const vg = dashPosVolume(todos, a);
+  const vl = dashPosVolume(todos.filter(x => x.loja && x.loja === a.loja), a);
+  const comVendas = todos.filter(x => (x.equipamentos || 0) > 0);
+  const media = comVendas.length ? Math.round(comVendas.reduce((t, x) => t + x.equipamentos, 0) / comVendas.length) : null;
+  const maximo = Math.max(1, ...comVendas.map(x => x.equipamentos));
+  const largV = Math.round(((a.equipamentos || 0) / maximo) * 100);
+  const marcaV = media ? `<em style="left:${Math.round((media / maximo) * 100)}%"></em>` : '';
+  const tel = dashTel(a);
+  const detalhe = `${tel} telemóve${tel === 1 ? 'l' : 'is'}${a.hotspots ? ` + ${a.hotspots} hotspot${a.hotspots === 1 ? '' : 's'}` : ''}`;
+  const posVG = vg.pos ? `<b>${vg.pos}.º</b><span>de ${vg.total} no grupo</span>` : `<b>—</b><span>sem vendas</span>`;
+  const posVL = vl.pos ? `<b>${vl.pos}.º</b><span>de ${vl.total} em ${esc(loja)}</span>` : `<b>—</b><span>${esc(loja)}</span>`;
+
+  return `<div class="dash-hero dash-hero-duplo">
+    <div class="dash-metade">
+      <div class="dash-metade-num">
+        <div class="dash-hero-lbl">Attach rate</div>
+        <div class="dash-hero-num">${dashPct(a.attachRate)}</div>
+        <div class="dash-barra-leg" style="margin-top:.3rem">${a.acessorios} acessórios em ${a.equipamentos} equipamentos</div>
+      </div>
+      <div class="dash-metade-pos">
+        <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
+        <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
+        <div class="dash-barra-leg">Média do grupo: ${dashPct(grupoRate)} (traço amarelo)</div>
+      </div>
+      ${dashConquistasHtml(conqAttach)}
+    </div>
+    <div class="dash-metade">
+      <div class="dash-metade-num">
+        <div class="dash-hero-lbl">Equipamentos</div>
+        <div class="dash-hero-num">${a.equipamentos || 0}</div>
+        <div class="dash-barra-leg" style="margin-top:.3rem">${detalhe}</div>
+      </div>
+      <div class="dash-metade-pos">
+        <div class="dash-hero-pos"><div>${posVG}</div><div>${posVL}</div></div>
+        <div class="dash-barra"><i style="width:${largV}%"></i>${marcaV}</div>
+        <div class="dash-barra-leg">Média por assistente: ${media === null ? '—' : media} (traço amarelo) · melhor do grupo: ${maximo}</div>
+      </div>
+      ${dashConquistasHtml(conqVolume)}
     </div>
   </div>`;
 }
 
 function dashHeroGrupo(r) {
   const g = r.grupo || {};
-  return `<div class="dash-hero">
-    <div><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div></div>
-    <div class="dash-hero-pos">
-      <div><b>${g.equipamentos || 0}</b><span>equipamentos</span></div>
-      <div><b>${g.acessorios || 0}</b><span>acessórios</span></div>
-      <div><b>${r.totalNoRanking}</b><span>no ranking</span></div>
+  const comVendas = (r.ranking || []).filter(x => (x.equipamentos || 0) > 0);
+  const media = comVendas.length ? Math.round((g.equipamentos || 0) / comVendas.length) : '—';
+  return `<div class="dash-hero dash-hero-duplo">
+    <div class="dash-metade">
+      <div class="dash-metade-num"><div class="dash-hero-lbl">Attach rate do grupo</div><div class="dash-hero-num">${dashPct(g.attachRate)}</div>
+        <div class="dash-barra-leg" style="margin-top:.3rem">${g.acessorios || 0} acessórios em ${g.equipamentos || 0} equipamentos</div></div>
+      <div class="dash-metade-pos"><div class="dash-hero-pos"><div><b>${r.totalNoRanking}</b><span>no ranking</span></div></div></div>
+    </div>
+    <div class="dash-metade">
+      <div class="dash-metade-num"><div class="dash-hero-lbl">Equipamentos do grupo</div><div class="dash-hero-num">${g.equipamentos || 0}</div>
+        <div class="dash-barra-leg" style="margin-top:.3rem">${g.acessorios || 0} acessórios</div></div>
+      <div class="dash-metade-pos"><div class="dash-hero-pos"><div><b>${media}</b><span>por assistente</span></div><div><b>${comVendas.length}</b><span>com vendas</span></div></div></div>
     </div>
   </div>`;
 }
