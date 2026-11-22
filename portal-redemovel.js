@@ -3628,7 +3628,7 @@ function dashRender() {
       <div class="page-subtitle">${esc(r.mesNome)} · dados de vendas até ${dashDataCurta(r.ultimoDiaComDados)}${r.diasFalta ? ` · faltam ${r.diasFalta} dia${r.diasFalta === 1 ? '' : 's'}` : ''}</div>
     </div>
     <div class="dash-controles">
-      ${gestor ? `<select class="form-input" onchange="dashMudarVerComo(this.value)"><option value="">Grupo (todos)</option>${(r.detalhe || []).map(a => `<option value="${esc(a.username)}"${a.username === DASH_ESTADO.verComo ? ' selected' : ''}>${esc(a.nome)}</option>`).join('')}</select>` : ''}
+      ${gestor ? `<select class="form-input" onchange="dashMudarVerComo(this.value)"><option value="">Grupo (todos)</option>${(r.detalhe || []).slice().sort((x, y) => String(x.nome || '').localeCompare(String(y.nome || ''), 'pt', { sensitivity: 'base' })).map(a => `<option value="${esc(a.username)}"${a.username === DASH_ESTADO.verComo ? ' selected' : ''}>${esc(a.nome)}</option>`).join('')}</select>` : ''}
       <select class="form-input" onchange="dashMudarMes(this.value)">${mesesOpc}</select>
       ${DASH_ESTADO.forcado ? '<button class="dash-continuar" onclick="dashContinuar()">Continuar →</button>' : ''}
     </div>
