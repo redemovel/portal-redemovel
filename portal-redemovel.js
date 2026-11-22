@@ -3515,9 +3515,9 @@ function dashGarantirEstilos() {
   .dash-treinador li.t-alerta { background:#fff4e0; border-left-color:#d97706; }
   .dash-treinador li.t-ritmo { background:#eef2fb; border-left-color:#4f6fb5; }
   .dash-treinador li.t-dica { background:var(--off-white); border-left-color:var(--gray-mid, #b8c4c6); color:var(--text-muted); font-size:.84rem; }
-  .dash-hero-duplo { grid-template-columns:1fr 1fr; gap:0; padding:0; overflow:hidden; }
-  .dash-metade { display:grid; grid-template-columns:auto 1fr; gap:1.25rem; align-items:center; padding:1.3rem 1.5rem; }
-  .dash-metade + .dash-metade { border-left:1px solid rgba(255,255,255,.22); background:rgba(0,0,0,.06); }
+  /* Duas caixas separadas (2026-11-22, pedido do Ricardo). */
+  .dash-hero-duplo { grid-template-columns:1fr 1fr; gap:1rem; padding:0; background:none; align-items:stretch; }
+  .dash-metade { display:grid; grid-template-columns:auto 1fr; gap:1.25rem; align-items:center; align-content:center; padding:1.3rem 1.5rem; background:var(--dash-forte); border-radius:16px; }
   .dash-metade .dash-conq { grid-column:1 / -1; margin-top:0; }
   .dash-metade-num .dash-hero-num { font-size:3rem; }
   .dash-conq { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.8rem; }
@@ -3553,9 +3553,8 @@ function dashGarantirEstilos() {
     .dash-grid2 { grid-template-columns:1fr; }
     .dash-kpis { grid-template-columns:repeat(2,1fr); }
     .dash-hero { grid-template-columns:1fr; gap:.9rem; }
-    .dash-hero-duplo { gap:0; }
+    .dash-hero-duplo { gap:.75rem; }
     .dash-metade { grid-template-columns:1fr; gap:.7rem; }
-    .dash-metade + .dash-metade { border-left:none; border-top:1px solid rgba(255,255,255,.22); }
     .dash-hero-num { font-size:3rem; }
     .dash-rank .col-loja { display:none; }
     .dash-mini { display:none; }
