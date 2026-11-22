@@ -3508,6 +3508,15 @@ function dashGarantirEstilos() {
   .dash-kpi .s { font-size:.72rem; color:var(--text-muted); margin-top:.1rem; }
   .dash-treinador { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
   .dash-treinador li { background:var(--dash-claro); border-radius:10px; padding:.65rem .85rem; font-size:.88rem; color:var(--text); line-height:1.45; }
+  .dash-treinador li[class^="t-"] { display:flex; gap:.6rem; align-items:flex-start; border-left:4px solid var(--dash-cor); }
+  .dash-treinador li .ic { font-size:1.05rem; line-height:1.3; flex-shrink:0; }
+  .dash-treinador li.t-celebrar { background:#e8f8ef; border-left-color:#1f9d55; }
+  .dash-treinador li.t-desafio { background:var(--dash-claro); border-left-color:var(--dash-forte); }
+  .dash-treinador li.t-alerta { background:#fff4e0; border-left-color:#d97706; }
+  .dash-treinador li.t-ritmo { background:#eef2fb; border-left-color:#4f6fb5; }
+  .dash-treinador li.t-dica { background:var(--off-white); border-left-color:var(--gray-mid, #b8c4c6); color:var(--text-muted); font-size:.84rem; }
+  .dash-conq { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.8rem; }
+  .dash-conq span { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:.22rem .65rem; font-size:.74rem; font-weight:700; white-space:nowrap; }
   .dash-grid2 { display:grid; grid-template-columns:1fr 1.3fr; gap:1rem; margin-bottom:1rem; }
   .dash-tabs { display:flex; gap:.35rem; }
   .dash-tabs button { border:1px solid var(--gray-light); background:var(--white); color:var(--text-muted); border-radius:8px; padding:.3rem .7rem; font-family:'Outfit',sans-serif; font-size:.75rem; font-weight:600; cursor:pointer; }
@@ -3620,7 +3629,9 @@ function dashRender() {
 
   const hero = alvo ? dashHeroPessoa(r, alvo) : dashHeroGrupo(r);
   const kpis = alvo ? dashKpis(r, alvo) : '';
-  const treinador = alvo && alvo.treinador && alvo.treinador.length
+  const treinador = alvo && alvo.treinadorV2 && alvo.treinadorV2.length
+    ? dashTreinadorHtml(alvo, alvo === r.eu)
+    : alvo && alvo.treinador && alvo.treinador.length
     ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>O que fazer a seguir</div></div><ul class="dash-treinador">${alvo.treinador.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`
     : (alvo ? `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>Como ler</div></div><div class="dash-nota" style="margin:0">Attach rate = acessórios vendidos ÷ equipamentos vendidos (telemóveis e hotspots), tal como a Vodafone o mede. Pode passar de 100%.</div></div>` : '');
 
@@ -3629,8 +3640,8 @@ function dashRender() {
   const porAssociar = (r.porAssociar && r.porAssociar.length ? dashPorAssociarHtml(r.porAssociar) : '') +
     (r.foraDoPainel && r.foraDoPainel.length ? dashForaDoPainelHtml(r.foraDoPainel) : '');
 
-  c.innerHTML = topo + hero + kpis + dashHistHtml(r) +
-    `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` +
+  c.innerHTML = topo + hero + kpis +
+    `<div class="dash-grid2">${esquerda || '<div></div>'}${ranking}</div>` + dashHistHtml(r) +
     porAssociar + (r.conferencia ? dashConferenciaHtml(r.conferencia) : '') +
     `<div class="dash-nota">Fonte: Faturação GSV do Controlo de Caixa (chega no dia seguinte à venda). Attach = acessórios ÷ equipamentos, em unidades, como a Vodafone o mede (pode passar de 100%). Acessórios = capas, carga e áudio; devoluções descontam. Não inclui cartões, serviços nem TV. Entram no ranking a partir de ${r.minEquipamentosRanking} equipamentos no mês.</div>` +
     dashBotaoContinuarHtml();
@@ -3650,6 +3661,19 @@ function dashOpcoesMes(r) {
   return opc.join('');
 }
 
+// Treinador personalizado (2026-11-22): mensagens com ícone e cor por tipo
+// (celebrar / desafio / alerta / ritmo / dica), geradas no servidor.
+function dashTreinadorHtml(a, proprio) {
+  const titulo = proprio ? 'O teu treinador' : `Treinador de ${esc(String(a.nome || '').split(' ')[0])}`;
+  return `<div class="panel"><div class="panel-header"><div class="panel-title"><div class="dot"></div>${titulo}</div></div>
+    <ul class="dash-treinador">${a.treinadorV2.map(m => `<li class="t-${esc(m.tipo)}"><span class="ic">${esc(m.icone)}</span><span>${esc(m.texto)}</span></li>`).join('')}</ul>
+    ${proprio ? '' : '<div class="dash-nota">É exatamente o que este assistente vê no seu painel.</div>'}</div>`;
+}
+function dashConquistasHtml(a) {
+  if (!a.conquistas || !a.conquistas.length) return '';
+  return `<div class="dash-conq">${a.conquistas.map(c => `<span title="${esc(c.texto)}">${esc(c.icone)} ${esc(c.titulo)}</span>`).join('')}</div>`;
+}
+
 function dashHeroPessoa(r, a) {
   const grupoRate = r.grupo && r.grupo.attachRate;
   const larg = Math.max(0, Math.min(100, Number(a.attachRate) || 0));
@@ -3662,6 +3686,7 @@ function dashHeroPessoa(r, a) {
       <div class="dash-hero-pos"><div>${posG}</div><div>${posL}</div></div>
       <div class="dash-barra"><i style="width:${larg}%"></i>${marca}</div>
       <div class="dash-barra-leg">Barra: tu · traço amarelo: média do grupo (${dashPct(grupoRate)})</div>
+      ${dashConquistasHtml(a)}
     </div>
   </div>`;
 }
