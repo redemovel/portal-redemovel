@@ -778,8 +778,37 @@
       <button class="sub-aba-btn ativa" data-subaba="tabelacomercial" onclick="mudarSubAbaGestao('tabelacomercial')">📊 Tabela Comercial</button>
       <button class="sub-aba-btn" data-subaba="tipologia" onclick="mudarSubAbaGestao('tipologia')">🧮 Tipologia de venda</button>
       <button class="sub-aba-btn" data-subaba="classificacao" onclick="mudarSubAbaGestao('classificacao')">🏷 Classificação</button>
+      <button class="sub-aba-btn" data-subaba="rcpp" onclick="mudarSubAbaGestao('rcpp')">🔄 RCPP · Coordenação</button>
       <button class="sub-aba-btn" data-subaba="colaboradores" onclick="mudarSubAbaGestao('colaboradores')">👤 Colaboradores</button>
       <button class="sub-aba-btn" data-subaba="historico" onclick="mudarSubAbaGestao('historico')">🕒 Histórico</button>
+    </div>
+
+    <!-- ── RCPP · Coordenação (2026-11-23) — os projetos de renovação de
+         fidelização que chegaram ao último mês de contrato sem fecho, ou
+         que se perderam, e passaram do assistente para a coordenação.
+         Vêm das colecções rcpp_* (mesmo Firestore), escritas pelo lote do
+         Apps Script dos Incentivos; ver lib/rcpp.js.
+         ⛔ Nunca mostra comissões — o servidor nem sequer as envia. ── -->
+    <div class="gestao-secao" id="aba-rcpp" hidden>
+      <div class="cartao">
+        <h2>🔄 Renovações na coordenação</h2>
+        <p class="rodape-nota" style="margin-bottom:1rem">Contratos de fidelização a chegar ao fim que já saíram da mesa do assistente — ou porque passaram a <strong>um mês do termo</strong> sem fecho, ou porque o negócio se perdeu. Ordenados por quem acaba primeiro. <strong>Reatribuir</strong> muda a carteira do cliente: os projetos abertos desse cliente passam todos para o novo assistente.</p>
+        <div class="resumo-grelha" id="rcpp-resumo"><div class="resumo-item"><span class="rotulo">A carregar…</span></div></div>
+        <div class="filtros" style="margin-top:1rem">
+          <div>
+            <label class="form-label" for="rcpp-loja">Loja</label>
+            <select class="form-input" id="rcpp-loja" onchange="carregarRcppCoordenacao()"><option value="">Todas</option></select>
+          </div>
+          <div>
+            <label class="form-label" for="rcpp-origem">Assistente de origem</label>
+            <select class="form-input" id="rcpp-origem" onchange="carregarRcppCoordenacao()"><option value="">Todos</option></select>
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn" onclick="carregarRcppCoordenacao()">Atualizar</button>
+          </div>
+        </div>
+        <div id="rcpp-lista" style="margin-top:1rem"></div>
+      </div>
     </div>
 
     <!-- ── Tabela Comercial (2026-09-21) — tabela de preços/comissões
@@ -1596,6 +1625,10 @@ function mudarSubAbaGestao(nome) {
   if (nome === 'classificacao' && !GESTAO_SUBABAS_CARREGADAS.has('classificacao')) {
     GESTAO_SUBABAS_CARREGADAS.add('classificacao');
     carregarClassificacao();
+  }
+  if (nome === 'rcpp' && !GESTAO_SUBABAS_CARREGADAS.has('rcpp')) {
+    GESTAO_SUBABAS_CARREGADAS.add('rcpp');
+    carregarRcppCoordenacao();
   }
   if (nome === 'historico' && !GESTAO_SUBABAS_CARREGADAS.has('historico')) {
     GESTAO_SUBABAS_CARREGADAS.add('historico');
@@ -3858,6 +3891,150 @@ async function definirPercentagemManualUI() {
   document.getElementById('refsap-manual-percentagem').value = '';
   document.getElementById('refsap-manual-motivo').value = '';
   carregarClassificacao();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RCPP · Coordenação (2026-11-23)
+// ═══════════════════════════════════════════════════════════════════════════
+// Os projetos de renovação que saíram da mesa do assistente — por terem
+// chegado a um mês do fim do contrato sem fecho, ou por se ter perdido o
+// negócio. Vêm de lib/rcpp.js (acção mesaCoordenacaoRcpp).
+// ⛔ Nunca mostra comissões — o servidor nem sequer as envia.
+// O que empurra para fechar na altura certa é a DATA, nunca o valor.
+let RCPP_DADOS = null;
+let RCPP_ASSISTENTES = null;
+
+function rcppEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function rcppData(iso) {
+  const p = String(iso || '').slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : '';
+}
+function rcppPrazo(dias) {
+  if (dias === null || dias === undefined) return '';
+  if (dias < 0) return `terminou há ${-dias} dia${-dias === 1 ? '' : 's'}`;
+  if (dias === 0) return 'termina hoje';
+  return `faltam ${dias} dia${dias === 1 ? '' : 's'}`;
+}
+
+async function carregarRcppCoordenacao() {
+  const lista = document.getElementById('rcpp-lista');
+  lista.innerHTML = '<span class="spinner"></span>A carregar…';
+  const loja = document.getElementById('rcpp-loja').value;
+  const origem = document.getElementById('rcpp-origem').value;
+  const r = await chamarApi({ acao: 'mesaCoordenacaoRcpp', loja, origem });
+  if (!r.ok) { lista.innerHTML = `<div class="alerta alerta-erro">${rcppEsc(r.erro || 'Erro.')}</div>`; return; }
+  RCPP_DADOS = r;
+  rcppPreencherFiltros(r);
+  rcppRenderResumo(r);
+  rcppRenderLista(r);
+}
+
+// Os filtros só se preenchem uma vez, e a partir da lista SEM filtro — caso
+// contrário filtrar por uma loja apagava as outras opções.
+function rcppPreencherFiltros(r) {
+  const selL = document.getElementById('rcpp-loja');
+  const selO = document.getElementById('rcpp-origem');
+  if (selL.options.length <= 1) {
+    Object.keys(r.por_loja).sort().forEach(l => {
+      selL.insertAdjacentHTML('beforeend', `<option value="${rcppEsc(l)}">${rcppEsc(l)}</option>`);
+    });
+  }
+  if (selO.options.length <= 1) {
+    Object.keys(r.por_origem).sort().forEach(o => {
+      selO.insertAdjacentHTML('beforeend', `<option value="${rcppEsc(o)}">${rcppEsc(o)}</option>`);
+    });
+  }
+}
+
+function rcppRenderResumo(r) {
+  const el = document.getElementById('rcpp-resumo');
+  const item = (rotulo, valor, destaque) =>
+    `<div class="resumo-item"><span class="rotulo">${rotulo}</span><span class="valor"${destaque ? ' style="color:var(--danger)"' : ''}>${valor}</span></div>`;
+  el.innerHTML =
+    item('Na coordenação', r.total) +
+    item('Acabam esta semana', r.esta_semana, r.esta_semana > 0) +
+    item('Já terminaram', r.expirados, r.expirados > 0);
+}
+
+function rcppRenderLista(r) {
+  const el = document.getElementById('rcpp-lista');
+  if (!r.projetos.length) { el.innerHTML = '<p class="rodape-nota">Nada neste filtro.</p>'; return; }
+
+  el.innerHTML = r.projetos.map(p => {
+    const num = p.contacto || p.contacto_servico || '';
+    const tel = num
+      ? `<a href="tel:${rcppEsc(num)}">☎ ${rcppEsc(num)}</a>${p.contacto ? '' : ' <em>(serviço)</em>'}`
+      : '<span style="color:var(--text-muted)">sem contacto</span>';
+
+    const linhas = p.linhas.map(l =>
+      `<div style="font-size:.78rem;color:var(--text-muted);padding:2px 0">
+         ${rcppEsc(l.produto || '(sem produto)')}${l.servico ? ' · ' + rcppEsc(l.servico) : ''}${l.meses ? ' · ' + l.meses + 'm' : ''}
+       </div>`).join('');
+
+    const urgente = p.dias !== null && p.dias <= 7;
+    const perdido = p.motivo_perda ? ` · perdido: ${rcppEsc(p.motivo_perda)}` : '';
+
+    return `<div class="cartao" style="margin-bottom:.6rem;padding:.8rem 1rem;border-left:3px solid ${urgente ? 'var(--danger)' : 'var(--gray-light)'}">
+      <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <strong>${rcppEsc(p.cliente_nome)}</strong>
+          <div style="font-size:.78rem;color:var(--text-muted)">
+            ${p.n_linhas} linha${p.n_linhas === 1 ? '' : 's'} · ${rcppEsc(p.loja)} · de ${rcppEsc(p.username_original || '(sem assistente)')}${perdido}
+          </div>
+          ${linhas}
+          <div style="margin-top:.4rem;font-size:.82rem">${tel}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-weight:600${urgente ? ';color:var(--danger)' : ''}">${rcppEsc(rcppPrazo(p.dias))}</div>
+          <div style="font-size:.78rem;color:var(--text-muted)">termina ${rcppData(p.data_fim)}</div>
+          <button class="btn" style="margin-top:.5rem" onclick="rcppAbrirReatribuir('${rcppEsc(p.cliente_nif)}','${rcppEsc(p.cliente_nome)}')">Reatribuir</button>
+        </div>
+      </div>
+      <div id="rcpp-reatribuir-${rcppEsc(p.cliente_nif)}"></div>
+    </div>`;
+  }).join('');
+}
+
+async function rcppAbrirReatribuir(nif, nome) {
+  const el = document.getElementById('rcpp-reatribuir-' + nif);
+  if (!el) return;
+  if (el.innerHTML) { el.innerHTML = ''; return; }
+  document.querySelectorAll('[id^="rcpp-reatribuir-"]').forEach(x => { x.innerHTML = ''; });
+
+  if (!RCPP_ASSISTENTES) {
+    el.innerHTML = '<span class="spinner"></span>';
+    const r = await chamarApi({ acao: 'assistentesRcpp' });
+    RCPP_ASSISTENTES = (r && r.ok) ? r.assistentes : [];
+  }
+  const ops = RCPP_ASSISTENTES
+    .filter(a => a.username !== '(sem assistente)')
+    .map(a => `<option value="${rcppEsc(a.username)}">${rcppEsc(a.username)} (${a.n})</option>`).join('');
+
+  el.innerHTML = `<div style="margin-top:.6rem;padding:.6rem;background:var(--off-white);border-radius:6px">
+    <p class="rodape-nota" style="margin:0 0 .4rem">Passa <strong>${rcppEsc(nome)}</strong> para outro assistente. Todos os projetos abertos deste cliente seguem com ele; os já fechados ficam com quem os fez.</p>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <select class="form-input" id="rcpp-novo-${rcppEsc(nif)}" style="max-width:220px">${ops}</select>
+      <button class="btn" onclick="rcppReatribuir('${rcppEsc(nif)}')">Confirmar</button>
+    </div>
+  </div>`;
+}
+
+async function rcppReatribuir(nif) {
+  const sel = document.getElementById('rcpp-novo-' + nif);
+  if (!sel || !sel.value) return;
+  const el = document.getElementById('rcpp-reatribuir-' + nif);
+  el.innerHTML = '<span class="spinner"></span>A reatribuir…';
+  // novoUsername, e não username: esse campo é o da autenticação do pedido
+  // (chamarApi sobrepõe-no sempre com o da sessão).
+  const r = await chamarApi({ acao: 'reatribuirRcpp', cliente_nif: nif, novoUsername: sel.value });
+  if (!r.ok) { el.innerHTML = `<div class="alerta alerta-erro">${rcppEsc(r.erro || 'Erro.')}</div>`; return; }
+  RCPP_ASSISTENTES = null;
+  await carregarRcppCoordenacao();
 }
 
 // ═══ Histórico ═══
