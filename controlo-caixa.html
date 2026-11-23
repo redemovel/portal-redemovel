@@ -3927,7 +3927,13 @@ async function carregarRcppCoordenacao() {
   const loja = document.getElementById('rcpp-loja').value;
   const origem = document.getElementById('rcpp-origem').value;
   const r = await chamarApi({ acao: 'mesaCoordenacaoRcpp', loja, origem });
-  if (!r.ok) { lista.innerHTML = `<div class="alerta alerta-erro">${rcppEsc(r.erro || 'Erro.')}</div>`; return; }
+  if (!r.ok) {
+    // Tambem limpar os contadores: deixa-los em "A carregar..." faz
+    // parecer que o ecra ainda esta a trabalhar quando ja falhou.
+    document.getElementById('rcpp-resumo').innerHTML = '';
+    lista.innerHTML = `<div class="alerta alerta-erro">${rcppEsc(r.erro || 'Erro.')}</div>`;
+    return;
+  }
   RCPP_DADOS = r;
   rcppPreencherFiltros(r);
   rcppRenderResumo(r);
