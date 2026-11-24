@@ -186,6 +186,7 @@ async function enterDashboard() {
   // Assistente de Loja. Criado aqui por JS (não no HTML da Apps Script) para
   // esta funcionalidade só precisar de um commit deste ficheiro.
   atualizarBotaoCaixa();
+  try { rcppInstalarSeparador(); } catch(e) { console.error('rcpp:', e); }
 
   // Regras e RGPD (2026-09-10): confirmação de leitura obrigatória antes de
   // aceder ao resto do portal. Se ainda não confirmou a versão actual do
@@ -322,6 +323,8 @@ function showView(id, btn) {
   try { sessionStorage.setItem('rmView', id); } catch(_) {}
   // 2026-11-21: Dashboard de Atividade dos Assistentes (fim deste ficheiro).
   if (id==='dashboard') { try { dashboardActivar(); } catch(e) { console.error('dashboard:', e); } }
+  // 2026-11-24: Mesa de renovações RCPP (fim deste ficheiro).
+  else if (id==='rcpp') { try { rcppActivar(); } catch(e) { console.error('rcpp:', e); } }
   else if (typeof DASH_ESTADO !== 'undefined') DASH_ESTADO.forcado = false;
 }
 
@@ -4140,3 +4143,368 @@ window.dashMudarAmbito = dashMudarAmbito;
 window.dashMudarOrdem = dashMudarOrdem;
 window.dashMudarVerComo = dashMudarVerComo;
 window.dashAposEntrada = dashAposEntrada;
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RCPP — Mesa de renovações (2026-11-24)
+// ═══════════════════════════════════════════════════════════════════════════
+// A lista de clientes do assistente com contrato de fidelização a acabar.
+// Fala com o serviço da caixa (lib/rcpp.js): mesaRcpp, detalheRcpp,
+// mudarEstagioRcpp, fecharRcpp.
+//
+// O separador e a vista são criados AQUI, por JavaScript, como já se faz com
+// o botão do Controlo de Caixa — o HTML desta página é servido pela Apps
+// Script e não se toca nele.
+//
+// ⛔ Nunca mostra comissões: o servidor não as envia, para perfil nenhum.
+// O que empurra para fechar na altura certa é a DATA, nunca o valor.
+const RCPP_ROLES = new Set(['assistente_loja', 'assistente', 'master', 'coordenador', 'coordenador_lojas']);
+const RCPP_ESTAGIOS = {
+  por_contactar: 'Por contactar', contactado: 'Contactado',
+  em_negociacao: 'Em negociação', adiado: 'Adiado',
+  aguarda_janela: 'Aguarda janela', entregue_coord: 'Na coordenação',
+};
+const RCPP_PERDA = {
+  preco: 'Preço', concorrencia: 'Concorrência', mudou_morada: 'Mudou de morada',
+  deixou_precisar: 'Deixou de precisar', nao_contactavel: 'Não contactável', outro: 'Outro',
+};
+let RCPP = { dados: null, filtro: 'todos', aberto: '', detalhes: {}, como: '', assistentes: null };
+
+function rcppTemAcesso() { return !!(SESSION && RCPP_ROLES.has(String(SESSION.role || '').toLowerCase())); }
+function rcppEhGestao() { return !!(SESSION && ['master', 'coordenador', 'coordenador_lojas'].includes(String(SESSION.role || '').toLowerCase())); }
+function rcppDataPT(iso) { const p = String(iso || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ''; }
+
+async function rcppApi(corpo) {
+  try {
+    return await fetchComRetry(CAIXA_API_URL, Object.assign({ username: SESSION.username, password: SESSION.password }, corpo), 2);
+  } catch (e) { return { ok: false, erro: 'Erro de ligação. Tenta outra vez.' }; }
+}
+
+// Cria (ou remove) o separador e a vista. Chamado no arranque, como o
+// atualizarBotaoCaixa — e remove-os quando entra alguém sem acesso no mesmo PC.
+function rcppInstalarSeparador() {
+  const existente = document.getElementById('nav-rcpp');
+  if (!rcppTemAcesso()) {
+    if (existente) existente.remove();
+    const v = document.getElementById('view-rcpp'); if (v) v.remove();
+    return;
+  }
+  if (existente) return;
+
+  const lista = document.getElementById('topbar-nav-list');
+  const refDash = document.getElementById('view-dashboard');
+  if (!lista || !refDash || !refDash.parentNode) return;
+
+  const vista = document.createElement('section');
+  vista.id = 'view-rcpp';
+  vista.className = 'view';
+  vista.innerHTML = '<div id="rcpp-conteudo"></div>';
+  refDash.parentNode.insertBefore(vista, refDash.nextSibling);
+
+  const btn = document.createElement('button');
+  btn.className = 'nav-item';
+  btn.id = 'nav-rcpp';
+  btn.type = 'button';
+  btn.title = 'Clientes com contrato a acabar — renovações';
+  btn.textContent = '🔄 Renovações';
+  btn.addEventListener('click', () => showView('rcpp', btn));
+  const caixa = document.getElementById('nav-caixa');
+  const perfil = lista.querySelector('.nav-item[onclick*="\'perfil\'"]');
+  lista.insertBefore(btn, caixa || perfil || null);
+
+  rcppGarantirEstilos();
+}
+
+function rcppGarantirEstilos() {
+  if (document.getElementById('rcpp-estilos')) return;
+  const st = document.createElement('style');
+  st.id = 'rcpp-estilos';
+  st.textContent = `
+  .rcpp-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; margin-bottom:1rem; }
+  .rcpp-kpi { background:var(--white,#fff); border:1px solid var(--gray-light,#e8e8e8); border-radius:10px; padding:.7rem; text-align:center; }
+  .rcpp-kpi.urg { border-color:var(--danger,#e60000); background:#fff5f5; }
+  .rcpp-kpi.ok { border-color:var(--success,#0a0); background:#f4fbf4; }
+  .rcpp-kn { font-size:1.4rem; font-weight:700; }
+  .rcpp-kpi.urg .rcpp-kn { color:var(--danger,#e60000); }
+  .rcpp-kpi.ok .rcpp-kn { color:var(--success,#070); }
+  .rcpp-kl { font-size:.65rem; color:var(--text-muted,#888); margin-top:.1rem; }
+  .rcpp-filtros { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.8rem; align-items:center; }
+  .rcpp-fb { font-size:.72rem; padding:.3rem .8rem; border:1px solid var(--gray-light,#ddd); border-radius:20px; background:var(--white,#fff); cursor:pointer; color:var(--text-muted,#666); }
+  .rcpp-fb.on { background:var(--danger,#e60000); border-color:var(--danger,#e60000); color:#fff; }
+  .rcpp-c { background:var(--white,#fff); border:1px solid var(--gray-light,#e8e8e8); border-left:3px solid var(--gray-light,#ddd); border-radius:10px; padding:.7rem .9rem; margin-bottom:.5rem; }
+  .rcpp-c.av { border-left-color:#f90; }
+  .rcpp-c.urg { border-left-color:var(--danger,#e60000); }
+  .rcpp-c.coord { background:var(--off-white,#fafafa); border-left-color:#999; }
+  .rcpp-ch { display:flex; justify-content:space-between; gap:.8rem; cursor:pointer; }
+  .rcpp-nome { font-weight:700; font-size:.92rem; }
+  .rcpp-sub { font-size:.7rem; color:var(--text-muted,#888); margin-top:.1rem; }
+  .rcpp-dir { text-align:right; white-space:nowrap; }
+  .rcpp-est { font-size:.62rem; padding:.15rem .5rem; border-radius:12px; background:var(--off-white,#f0f0f0); color:var(--text-muted,#666); }
+  .rcpp-prazo { font-size:.7rem; color:var(--text-muted,#888); margin-top:.25rem; }
+  .rcpp-c.urg .rcpp-prazo { color:var(--danger,#e60000); font-weight:700; }
+  .rcpp-ln { font-size:.7rem; color:var(--text-muted,#777); padding:.1rem 0; }
+  .rcpp-meta { margin-top:.45rem; font-size:.72rem; display:flex; gap:.7rem; flex-wrap:wrap; align-items:center; }
+  .rcpp-tel { color:#06c; font-weight:600; text-decoration:none; }
+  .rcpp-jan { color:var(--text-muted,#888); }
+  .rcpp-jan.ok { color:var(--success,#070); font-weight:600; }
+  .rcpp-acc { margin-top:.6rem; display:flex; gap:.35rem; flex-wrap:wrap; }
+  .rcpp-b { font-size:.7rem; padding:.3rem .7rem; border:1px solid var(--gray-light,#ddd); border-radius:6px; background:var(--white,#fff); cursor:pointer; }
+  .rcpp-b.ok { border-color:var(--success,#0a0); color:var(--success,#070); }
+  .rcpp-b.perda { border-color:var(--danger,#e60000); color:var(--danger,#e60000); }
+  .rcpp-form:empty, .rcpp-det:empty { display:none; }
+  .rcpp-form, .rcpp-det { margin-top:.6rem; padding:.6rem; background:var(--off-white,#fafafa); border-radius:8px; }
+  .rcpp-form input, .rcpp-form select { padding:.35rem .5rem; border:1px solid var(--gray-light,#ddd); border-radius:6px; font-size:.78rem; }
+  .rcpp-fl { width:100%; font-size:.7rem; font-weight:700; color:var(--text-muted,#666); margin-bottom:.3rem; }
+  .rcpp-nota { width:100%; font-size:.65rem; color:var(--text-muted,#999); margin-top:.3rem; }
+  .rcpp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem .8rem; margin-top:.6rem; }
+  .rcpp-cr { font-size:.62rem; color:var(--text-muted,#999); display:block; }
+  .rcpp-hl { font-size:.68rem; color:var(--text-muted,#666); padding:.12rem 0; }
+  @media (max-width:600px) { .rcpp-kpis { grid-template-columns:repeat(2,1fr); } .rcpp-grid { grid-template-columns:repeat(2,1fr); } }`;
+  document.head.appendChild(st);
+}
+
+async function rcppActivar() {
+  if (!rcppTemAcesso()) return;
+  rcppGarantirEstilos();
+  const c = document.getElementById('rcpp-conteudo');
+  if (!c) return;
+  c.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-muted)">A carregar as tuas renovações…</div>';
+  const r = await rcppApi({ acao: 'mesaRcpp', mesaDe: RCPP.como || undefined });
+  if (!r || !r.ok) {
+    c.innerHTML = `<div class="panel" style="text-align:center;color:var(--danger)">${esc((r && r.erro) || 'Não foi possível carregar.')}</div>`;
+    return;
+  }
+  RCPP.dados = r;
+  if (r.pode_ver_outros && !RCPP.assistentes) {
+    const a = await rcppApi({ acao: 'assistentesRcpp' });
+    RCPP.assistentes = (a && a.ok) ? a.assistentes : [];
+  }
+  rcppRender();
+}
+
+function rcppRender() {
+  const d = RCPP.dados, s = d.resumo;
+  let sel = '';
+  if (d.pode_ver_outros && RCPP.assistentes) {
+    const ops = RCPP.assistentes.map(a => `<option value="${esc(a.username)}"${RCPP.como === a.username ? ' selected' : ''}>${esc(a.username)} (${a.n})</option>`).join('');
+    sel = `<div class="rcpp-filtros"><span style="font-size:.72rem;color:var(--text-muted)">Mesa de:</span>
+      <select class="rcpp-b" onchange="rcppVerComo(this.value)"><option value="">A minha</option>${ops}</select>
+      ${d.proprio ? '' : `<span style="font-size:.68rem;color:#c60">a ver a mesa de ${esc(d.como)}</span>`}</div>`;
+  }
+  const kpi = (n, l, cls) => `<div class="rcpp-kpi ${cls || ''}"><div class="rcpp-kn">${n}</div><div class="rcpp-kl">${l}</div></div>`;
+  document.getElementById('rcpp-conteudo').innerHTML = sel +
+    `<div class="rcpp-kpis">
+       ${kpi(s.total, 'Em curso')}
+       ${kpi(s.em_atraso, 'Em atraso', s.em_atraso ? 'urg' : '')}
+       ${kpi(s.esta_semana, 'Acabam esta semana', s.esta_semana ? 'urg' : '')}
+       ${kpi(s.na_janela, 'Na janela', s.na_janela ? 'ok' : '')}
+     </div>
+     <div class="rcpp-filtros">
+       ${['todos|Todos', 'janela|Na janela', 'semana|Esta semana', 'porcontactar|Por contactar', 'adiados|Adiados', 'coord|Na coordenação (' + s.na_coord + ')']
+        .map(f => { const [k, t] = f.split('|'); return `<span class="rcpp-fb${RCPP.filtro === k ? ' on' : ''}" onclick="rcppFiltrar('${k}')">${t}</span>`; }).join('')}
+     </div>
+     <div id="rcpp-lista"></div>`;
+  rcppLista();
+}
+
+function rcppVerComo(v) { RCPP.como = v; RCPP.assistentes = null; RCPP.detalhes = {}; rcppActivar(); }
+function rcppFiltrar(f) { RCPP.filtro = f; rcppRender(); }
+
+function rcppPassa(p) {
+  if (RCPP.filtro === 'coord') return p.na_coord;
+  if (p.na_coord) return false;
+  if (RCPP.filtro === 'janela') return p.na_janela;
+  if (RCPP.filtro === 'semana') return p.dias !== null && p.dias <= 7;
+  if (RCPP.filtro === 'porcontactar') return p.estagio === 'por_contactar';
+  if (RCPP.filtro === 'adiados') return p.estagio === 'adiado';
+  return true;
+}
+
+function rcppLista() {
+  const ps = RCPP.dados.projetos.filter(rcppPassa);
+  document.getElementById('rcpp-lista').innerHTML = ps.length
+    ? ps.map(rcppCartao).join('')
+    : '<div style="text-align:center;color:var(--text-muted);padding:2rem;font-size:.85rem">Nada neste filtro.</div>';
+}
+
+function rcppCartao(p) {
+  const urg = p.dias !== null && p.dias <= 7 ? 'urg' : (p.ultimo_mes ? 'av' : '');
+  const prazo = p.dias === null ? '' : p.dias < 0 ? `terminou há ${-p.dias} dias` : p.dias === 0 ? 'termina hoje' : `faltam ${p.dias} dias`;
+  const num = p.contacto || p.contacto_servico || '';
+  const tel = num
+    ? `<a class="rcpp-tel" href="tel:${esc(num)}" onclick="event.stopPropagation()">☎ ${esc(num)}${p.contacto ? '' : ' <i>(serviço)</i>'}</a>`
+    : '<span style="color:var(--text-muted)">sem contacto</span>';
+  const janela = p.na_janela
+    ? '<span class="rcpp-jan ok">✔ Na janela — altura certa para fechar</span>'
+    : (p.dias_janela !== null ? `<span class="rcpp-jan">Janela abre ${rcppDataPT(p.data_janela)} — faltam ${p.dias_janela} dias</span>` : '');
+  const linhas = p.linhas.map(l => `<div class="rcpp-ln">${esc(l.produto || '(sem produto)')}${l.servico ? ' · ' + esc(l.servico) : ''}${l.meses ? ' · ' + l.meses + 'm' : ''}</div>`).join('');
+  const adiado = p.estagio === 'adiado' && p.data_retoma
+    ? `<div class="rcpp-ln" style="color:#73c">Adiado até ${rcppDataPT(p.data_retoma)}${p.motivo_adiamento ? ' — ' + esc(p.motivo_adiamento) : ''}</div>` : '';
+
+  const acc = p.na_coord
+    ? '<div class="rcpp-nota">Entregue à coordenação — já não se mexe a partir da mesa.</div>'
+    : `<div class="rcpp-acc">
+        <button class="rcpp-b" onclick="rcppAccao('${p.id}','contactado')">Contactado</button>
+        <button class="rcpp-b" onclick="rcppAccao('${p.id}','em_negociacao')">Em negociação</button>
+        <button class="rcpp-b" onclick="rcppForm('${p.id}','adiar')">Adiar</button>
+        <button class="rcpp-b perda" onclick="rcppForm('${p.id}','perda')">Perdido</button>
+        <button class="rcpp-b ok" onclick="rcppForm('${p.id}','fecho')">Fechou negócio</button>
+       </div>`;
+
+  return `<div class="rcpp-c ${urg} ${p.na_coord ? 'coord' : ''}" id="rc-${esc(p.id)}">
+    <div class="rcpp-ch" onclick="rcppDetalhe('${p.id}')">
+      <div><div class="rcpp-nome">${esc(p.cliente_nome)}</div>
+        <div class="rcpp-sub">${p.n_linhas} linha${p.n_linhas === 1 ? '' : 's'}${p.loja ? ' · ' + esc(p.loja) : ''}</div></div>
+      <div class="rcpp-dir"><span class="rcpp-est">${RCPP_ESTAGIOS[p.estagio] || p.estagio}</span>
+        <div class="rcpp-prazo">${esc(prazo)}</div></div>
+    </div>
+    ${linhas}${adiado}
+    <div class="rcpp-meta">${tel} ${janela}</div>
+    <div class="rcpp-det" id="rd-${esc(p.id)}"></div>
+    ${acc}
+    <div class="rcpp-form" id="rf-${esc(p.id)}"></div>
+  </div>`;
+}
+
+// ── Detalhe ────────────────────────────────────────────────────
+async function rcppDetalhe(id) {
+  const el = document.getElementById('rd-' + id);
+  if (!el) return;
+  if (el.innerHTML) { el.innerHTML = ''; return; }
+  document.querySelectorAll('.rcpp-det').forEach(x => { x.innerHTML = ''; });
+  if (RCPP.detalhes[id]) { el.innerHTML = rcppDetalheHtml(RCPP.detalhes[id]); return; }
+  el.innerHTML = '<div class="rcpp-nota">A carregar…</div>';
+  const r = await rcppApi({ acao: 'detalheRcpp', id });
+  if (!r || !r.ok) { el.innerHTML = `<div class="rcpp-nota" style="color:var(--danger)">${esc((r && r.erro) || 'Erro.')}</div>`; return; }
+  RCPP.detalhes[id] = r.detalhe;
+  el.innerHTML = rcppDetalheHtml(r.detalhe);
+}
+
+function rcppDetalheHtml(d) {
+  const SV = { movel: 'Móvel', fixo: 'Fixo', dados: 'Dados' };
+  let cont = '<div class="rcpp-acc">';
+  (d.contactos || []).forEach((c, i) => {
+    cont += `<a class="rcpp-b${i === 0 ? ' ok' : ''}" href="tel:${esc(c.valor)}">☎ ${i === 0 ? 'Ligar ' : ''}${esc(c.valor)}</a>`;
+    if (c.servico) cont += '<span class="rcpp-nota" style="width:auto">nº do serviço</span>';
+  });
+  if (d.contactos && d.contactos.length) cont += `<a class="rcpp-b" href="sms:${esc(d.contactos[0].valor)}">✉ SMS</a>`;
+  if (d.email) cont += `<a class="rcpp-b" href="mailto:${esc(d.email)}?subject=${encodeURIComponent('Renovação do seu contrato')}">✉ ${esc(d.email)}</a>`;
+  if (!(d.contactos || []).length && !d.email) cont += '<span class="rcpp-nota">Sem telefone nem e-mail. Confirma os dados nos sistemas Vodafone.</span>';
+  cont += '</div>';
+
+  const linhas = (d.linhas || []).map(l =>
+    `<div class="rcpp-hl">${esc(l.produto || '(sem produto)')} · ${esc(l.servico || '—')}${l.tipo ? ' · ' + (SV[l.tipo] || l.tipo) : ''} · ${l.meses}m · termina ${rcppDataPT(l.fim)}</div>`).join('');
+
+  const campo = (r, v) => v ? `<div><span class="rcpp-cr">${r}</span>${v}</div>` : '';
+  const hist = (d.historico || []).map(h =>
+    `<div class="rcpp-hl"><span style="color:var(--text-muted)">${rcppDataPT(h.quando)} ${esc(h.hora)}</span> <b>${esc(RCPP_ESTAGIOS[h.estagio] || h.estagio)}</b>${h.quem ? ' · ' + esc(h.quem) : ''}${h.nota ? ' — ' + esc(h.nota) : ''}</div>`).join('');
+
+  return cont + `<div class="rcpp-fl" style="margin-top:.6rem">Linhas do negócio</div>${linhas}
+    <div class="rcpp-grid">
+      ${campo('NIF', esc(d.cliente_nif) + (d.nif_valido ? '' : ' <i>a confirmar</i>'))}
+      ${campo('Loja', esc(d.loja))}
+      ${campo('Termina', rcppDataPT(d.data_fim))}
+      ${campo('Janela abre', rcppDataPT(d.data_janela))}
+      ${campo('Passa à coordenação', rcppDataPT(d.data_entrega_coord))}
+      ${campo('Assistente de origem', esc(d.username_original))}
+    </div>
+    ${hist ? `<div class="rcpp-fl" style="margin-top:.6rem">Histórico</div>${hist}` : ''}`;
+}
+
+// ── Formulários ────────────────────────────────────────────────
+function rcppForm(id, tipo) {
+  const el = document.getElementById('rf-' + id);
+  if (!el) return;
+  if (RCPP.aberto === id + tipo && el.innerHTML) { el.innerHTML = ''; RCPP.aberto = ''; return; }
+  document.querySelectorAll('.rcpp-form').forEach(x => { x.innerHTML = ''; });
+  RCPP.aberto = id + tipo;
+
+  if (tipo === 'adiar') {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    el.innerHTML = `<div class="rcpp-fl">Adiar até que data?</div>
+      <div class="rcpp-acc"><input type="date" id="ra-${id}" value="${d.toISOString().slice(0, 10)}">
+      <input type="text" id="rm-${id}" placeholder="Motivo (cliente de férias…)" style="flex:1;min-width:150px">
+      <button class="rcpp-b ok" onclick="rcppAdiar('${id}')">Adiar</button></div>
+      <div class="rcpp-nota">Volta à tua mesa nessa data. Não pode passar do último mês do contrato — se passar, é encurtado.</div>`;
+  } else if (tipo === 'perda') {
+    const ops = Object.keys(RCPP_PERDA).map(k => `<option value="${k}">${RCPP_PERDA[k]}</option>`).join('');
+    el.innerHTML = `<div class="rcpp-fl">Porque se perdeu?</div>
+      <div class="rcpp-acc"><select id="rp-${id}">${ops}</select>
+      <input type="text" id="rt-${id}" placeholder="Detalhe (opcional)" style="flex:1;min-width:150px">
+      <button class="rcpp-b perda" onclick="rcppPerder('${id}')">Registar perda</button></div>
+      <div class="rcpp-nota">Vai para a coordenação analisar.</div>`;
+  } else {
+    el.innerHTML = `<div class="rcpp-fl">Contrato novo</div>
+      <div id="rl-${id}"></div>
+      <div class="rcpp-acc"><button class="rcpp-b" onclick="rcppLinhaMais('${id}')">+ Linha</button>
+      <input type="date" id="rd0-${id}" value="${new Date().toISOString().slice(0, 10)}">
+      <button class="rcpp-b ok" onclick="rcppFechar('${id}')">Registar e fechar</button></div>
+      <div class="rcpp-nota">Um 4P com dois móveis são três linhas. O sistema calcula o fim da permanência e abre sozinho a próxima renovação.</div>`;
+    rcppLinhaMais(id);
+  }
+}
+
+function rcppLinhaMais(id) {
+  const c = document.getElementById('rl-' + id);
+  if (!c) return;
+  const n = c.children.length;
+  const div = document.createElement('div');
+  div.className = 'rcpp-acc';
+  div.innerHTML = `<input type="text" class="rcpp-lp" placeholder="Produto *" style="flex:1;min-width:130px">
+    <input type="text" class="rcpp-lsv" placeholder="Nº de serviço" style="width:130px">
+    <select class="rcpp-lm"><option value="24" selected>24 meses</option><option value="36">36</option><option value="30">30</option><option value="18">18</option><option value="12">12</option></select>
+    ${n ? '<button class="rcpp-b" onclick="this.parentNode.remove()">×</button>' : ''}`;
+  c.appendChild(div);
+}
+
+// ── Acções ─────────────────────────────────────────────────────
+function rcppDepois(r) {
+  if (!r || !r.ok) { alert((r && r.erro) || 'Erro.'); }
+  RCPP.detalhes = {};
+  rcppActivar();
+}
+
+async function rcppAccao(id, estagio) {
+  const r = await rcppApi({ acao: 'mudarEstagioRcpp', id, estagio });
+  rcppDepois(r);
+}
+
+async function rcppAdiar(id) {
+  const data = document.getElementById('ra-' + id).value;
+  if (!data) { alert('Indica a data.'); return; }
+  const r = await rcppApi({ acao: 'mudarEstagioRcpp', id, estagio: 'adiado', data_retoma: data, motivo_adiamento: document.getElementById('rm-' + id).value });
+  if (r && r.ok && r.encurtado) alert('O adiamento foi encurtado: não pode passar do último mês do contrato.');
+  rcppDepois(r);
+}
+
+async function rcppPerder(id) {
+  if (!confirm('Registar como perdido? Passa para a coordenação.')) return;
+  const r = await rcppApi({ acao: 'mudarEstagioRcpp', id, estagio: 'perdido', motivo_perda: document.getElementById('rp-' + id).value, motivo_perda_texto: document.getElementById('rt-' + id).value });
+  rcppDepois(r);
+}
+
+async function rcppFechar(id) {
+  const c = document.getElementById('rl-' + id);
+  const linhas = [];
+  for (const div of c.children) {
+    const produto = div.querySelector('.rcpp-lp').value.trim();
+    if (!produto) continue;
+    linhas.push({ produto, servico: div.querySelector('.rcpp-lsv').value.trim(), permanencia_meses: Number(div.querySelector('.rcpp-lm').value) });
+  }
+  if (!linhas.length) { alert('Indica pelo menos um produto.'); return; }
+  const r = await rcppApi({ acao: 'fecharRcpp', id, data_inicio: document.getElementById('rd0-' + id).value, linhas });
+  if (r && r.ok) alert(`Contrato registado com ${r.linhas} linha(s). A permanência termina a ${rcppDataPT(r.data_fim)}.`);
+  rcppDepois(r);
+}
+
+window.rcppActivar = rcppActivar;
+window.rcppFiltrar = rcppFiltrar;
+window.rcppVerComo = rcppVerComo;
+window.rcppDetalhe = rcppDetalhe;
+window.rcppForm = rcppForm;
+window.rcppLinhaMais = rcppLinhaMais;
+window.rcppAccao = rcppAccao;
+window.rcppAdiar = rcppAdiar;
+window.rcppPerder = rcppPerder;
+window.rcppFechar = rcppFechar;
+window.rcppInstalarSeparador = rcppInstalarSeparador;
