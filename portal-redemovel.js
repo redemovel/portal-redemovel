@@ -4533,7 +4533,8 @@ function rcppBuscaRender() {
 
   if (!r.clientes.length) {
     el.innerHTML = cab + `<div style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:.85rem">
-      Nada encontrado. Experimenta o NIF, ou só uma palavra do nome.</div>`;
+      Nada encontrado.<br>Experimenta o NIF, ou <b>uma só palavra</b> do nome — procura-se palavra inteira, não pedaços de palavra.
+      <br><span style="font-size:.78rem">Um cliente cujo contrato não trouxe NIF não tem ficha, e nesse caso só se encontra pelo número do serviço.</span></div>`;
     return;
   }
 

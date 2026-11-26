@@ -4069,7 +4069,7 @@ async function rcppBuscar() {
     </div>`;
 
   if (!r.clientes.length) {
-    el.innerHTML = cab + '<p class="rodape-nota">Nada encontrado. Experimente o NIF, ou só uma palavra do nome.</p>';
+    el.innerHTML = cab + '<p class="rodape-nota">Nada encontrado. Experimente o NIF, ou <strong>uma só palavra</strong> do nome — procura-se palavra inteira, não pedaços de palavra. Um cliente cujo contrato não trouxe NIF não tem ficha, e nesse caso só se encontra pelo número do serviço.</p>';
     return;
   }
 
