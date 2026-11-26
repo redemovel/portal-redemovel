@@ -4168,7 +4168,7 @@ const RCPP_PERDA = {
   preco: 'Preço', concorrencia: 'Concorrência', mudou_morada: 'Mudou de morada',
   deixou_precisar: 'Deixou de precisar', nao_contactavel: 'Não contactável', outro: 'Outro',
 };
-let RCPP = { dados: null, filtro: 'todos', aberto: '', detalhes: {}, como: '', assistentes: null };
+let RCPP = { dados: null, filtro: 'todos', aberto: '', detalhes: {}, como: '', assistentes: null, busca: null, fichas: {} };
 
 function rcppTemAcesso() { return !!(SESSION && RCPP_ROLES.has(String(SESSION.role || '').toLowerCase())); }
 function rcppEhGestao() { return !!(SESSION && ['master', 'coordenador', 'coordenador_lojas'].includes(String(SESSION.role || '').toLowerCase())); }
@@ -4293,7 +4293,15 @@ function rcppRender() {
   }
   const kpi = (n, l, cls) => `<div class="rcpp-kpi ${cls || ''}"><div class="rcpp-kn">${n}</div><div class="rcpp-kl">${l}</div></div>`;
   document.getElementById('rcpp-conteudo').innerHTML = sel +
-    `<div class="rcpp-kpis">
+    `<div class="rcpp-acc" style="margin-bottom:.8rem">
+       <input type="search" id="rcpp-q" placeholder="Procurar cliente — NIF, nome, telefone ou e-mail"
+              style="flex:1;min-width:220px;padding:.4rem .6rem;border:1px solid var(--gray-light,#ddd);border-radius:6px;font-size:.82rem"
+              onkeydown="if(event.key==='Enter')rcppBuscar()">
+       <button class="rcpp-b" onclick="rcppBuscar()">Procurar</button>
+     </div>
+     <div id="rcpp-busca"></div>
+     <div id="rcpp-mesa">
+     <div class="rcpp-kpis">
        ${kpi(s.total, 'Em curso')}
        ${kpi(s.em_atraso, 'Em atraso', s.em_atraso ? 'urg' : '')}
        ${kpi(s.esta_semana, 'Acabam esta semana', s.esta_semana ? 'urg' : '')}
@@ -4305,8 +4313,19 @@ function rcppRender() {
        <button class="rcpp-b ok" style="margin-left:auto" onclick="rcppNovoForm()">+ Registo novo</button>
      </div>
      <div class="rcpp-form" id="rcpp-novo"></div>
-     <div id="rcpp-lista"></div>`;
+     <div id="rcpp-lista"></div>
+     </div>`;
   rcppLista();
+  // Depois de uma acção o ecrã é todo reconstruído. Se havia uma busca
+  // aberta, tem de voltar a aparecer — e a mesa tem de ficar escondida,
+  // senão apareciam as duas uma debaixo da outra.
+  if (RCPP.busca) {
+    const q = document.getElementById('rcpp-q');
+    if (q) q.value = RCPP.busca.termo || '';
+    const mesa = document.getElementById('rcpp-mesa');
+    if (mesa) mesa.style.display = 'none';
+    rcppBuscaRender();
+  }
 }
 
 function rcppVerComo(v) { RCPP.como = v; RCPP.assistentes = null; RCPP.detalhes = {}; rcppActivar(); }
@@ -4461,6 +4480,128 @@ function rcppLinhaMais(id) {
   c.appendChild(div);
 }
 
+// ── Buscas (2026-11-26) ────────────────────────────────────────
+// "Devemos ter buscas. Por NIF, Nome (denominação), Contacto telefónico,
+// e-mail... tanto nos Clientes como nos projetos e nos contratos."
+//
+// Procura-se o CLIENTE; os contratos e os RCPP vêm dentro da ficha dele,
+// como na outra plataforma. O servidor (lib/rcppBusca.js) é que decide que
+// consultas valem a pena para o que foi escrito — aqui só se mostra.
+//
+// Um assistente vê que um cliente de outro existe e de quem é, mas não
+// recebe os contactos nem abre a ficha. Serve para saber a quem perguntar.
+const RCPP_TIPO_NEG = { ativacao: 'activação', refidelizacao: 'refidelização', retencao: 'retenção' };
+
+async function rcppBuscar() {
+  const campo = document.getElementById('rcpp-q');
+  const termo = (campo ? campo.value : '').trim();
+  const mesa = document.getElementById('rcpp-mesa');
+  const el = document.getElementById('rcpp-busca');
+  if (!el) return;
+
+  if (!termo) { RCPP.busca = null; el.innerHTML = ''; if (mesa) mesa.style.display = ''; return; }
+  if (termo.length < 3) { alert('Escreve pelo menos 3 caracteres.'); return; }
+
+  el.innerHTML = '<div class="rcpp-nota">A procurar…</div>';
+  if (mesa) mesa.style.display = 'none';
+  const r = await rcppApi({ acao: 'buscarRcpp', termo });
+  if (!r || !r.ok) {
+    el.innerHTML = `<div class="rcpp-nota" style="color:var(--danger)">${esc((r && r.erro) || 'Erro.')}</div>`;
+    return;
+  }
+  RCPP.busca = r;
+  rcppBuscaRender();
+}
+
+function rcppFecharBusca() {
+  RCPP.busca = null;
+  const el = document.getElementById('rcpp-busca'); if (el) el.innerHTML = '';
+  const q = document.getElementById('rcpp-q'); if (q) q.value = '';
+  const mesa = document.getElementById('rcpp-mesa'); if (mesa) mesa.style.display = '';
+}
+
+function rcppBuscaRender() {
+  const el = document.getElementById('rcpp-busca');
+  const r = RCPP.busca;
+  if (!el || !r) return;
+
+  const cab = `<div class="rcpp-filtros" style="margin-bottom:.6rem">
+      <b style="font-size:.85rem">${r.total} resultado${r.total === 1 ? '' : 's'} para "${esc(r.termo)}"</b>
+      ${r.limitado ? '<span class="rcpp-nota" style="width:auto">só os primeiros — afina a procura</span>' : ''}
+      <button class="rcpp-b" style="margin-left:auto" onclick="rcppFecharBusca()">← Voltar à mesa</button>
+    </div>`;
+
+  if (!r.clientes.length) {
+    el.innerHTML = cab + `<div style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:.85rem">
+      Nada encontrado. Experimenta o NIF, ou só uma palavra do nome.</div>`;
+    return;
+  }
+
+  el.innerHTML = cab + r.clientes.map(c => {
+    const tels = c.contactos.filter(x => x.valor && !x.valor.includes('@'))
+      .map(x => `<span class="rcpp-num">${esc(x.valor)}</span>`).join(' ');
+    const mails = c.contactos.filter(x => (x.valor || '').includes('@'))
+      .map(x => `<span class="rcpp-nota" style="width:auto">${esc(x.valor)}</span>`).join(' ');
+    return `<div class="rcpp-c" id="rb-${esc(c.nif)}">
+      <div class="rcpp-ch"${c.meu ? ` onclick="rcppFicha('${esc(c.nif)}')"` : ''}>
+        <div><div class="rcpp-nome">${esc(c.nome)}</div>
+          <div class="rcpp-sub">${esc(c.nif)}${c.nif_valido ? '' : ' <i>NIF a confirmar</i>'}${c.loja ? ' · ' + esc(c.loja) : ''}${c.n_contratos ? ' · ' + c.n_contratos + ' contrato' + (c.n_contratos === 1 ? '' : 's') : ''}${c.sem_ficha ? ' · <i>sem ficha</i>' : ''}</div></div>
+        <div class="rcpp-dir">${c.meu
+          ? '<span class="rcpp-est">na tua carteira</span>'
+          : `<span class="rcpp-est">de ${esc(c.username || '—')}</span>`}</div>
+      </div>
+      ${c.meu ? `<div class="rcpp-meta">${tels}${mails}</div>` : '<div class="rcpp-nota">Cliente de outro assistente — fala com quem o tem.</div>'}
+      <div class="rcpp-det" id="rbf-${esc(c.nif)}"></div>
+    </div>`;
+  }).join('');
+}
+
+async function rcppFicha(nif) {
+  const el = document.getElementById('rbf-' + nif);
+  if (!el) return;
+  if (el.innerHTML) { el.innerHTML = ''; return; }
+  document.querySelectorAll('.rcpp-det').forEach(x => { x.innerHTML = ''; });
+  if (RCPP.fichas[nif]) { el.innerHTML = rcppFichaHtml(RCPP.fichas[nif]); return; }
+  el.innerHTML = '<div class="rcpp-nota">A carregar…</div>';
+  const r = await rcppApi({ acao: 'fichaClienteRcpp', nif });
+  if (!r || !r.ok) { el.innerHTML = `<div class="rcpp-nota" style="color:var(--danger)">${esc((r && r.erro) || 'Erro.')}</div>`; return; }
+  RCPP.fichas[nif] = r;
+  el.innerHTML = rcppFichaHtml(r);
+}
+
+function rcppFichaHtml(r) {
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  // Fidelizações: as substituídas ficam esbatidas, não escondidas — ver o
+  // que o cliente já teve é metade da conversa de renovação.
+  const fid = r.contratos.map(l => {
+    const acabou = l.fim && l.fim < hoje;
+    const cor = l.superado ? 'var(--text-muted,#999)' : acabou ? 'var(--danger,#e60000)' : 'inherit';
+    return `<div class="rcpp-hl" style="color:${cor}">
+      ${esc(l.produto || '(sem produto)')}${l.servico ? ' · ' + esc(l.servico) : ''} · ${l.meses}m ·
+      ${rcppDataPT(l.inicio)} → ${rcppDataPT(l.fim)}
+      ${l.tipo ? ' · ' + esc(RCPP_TIPO_NEG[l.tipo] || l.tipo) : ''}
+      ${l.superado ? ' · <i>substituído</i>' : acabou ? ' · <i>terminado</i>' : ''}
+      ${l.origem === 'app' ? ' · <i>registado aqui</i>' : ''}
+    </div>`;
+  }).join('') || '<div class="rcpp-nota">Sem fidelizações no histórico.</div>';
+
+  const proj = r.projetos.map(p => `<div class="rcpp-hl">
+      ${rcppDataPT(p.data_fim)} · <b>${esc(RCPP_ESTAGIOS[p.estagio] || p.estagio)}</b> ·
+      ${p.n_linhas} linha${p.n_linhas === 1 ? '' : 's'}
+      ${p.username !== p.username_original ? ' · reatribuído de ' + esc(p.username_original) : ''}
+      ${p.motivo_perda ? ' · perdido: ' + esc(RCPP_PERDA[p.motivo_perda] || p.motivo_perda) : ''}
+    </div>`).join('') || '<div class="rcpp-nota">Sem RCPP — nenhum contrato deste cliente está perto do fim.</div>';
+
+  const cont = (r.cliente.contactos || []).map(c =>
+    `<div class="rcpp-hl">${esc(c.valor)}${c.nome ? ' — ' + esc(c.nome) : ''}${c.origem === 'servico' ? ' <i>(nº do serviço)</i>' : ''}</div>`
+  ).join('') || '<div class="rcpp-nota">Sem contactos na ficha.</div>';
+
+  return `<div class="rcpp-fl" style="margin-top:.4rem">Contactos</div>${cont}
+    <div class="rcpp-fl" style="margin-top:.6rem">Fidelizações (${r.n_contratos}, ${r.n_ativos} em vigor)</div>${fid}
+    <div class="rcpp-fl" style="margin-top:.6rem">RCPP (${r.projetos.length})</div>${proj}`;
+}
+
 // ── Registo novo (2026-11-26) ──────────────────────────────────
 // Uma venda que não vem de renovação nenhuma: activação, refidelização ou
 // retenção feita ao balcão. Entra como contrato com origem 'app', e daqui a
@@ -4554,6 +4695,7 @@ async function rcppNovoGravar(botao) {
 function rcppDepois(r) {
   if (!r || !r.ok) { alert((r && r.erro) || 'Erro.'); }
   RCPP.detalhes = {};
+  RCPP.fichas = {};
   rcppActivar();
 }
 
@@ -4600,6 +4742,9 @@ window.rcppAccao = rcppAccao;
 window.rcppAdiar = rcppAdiar;
 window.rcppPerder = rcppPerder;
 window.rcppFechar = rcppFechar;
+window.rcppBuscar = rcppBuscar;
+window.rcppFecharBusca = rcppFecharBusca;
+window.rcppFicha = rcppFicha;
 window.rcppNovoForm = rcppNovoForm;
 window.rcppNovoLinha = rcppNovoLinha;
 window.rcppNovoGravar = rcppNovoGravar;
