@@ -792,7 +792,7 @@
     <div class="gestao-secao" id="aba-rcpp" hidden>
       <div class="cartao">
         <h2>🔄 Renovações na coordenação</h2>
-        <p class="rodape-nota" style="margin-bottom:1rem">Contratos de fidelização a chegar ao fim que já saíram da mesa do assistente — ou porque passaram a <strong>um mês do termo</strong> sem fecho, ou porque o negócio se perdeu. Ordenados por quem acaba primeiro. <strong>Reatribuir</strong> muda a carteira do cliente: os projetos abertos desse cliente passam todos para o novo assistente.</p>
+        <p class="rodape-nota" style="margin-bottom:1rem">Contratos de fidelização a chegar ao fim que já saíram da mesa do assistente — ou porque passaram a <strong>um mês do termo</strong> sem fecho, ou porque o negócio se perdeu. Ordenados por quem acaba primeiro. <strong>Reatribuir</strong> muda a carteira do cliente: os projetos abertos desse cliente passam todos para o novo assistente. <strong>Anular</strong> desfaz um fecho ou uma perda: o projeto volta &agrave; mesa de quem o tinha e, se o fecho criou um contrato nesta aplica&ccedil;&atilde;o, esse contrato &eacute; apagado.</p>
         <div class="resumo-grelha" id="rcpp-resumo"><div class="resumo-item"><span class="rotulo">A carregar…</span></div></div>
         <div class="filtros" style="margin-top:1rem">
           <div>
@@ -802,6 +802,15 @@
           <div>
             <label class="form-label" for="rcpp-origem">Assistente de origem</label>
             <select class="form-input" id="rcpp-origem" onchange="carregarRcppCoordenacao()"><option value="">Todos</option></select>
+          </div>
+          <div>
+            <label class="form-label" for="rcpp-tipo">Mostrar</label>
+            <select class="form-input" id="rcpp-tipo" onchange="carregarRcppCoordenacao()">
+              <option value="entregues">Entregues &agrave; coordena&ccedil;&atilde;o</option>
+              <option value="perdidos">Perdidos</option>
+              <option value="fechados">Fechados (para anular um engano)</option>
+              <option value="todos">Tudo o que saiu da mesa</option>
+            </select>
           </div>
           <div style="align-self:flex-end">
             <button class="btn" onclick="carregarRcppCoordenacao()">Atualizar</button>
@@ -3926,7 +3935,8 @@ async function carregarRcppCoordenacao() {
   lista.innerHTML = '<span class="spinner"></span>A carregar…';
   const loja = document.getElementById('rcpp-loja').value;
   const origem = document.getElementById('rcpp-origem').value;
-  const r = await chamarApi({ acao: 'mesaCoordenacaoRcpp', loja, origem });
+  const tipo = document.getElementById('rcpp-tipo').value;
+  const r = await chamarApi({ acao: 'mesaCoordenacaoRcpp', loja, origem, tipo });
   if (!r.ok) {
     // Tambem limpar os contadores: deixa-los em "A carregar..." faz
     // parecer que o ecra ainda esta a trabalhar quando ja falhou.
@@ -3962,7 +3972,10 @@ function rcppRenderResumo(r) {
   const item = (rotulo, valor, destaque) =>
     `<div class="resumo-item"><span class="rotulo">${rotulo}</span><span class="valor"${destaque ? ' style="color:var(--danger)"' : ''}>${valor}</span></div>`;
   el.innerHTML =
-    item('Na coordenação', r.total) +
+    item('Em lista', r.total) +
+    item('Entregues', r.entregues) +
+    item('Perdidos', r.perdidos, r.perdidos > 0) +
+    item('Fechados', r.fechados) +
     item('Acabam esta semana', r.esta_semana, r.esta_semana > 0) +
     item('Já terminaram', r.expirados, r.expirados > 0);
 }
@@ -3973,8 +3986,9 @@ function rcppRenderLista(r) {
 
   el.innerHTML = r.projetos.map(p => {
     const num = p.contacto || p.contacto_servico || '';
+    // 2026-11-26: isto usa-se num computador — o link tel: nao fazia nada.
     const tel = num
-      ? `<a href="tel:${rcppEsc(num)}">☎ ${rcppEsc(num)}</a>${p.contacto ? '' : ' <em>(serviço)</em>'}`
+      ? `<span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600">${rcppEsc(num)}</span>${p.contacto ? '' : ' <em>(serviço)</em>'}`
       : '<span style="color:var(--text-muted)">sem contacto</span>';
 
     const linhas = p.linhas.map(l =>
@@ -3983,14 +3997,18 @@ function rcppRenderLista(r) {
        </div>`).join('');
 
     const urgente = p.dias !== null && p.dias <= 7;
-    const perdido = p.motivo_perda ? ` · perdido: ${rcppEsc(p.motivo_perda)}` : '';
+    const ehPerdido = p.estagio === 'perdido';
+    const ehFechado = p.estagio === 'fechado';
+    const perdido = p.motivo_perda
+      ? ` · <span style="color:var(--danger)">perdido: ${rcppEsc(RCPP_PERDA_TEXTO[p.motivo_perda] || p.motivo_perda)}${p.motivo_perda_texto ? ' — ' + rcppEsc(p.motivo_perda_texto) : ''}</span>`
+      : '';
 
-    return `<div class="cartao" style="margin-bottom:.6rem;padding:.8rem 1rem;border-left:3px solid ${urgente ? 'var(--danger)' : 'var(--gray-light)'}">
+    return `<div class="cartao" style="margin-bottom:.6rem;padding:.8rem 1rem;border-left:3px solid ${ehPerdido ? '#b36' : ehFechado ? 'var(--success, #0a0)' : urgente ? 'var(--danger)' : 'var(--gray-light)'}">
       <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
           <strong>${rcppEsc(p.cliente_nome)}</strong>
           <div style="font-size:.78rem;color:var(--text-muted)">
-            ${p.n_linhas} linha${p.n_linhas === 1 ? '' : 's'} · ${rcppEsc(p.loja)} · de ${rcppEsc(p.username_original || '(sem assistente)')}${perdido}
+            ${p.n_linhas} linha${p.n_linhas === 1 ? '' : 's'} · ${rcppEsc(p.loja)} · de ${rcppEsc(p.username_original || '(sem assistente)')}${perdido}${ehFechado ? ` · <span style="color:var(--success,#070)">fechado ${rcppData(p.fechado_em)}</span>` : ''}
           </div>
           ${linhas}
           <div style="margin-top:.4rem;font-size:.82rem">${tel}</div>
@@ -3999,11 +4017,31 @@ function rcppRenderLista(r) {
           <div style="font-weight:600${urgente ? ';color:var(--danger)' : ''}">${rcppEsc(rcppPrazo(p.dias))}</div>
           <div style="font-size:.78rem;color:var(--text-muted)">termina ${rcppData(p.data_fim)}</div>
           <button class="btn" style="margin-top:.5rem" onclick="rcppAbrirReatribuir('${rcppEsc(p.cliente_nif)}','${rcppEsc(p.cliente_nome)}')">Reatribuir</button>
+          ${ehPerdido || ehFechado ? `<button class="btn" style="margin-top:.35rem" onclick="rcppAnular('${rcppEsc(p.id)}','${rcppEsc(p.cliente_nome)}')">Anular ${ehFechado ? 'o fecho' : 'a perda'}</button>` : ''}
         </div>
       </div>
       <div id="rcpp-reatribuir-${rcppEsc(p.cliente_nif)}"></div>
     </div>`;
   }).join('');
+}
+
+// Motivos da perda, como os grava a mesa do assistente (lib/rcpp.js).
+const RCPP_PERDA_TEXTO = {
+  preco: 'preço', concorrencia: 'concorrência', mudou_morada: 'mudou de morada',
+  deixou_precisar: 'deixou de precisar', nao_contactavel: 'não contactável', outro: 'outro',
+};
+
+// Anular (2026-11-26) — desfazer um fecho ou uma perda. Pedido do Ricardo
+// quando perguntou "tenho como abortar o teste?": sem isto, um clique errado
+// num botão ficava gravado para sempre na base de dados real.
+async function rcppAnular(id, nome) {
+  if (!confirm('Anular o registo de ' + nome + '?\n\nO projeto volta à mesa do assistente. Se o fecho tinha criado um contrato nesta aplicação, esse contrato é apagado — contratos importados do PHC nunca são tocados.')) return;
+  const r = await chamarApi({ acao: 'reabrirRcpp', id });
+  if (!r.ok) { alert(r.erro || 'Erro.'); return; }
+  alert(r.apagados
+    ? 'Anulado. Voltou ao estágio "' + r.estagio + '" e foram apagadas ' + r.apagados + ' linha(s) do contrato criado aqui.'
+    : 'Anulado. Voltou ao estágio "' + r.estagio + '".');
+  carregarRcppCoordenacao();
 }
 
 async function rcppAbrirReatribuir(nif, nome) {

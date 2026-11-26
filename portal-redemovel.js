@@ -4205,8 +4205,8 @@ function rcppInstalarSeparador() {
   btn.className = 'nav-item';
   btn.id = 'nav-rcpp';
   btn.type = 'button';
-  btn.title = 'Clientes com contrato a acabar — renovações';
-  btn.textContent = '🔄 Renovações';
+  btn.title = 'RCPP — clientes com contrato a acabar, e registo de actividade nova';
+  btn.textContent = '🔄 RCPP';
   btn.addEventListener('click', () => showView('rcpp', btn));
   const caixa = document.getElementById('nav-caixa');
   const perfil = lista.querySelector('.nav-item[onclick*="\'perfil\'"]');
@@ -4244,7 +4244,7 @@ function rcppGarantirEstilos() {
   .rcpp-c.urg .rcpp-prazo { color:var(--danger,#e60000); font-weight:700; }
   .rcpp-ln { font-size:.7rem; color:var(--text-muted,#777); padding:.1rem 0; }
   .rcpp-meta { margin-top:.45rem; font-size:.72rem; display:flex; gap:.7rem; flex-wrap:wrap; align-items:center; }
-  .rcpp-tel { color:#06c; font-weight:600; text-decoration:none; }
+  .rcpp-num { font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; font-size:.8rem; letter-spacing:.02em; }
   .rcpp-jan { color:var(--text-muted,#888); }
   .rcpp-jan.ok { color:var(--success,#070); font-weight:600; }
   .rcpp-acc { margin-top:.6rem; display:flex; gap:.35rem; flex-wrap:wrap; }
@@ -4302,7 +4302,9 @@ function rcppRender() {
      <div class="rcpp-filtros">
        ${['todos|Todos', 'janela|Na janela', 'semana|Esta semana', 'porcontactar|Por contactar', 'adiados|Adiados', 'coord|Na coordenação (' + s.na_coord + ')']
         .map(f => { const [k, t] = f.split('|'); return `<span class="rcpp-fb${RCPP.filtro === k ? ' on' : ''}" onclick="rcppFiltrar('${k}')">${t}</span>`; }).join('')}
+       <button class="rcpp-b ok" style="margin-left:auto" onclick="rcppNovoForm()">+ Registo novo</button>
      </div>
+     <div class="rcpp-form" id="rcpp-novo"></div>
      <div id="rcpp-lista"></div>`;
   rcppLista();
 }
@@ -4332,7 +4334,7 @@ function rcppCartao(p) {
   const prazo = p.dias === null ? '' : p.dias < 0 ? `terminou há ${-p.dias} dias` : p.dias === 0 ? 'termina hoje' : `faltam ${p.dias} dias`;
   const num = p.contacto || p.contacto_servico || '';
   const tel = num
-    ? `<a class="rcpp-tel" href="tel:${esc(num)}" onclick="event.stopPropagation()">☎ ${esc(num)}${p.contacto ? '' : ' <i>(serviço)</i>'}</a>`
+    ? `<span class="rcpp-num">${esc(num)}${p.contacto ? '' : ' <i>(serviço)</i>'}</span>`
     : '<span style="color:var(--text-muted)">sem contacto</span>';
   const janela = p.na_janela
     ? '<span class="rcpp-jan ok">✔ Na janela — altura certa para fechar</span>'
@@ -4382,12 +4384,14 @@ async function rcppDetalhe(id) {
 
 function rcppDetalheHtml(d) {
   const SV = { movel: 'Móvel', fixo: 'Fixo', dados: 'Dados' };
-  let cont = '<div class="rcpp-acc">';
-  (d.contactos || []).forEach((c, i) => {
-    cont += `<a class="rcpp-b${i === 0 ? ' ok' : ''}" href="tel:${esc(c.valor)}">☎ ${i === 0 ? 'Ligar ' : ''}${esc(c.valor)}</a>`;
+  // 2026-11-26: isto usa-se ao balcão, num computador — os links tel: e sms:
+  // não fazem nada aqui e só ocupavam espaço. O número fica em texto, para
+  // se ler e marcar no telefone da loja.
+  let cont = '<div class="rcpp-acc" style="align-items:baseline">';
+  (d.contactos || []).forEach(c => {
+    cont += `<span class="rcpp-num">${esc(c.valor)}</span>`;
     if (c.servico) cont += '<span class="rcpp-nota" style="width:auto">nº do serviço</span>';
   });
-  if (d.contactos && d.contactos.length) cont += `<a class="rcpp-b" href="sms:${esc(d.contactos[0].valor)}">✉ SMS</a>`;
   if (d.email) cont += `<a class="rcpp-b" href="mailto:${esc(d.email)}?subject=${encodeURIComponent('Renovação do seu contrato')}">✉ ${esc(d.email)}</a>`;
   if (!(d.contactos || []).length && !d.email) cont += '<span class="rcpp-nota">Sem telefone nem e-mail. Confirma os dados nos sistemas Vodafone.</span>';
   cont += '</div>';
@@ -4457,6 +4461,95 @@ function rcppLinhaMais(id) {
   c.appendChild(div);
 }
 
+// ── Registo novo (2026-11-26) ──────────────────────────────────
+// Uma venda que não vem de renovação nenhuma: activação, refidelização ou
+// retenção feita ao balcão. Entra como contrato com origem 'app', e daqui a
+// dois anos a geração nocturna faz dela um RCPP como faz dos do PHC — é o
+// mesmo ciclo, só começa aqui em vez de começar no histórico.
+const RCPP_TIPOS = {
+  ativacao: 'Activação (cliente novo)',
+  refidelizacao: 'Refidelização',
+  retencao: 'Retenção',
+};
+
+function rcppNovoForm() {
+  const el = document.getElementById('rcpp-novo');
+  if (!el) return;
+  if (el.innerHTML) { el.innerHTML = ''; return; }
+  document.querySelectorAll('.rcpp-form').forEach(x => { x.innerHTML = ''; });
+
+  const lojas = (RCPP.dados && RCPP.dados.lojas) || [];
+  const opLoja = lojas.map(l => `<option value="${esc(l.codigo)}">${esc(l.codigo)} — ${esc(l.nome)}</option>`).join('');
+  const opTipo = Object.keys(RCPP_TIPOS).map(k => `<option value="${k}">${RCPP_TIPOS[k]}</option>`).join('');
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  el.innerHTML = `<div class="rcpp-fl">Registo novo — venda que não vem de uma renovação</div>
+    <div class="rcpp-acc">
+      <input type="text" id="rn-nome" placeholder="Nome do cliente *" style="flex:1;min-width:180px">
+      <input type="text" id="rn-nif" placeholder="NIF" style="width:110px" maxlength="9">
+      <select id="rn-loja">${opLoja || '<option value="">(sem lojas)</option>'}</select>
+      <select id="rn-tipo">${opTipo}</select>
+    </div>
+    <div class="rcpp-acc" style="margin-top:.35rem">
+      <input type="text" id="rn-tel" placeholder="Telefone" style="width:130px">
+      <input type="text" id="rn-email" placeholder="E-mail" style="flex:1;min-width:150px">
+      <span class="rcpp-nota" style="width:auto">Início da permanência</span>
+      <input type="date" id="rn-data" value="${hoje}">
+    </div>
+    <div class="rcpp-fl" style="margin-top:.6rem">Linhas do negócio</div>
+    <div id="rn-linhas"></div>
+    <div class="rcpp-acc" style="margin-top:.35rem">
+      <button class="rcpp-b" onclick="rcppNovoLinha()">+ Linha</button>
+      <button class="rcpp-b ok" onclick="rcppNovoGravar(this)">Registar venda</button>
+      <button class="rcpp-b" onclick="rcppNovoForm()">Cancelar</button>
+    </div>
+    <div class="rcpp-nota">Sem NIF não se cria ficha de cliente e a renovação futura fica mais frágil — mete-o sempre que puderes. Se a venda se registar por engano, a coordenação apaga no Controlo de Caixa.</div>`;
+  rcppNovoLinha();
+}
+
+function rcppNovoLinha() {
+  const c = document.getElementById('rn-linhas');
+  if (!c) return;
+  const n = c.children.length;
+  const div = document.createElement('div');
+  div.className = 'rcpp-acc';
+  div.innerHTML = `<input type="text" class="rn-p" placeholder="Produto *" style="flex:1;min-width:130px">
+    <input type="text" class="rn-sv" placeholder="Nº de serviço" style="width:130px">
+    <select class="rn-m"><option value="24" selected>24 meses</option><option value="36">36</option><option value="30">30</option><option value="18">18</option><option value="12">12</option></select>
+    ${n ? '<button class="rcpp-b" onclick="this.parentNode.remove()">×</button>' : ''}`;
+  c.appendChild(div);
+}
+
+async function rcppNovoGravar(botao) {
+  const val = id => (document.getElementById(id) || {}).value || '';
+  const nome = val('rn-nome').trim();
+  if (!nome) { alert('Indica o nome do cliente.'); return; }
+
+  const linhas = [];
+  for (const div of document.getElementById('rn-linhas').children) {
+    const produto = div.querySelector('.rn-p').value.trim();
+    if (!produto) continue;
+    linhas.push({ produto, servico: div.querySelector('.rn-sv').value.trim(), permanencia_meses: Number(div.querySelector('.rn-m').value) });
+  }
+  if (!linhas.length) { alert('Indica pelo menos um produto.'); return; }
+
+  // Travar o botão: dois cliques seguidos gravavam a mesma venda duas vezes,
+  // e cada uma com documento próprio — não havia como as reconhecer.
+  if (botao) { botao.disabled = true; botao.textContent = 'A registar…'; }
+  const r = await rcppApi({
+    acao: 'novoRcpp', cliente_nome: nome, cliente_nif: val('rn-nif').trim(),
+    loja: val('rn-loja'), tipo: val('rn-tipo'), contacto: val('rn-tel').trim(),
+    email: val('rn-email').trim(), data_inicio: val('rn-data'), linhas,
+  });
+  if (r && r.ok) {
+    alert(`Venda registada com ${r.linhas} linha(s).\nA permanência termina a ${rcppDataPT(r.data_fim)} e a janela de renovação abre a ${rcppDataPT(r.data_janela)}.`);
+    const el = document.getElementById('rcpp-novo'); if (el) el.innerHTML = '';
+  } else if (botao) {
+    botao.disabled = false; botao.textContent = 'Registar venda';
+  }
+  rcppDepois(r);
+}
+
 // ── Acções ─────────────────────────────────────────────────────
 function rcppDepois(r) {
   if (!r || !r.ok) { alert((r && r.erro) || 'Erro.'); }
@@ -4507,4 +4600,7 @@ window.rcppAccao = rcppAccao;
 window.rcppAdiar = rcppAdiar;
 window.rcppPerder = rcppPerder;
 window.rcppFechar = rcppFechar;
+window.rcppNovoForm = rcppNovoForm;
+window.rcppNovoLinha = rcppNovoLinha;
+window.rcppNovoGravar = rcppNovoGravar;
 window.rcppInstalarSeparador = rcppInstalarSeparador;
