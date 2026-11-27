@@ -753,6 +753,14 @@
         <li><a href="#manual-diverso">➕ Movimento diverso</a></li>
         <li><a href="#manual-arqueio">🧮 Arqueio (fecho de caixa)</a></li>
         <li><a href="#manual-folha">📒 Mapa Global</a></li>
+        <li><a href="#manual-rcpp">🔄 RCPP — renovação de contratos</a>
+          <ul style="margin:.1rem 0 .1rem 1.1rem">
+            <li><a href="#manual-rcpp-negocios">📋 Negócios — a tua mesa</a></li>
+            <li><a href="#manual-rcpp-clientes">👤 Clientes — procurar e a ficha</a></li>
+            <li><a href="#manual-rcpp-registo">➕ Registo novo</a></li>
+            <li><a href="#manual-rcpp-coord">🔄 Coordenação</a></li>
+          </ul>
+        </li>
         <li><a href="#manual-faq">Perguntas frequentes</a></li>
       </ul>
     </div>
@@ -831,8 +839,131 @@
       <p style="font-size:.85rem">Consulta todos os movimentos de uma loja (Cobranças, GSV, diversos, arqueios) num período — útil para conferir ou procurar algo específico, sem teres de ir a cada tab separadamente. Escolhe a loja e o período ("De"/"Até") e clica em "Atualizar".</p>
     </div>
 
+    <!-- ── Manual do RCPP (2026-11-27) ───────────────────────────────── -->
+    <div class="cartao" id="manual-rcpp">
+      <h2>🔄 RCPP — renovação de contratos</h2>
+      <p>O <strong>RCPP</strong> é onde se trabalha a renovação dos contratos de permanência: ver que clientes estão a chegar ao fim do contrato, contactá-los a tempo, registar o que acontece, e registar as vendas novas que não vêm de renovação nenhuma.</p>
+      <p class="rodape-nota">Substitui o dossier RCPP do PHC. O histórico todo — 13.486 linhas de contrato — foi importado, por isso os clientes que já lá estavam continuam lá.</p>
+
+      <h3>Como funciona o ciclo</h3>
+      <p style="font-size:.85rem">Cada contrato de permanência tem um fim. O sistema trabalha sozinho a partir dessa data:</p>
+      <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
+        <li><strong>3 meses e meio antes do fim</strong> — nasce o RCPP e aparece na tua mesa, em <strong>Negócios</strong>.</li>
+        <li><strong>3 meses antes do fim</strong> — abre a <strong>janela</strong>. É a altura certa para telefonar: é quando a penalização comissional de renovar é menor. O cartão passa a dizer "✔ Na janela".</li>
+        <li><strong>1 mês antes do fim</strong> — se ainda não tiver sido fechado, sai da tua mesa e passa para a <strong>coordenação</strong>, que decide o que fazer.</li>
+      </ol>
+      <div class="alerta alerta-aviso">⚠️ Um contrato que chega ao fim sem renovação é um cliente que fica livre para ir à concorrência. O que está "na janela" é o trabalho do dia — não o deixes para amanhã.</div>
+
+      <h3>Os quatro separadores</h3>
+      <ul style="margin:.3rem 0 0 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>📋 Negócios</strong> — a tua mesa: os contratos a chegar ao fim.</li>
+        <li><strong>👤 Clientes</strong> — procurar um cliente e abrir a ficha dele.</li>
+        <li><strong>➕ Registo novo</strong> — registar uma venda que não vem de uma renovação.</li>
+        <li><strong>🔄 Coordenação</strong> — só Master e Coordenador.</li>
+      </ul>
+    </div>
+
+    <div class="cartao" id="manual-rcpp-negocios">
+      <h2>📋 Negócios — a tua mesa</h2>
+      <p>Abre sozinho quando entras no RCPP. As quatro caixas em cima dizem-te onde estás:</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Em curso</strong> — quantos contratos tens a trabalhar.</li>
+        <li><strong>Em atraso</strong> — já passaram do fim. Estes são os que doem.</li>
+        <li><strong>Acabam esta semana</strong> — últimos dias para fechar.</li>
+        <li><strong>Na janela</strong> — prontos a telefonar. Começa por aqui.</li>
+      </ul>
+
+      <h3>O que fazer com um cartão</h3>
+      <p style="font-size:.85rem"><strong>Clica no nome</strong> para abrir o detalhe: os contactos, as linhas do negócio em tabela, as datas do ciclo e o histórico de tudo o que já se fez com aquele cliente.</p>
+      <p style="font-size:.85rem">Os botões registam o que aconteceu, e é esse registo que faz a coordenação saber em que pé está cada negócio:</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Contactado</strong> — falaste com o cliente.</li>
+        <li><strong>Em negociação</strong> — está a decidir, há proposta em cima da mesa.</li>
+        <li><strong>Adiar</strong> — pedes uma data para voltar (cliente de férias, pediu para ligar noutra altura). Volta à tua mesa nesse dia. Não pode passar do último mês do contrato: se escolheres mais tarde, o sistema encurta.</li>
+        <li><strong>Perdido</strong> — escolhes o motivo. Vai para a coordenação analisar.</li>
+        <li><strong>Fechou negócio</strong> — abre o painel para registares o contrato novo.</li>
+      </ul>
+
+      <h3>Fechar um negócio</h3>
+      <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
+        <li>Carrega em <strong>Fechou negócio</strong>.</li>
+        <li>Escreve uma linha por cada serviço contratado. <strong>Um 4P com dois móveis adicionais são três linhas</strong>, não três registos.</li>
+        <li>Escolhe a permanência de cada linha (24 meses é o normal).</li>
+        <li>Confirma a data de início e carrega em <strong>Registar e fechar</strong>.</li>
+      </ol>
+      <p style="font-size:.85rem">O sistema calcula o fim da permanência e abre sozinho o RCPP da renovação seguinte, quando chegar a altura. Não tens de fazer mais nada.</p>
+      <div class="alerta alerta-ok">Enganaste-te? A coordenação anula. O negócio volta à tua mesa e o contrato criado por engano é apagado. Pede, não deixes ficar errado.</div>
+
+      <h3>Filtros</h3>
+      <p style="font-size:.85rem">As pastilhas por baixo das caixas estreitam a lista. <strong>Na coordenação</strong> mostra os que já saíram da tua mesa: continuam a ser clientes teus e podes vê-los, mas já não lhes mexes.</p>
+    </div>
+
+    <div class="cartao" id="manual-rcpp-clientes">
+      <h2>👤 Clientes — procurar e a ficha</h2>
+      <p>Procura por <strong>NIF, nome, telefone, e-mail ou morada</strong>. Meia palavra chega: <em>cat</em> encontra a Catarina.</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li>Procura-se por <strong>princípio de palavra</strong>: <em>sousa</em> e <em>sou</em> encontram a Sousa; <em>ousa</em> não, porque não é princípio de nada.</li>
+        <li>Podes escrever várias palavras, por qualquer ordem: <em>catarina sousa</em> ou <em>sousa catarina</em>. <strong>Todas têm de encaixar</strong>.</li>
+        <li>Um cliente de outro assistente aparece com o nome e de quem é, mas sem contactos e sem ficha — serve para saberes a quem perguntar.</li>
+      </ul>
+
+      <h3>A ficha do cliente</h3>
+      <p style="font-size:.85rem">Clica num resultado teu para abrir. Tem três separadores:</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Ficha</strong> — nome, morada, código postal, localidade, e-mail, contactos e notas. <strong>Podes editar e guardar.</strong> Fica registado quem mudou o quê e quando.</li>
+        <li><strong>Fidelizações</strong> — o histórico todo de contratos daquele cliente. As substituídas aparecem esbatidas: ver o que ele já teve é metade da conversa de renovação.</li>
+        <li><strong>RCPP</strong> — as renovações dele, as de agora e as passadas.</li>
+      </ul>
+      <div class="alerta alerta-aviso">⚠️ <strong>A morada não veio do PHC</strong> — a exportação do dossier não a trouxe. Aproveita cada atendimento para a escrever. Vale o mesmo para o e-mail: quase nenhum cliente tem.</div>
+      <p style="font-size:.85rem">O botão <strong>+ Registar venda</strong>, em cima, leva-te ao registo novo já com o cliente preenchido.</p>
+    </div>
+
+    <div class="cartao" id="manual-rcpp-registo">
+      <h2>➕ Registo novo — uma venda que não vem de renovação</h2>
+      <p>Para activações de cliente novo, refidelizações e retenções feitas ao balcão. O que vem de uma renovação fecha-se no cartão, em <strong>Negócios</strong> — aqui é só o resto.</p>
+
+      <h3>Encontrar o cliente primeiro</h3>
+      <p style="font-size:.85rem">Antes de escrever o que quer que seja, vê se o cliente já existe. Há dois caminhos:</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Pelo NIF</strong> — escreve-o e sai do campo. Se existir, o resto preenche-se sozinho.</li>
+        <li><strong>Pelo nome</strong> — escreve e carrega em <strong>🔍 pelo nome</strong> (ou Enter). Aparecem os clientes que calham, com NIF, loja, telefone e quantos contratos têm. Escolhes.</li>
+      </ul>
+      <div class="alerta alerta-aviso">⚠️ <strong>Não escrevas o nome à mão se o cliente já existir.</strong> Um "Joana C. F. Sousa" ao lado da "Joana Catarina Fontes de Sousa" são dois clientes diferentes para o sistema: duas carteiras, duas renovações, nenhuma delas completa.</div>
+
+      <h3>Preencher</h3>
+      <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
+        <li><strong>Nome</strong> e <strong>NIF</strong> — mete sempre o NIF que puderes. Sem ele não se cria ficha de cliente e a renovação futura fica mais frágil.</li>
+        <li><strong>Loja</strong> e <strong>tipo de negócio</strong> — abre em Refidelização, que é o caso mais comum. Muda se for activação ou retenção.</li>
+        <li><strong>Telefone</strong> e <strong>e-mail</strong> — é por aqui que se contacta o cliente daqui a dois anos.</li>
+        <li><strong>Início da permanência</strong> — a data em que o contrato começa a contar.</li>
+        <li><strong>Linhas do negócio</strong> — uma por serviço, com a permanência de cada uma.</li>
+      </ol>
+      <p style="font-size:.85rem">Carrega em <strong>Registar venda</strong> uma só vez e espera. O sistema diz-te quando a permanência termina e quando abre a janela da renovação.</p>
+    </div>
+
+    <div class="cartao" id="manual-rcpp-coord">
+      <h2>🔄 Coordenação <span class="rodape-nota">(só Master e Coordenador)</span></h2>
+      <p>Os contratos que saíram da mesa do assistente — por terem passado a um mês do fim sem fecho, ou porque o negócio se perdeu.</p>
+      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
+        <li><strong>Mostrar</strong> — entregues, perdidos, fechados, ou tudo.</li>
+        <li><strong>Ficha</strong> — abre a ficha do cliente.</li>
+        <li><strong>Reatribuir</strong> — passa o cliente para outro assistente. Todos os projetos abertos dele seguem juntos; os já fechados ficam com quem os fez.</li>
+        <li><strong>Anular</strong> — desfaz um fecho ou uma perda. O projeto volta à mesa de quem o tinha e, se o fecho criou um contrato nesta aplicação, esse contrato é apagado.</li>
+      </ul>
+      <div class="alerta alerta-ok">A anulação nunca toca em contratos importados do PHC — só apaga o que foi criado aqui, por aquele fecho. É seguro usar.</div>
+      <p style="font-size:.85rem">Para ver a mesa de um assistente, vai a <strong>📋 Negócios</strong> e escolhe-o em "Mesa de". O que registares aí fica em nome dele, não no teu.</p>
+    </div>
+
     <div class="cartao" id="manual-faq">
       <h2>Perguntas frequentes</h2>
+      <h3>Procurei um cliente que existe e não apareceu nada</h3>
+      <p style="font-size:.85rem">Procura-se por <strong>princípio de palavra</strong>: "sousa" e "sou" encontram a Sousa, "ousa" não encontra nada. Com várias palavras, todas têm de encaixar — "catarina pereira" não encontra a Catarina Sousa. Experimenta só o apelido, ou o NIF. Se o contrato do cliente não trouxe NIF do PHC, ele não tem ficha: nesse caso só se encontra pelo número do serviço.</p>
+      <h3>Fechei um negócio por engano no RCPP</h3>
+      <p style="font-size:.85rem">Fala com o Master/Coordenador. Em "🔄 RCPP → Coordenação", com Mostrar = <em>Fechados</em>, há um botão <strong>Anular o fecho</strong>: o negócio volta à tua mesa e o contrato criado por engano é apagado. Contratos importados do PHC nunca são tocados.</p>
+      <h3>Um cliente meu aparece como sendo de outro assistente</h3>
+      <p style="font-size:.85rem">A carteira segue o último contrato registado. Se estiver errado, o Master/Coordenador reatribui em "🔄 RCPP → Coordenação → Reatribuir" — todos os projetos abertos desse cliente passam de uma vez.</p>
+      <h3>O cliente não tem morada nem e-mail na ficha</h3>
+      <p style="font-size:.85rem">É normal: a exportação do dossier RCPP do PHC não trouxe esses campos. Escreve-os na ficha do cliente quando o atenderes — "👤 Clientes", procura, separador <strong>Ficha</strong>, e <em>Guardar ficha</em>.</p>
       <h3>Apareceu "colaborador não reconhecido" ao importar um ficheiro</h3>
       <p style="font-size:.85rem">Fala com o Master/Coordenador para associar o nome (Cobranças) ou código (GSV) em "🔐 Gestão → 👤 Colaboradores" — depois volta a importar o mesmo ficheiro, sem precisares de fazer mais nada.</p>
       <h3>O Talão do dia diz "NÃO CONFERE"</h3>
