@@ -922,17 +922,15 @@
       <h2>➕ Registo novo — uma venda que não vem de renovação</h2>
       <p>Para activações de cliente novo, refidelizações e retenções feitas ao balcão. O que vem de uma renovação fecha-se no cartão, em <strong>Negócios</strong> — aqui é só o resto.</p>
 
-      <h3>Encontrar o cliente primeiro</h3>
-      <p style="font-size:.85rem">Antes de escrever o que quer que seja, vê se o cliente já existe. Há dois caminhos:</p>
-      <ul style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.7">
-        <li><strong>Pelo NIF</strong> — escreve-o e sai do campo. Se existir, o resto preenche-se sozinho.</li>
-        <li><strong>Pelo nome</strong> — escreve e carrega em <strong>🔍 pelo nome</strong> (ou Enter). Aparecem os clientes que calham, com NIF, loja, telefone e quantos contratos têm. Escolhes.</li>
-      </ul>
-      <div class="alerta alerta-aviso">⚠️ <strong>Não escrevas o nome à mão se o cliente já existir.</strong> Um "Joana C. F. Sousa" ao lado da "Joana Catarina Fontes de Sousa" são dois clientes diferentes para o sistema: duas carteiras, duas renovações, nenhuma delas completa.</div>
+      <h3>Começa pelo NIF</h3>
+      <p style="font-size:.85rem">O NIF é o primeiro campo e é <strong>obrigatório</strong>. Assim que escreveres os nove algarismos, o sistema procura sozinho: se o cliente já existir, o nome, a loja, o telefone e o e-mail preenchem-se e aparece-te quantos contratos ele já tem.</p>
+      <p style="font-size:.85rem"><strong>Não sabes o NIF?</strong> Escreve o nome e carrega em <strong>🔍 pelo nome</strong> (ou Enter). Aparecem os clientes que calham, com NIF, loja, telefone e quantos contratos têm — escolhes um e fica tudo preenchido.</p>
+      <div class="alerta alerta-aviso">⚠️ <strong>Porque é que o NIF é obrigatório:</strong> é ele que identifica o cliente — é o próprio nome da ficha. Sem NIF, a mesma pessoa ficava com uma ficha nova a cada venda, e daqui a dois anos apareciam duas renovações dela, cada uma com metade da história. Pela mesma razão, não escrevas o nome à mão de um cliente que já existe: um "Joana C. F. Sousa" ao lado da "Joana Catarina Fontes de Sousa" são dois clientes diferentes para o sistema.</div>
 
       <h3>Preencher</h3>
       <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
-        <li><strong>Nome</strong> e <strong>NIF</strong> — mete sempre o NIF que puderes. Sem ele não se cria ficha de cliente e a renovação futura fica mais frágil.</li>
+        <li><strong>NIF</strong> — obrigatório, e é por aqui que se começa. É validado pelo dígito de controlo, por isso um engano a escrever é apanhado logo.</li>
+        <li><strong>Nome</strong> — vem preenchido se o cliente já existir.</li>
         <li><strong>Loja</strong> e <strong>tipo de negócio</strong> — abre em Refidelização, que é o caso mais comum. Muda se for activação ou retenção.</li>
         <li><strong>Telefone</strong> e <strong>e-mail</strong> — é por aqui que se contacta o cliente daqui a dois anos.</li>
         <li><strong>Início da permanência</strong> — a data em que o contrato começa a contar.</li>
@@ -4805,14 +4803,20 @@ function rcppRegistoForm(cliente) {
   el.innerHTML = `
     ${RCPP.como ? `<div class="alerta alerta-aviso">A venda fica em nome de <strong>${rcppEsc(RCPP.como)}</strong>, de quem é a mesa que estás a ver.</div>` : ''}
     ${c ? `<div class="alerta alerta-ok">Sobre a ficha de <strong>${rcppEsc(c.nome)}</strong>${c.n_contratos ? ` — ${c.n_contratos} contrato${c.n_contratos === 1 ? '' : 's'} no histórico` : ''}. A ficha não é alterada por aqui.</div>` : ''}
-    <div class="rcpp-grid" style="grid-template-columns:2fr 1fr auto">
+    <!-- O NIF primeiro, de propósito (2026-11-27): é por ele que se
+         começa, e assim que estiver escrito o cliente aparece sozinho.
+         Escrever o nome primeiro convidava a escrevê-lo à mão num cliente
+         que já existia — e aí ficam dois clientes para a mesma pessoa. -->
+    <div class="rcpp-grid" style="grid-template-columns:1fr 2fr auto">
+      <div><span class="rcpp-cr">NIF *</span>
+        <input class="form-input" id="rn-nif" maxlength="9" inputmode="numeric" placeholder="Começa por aqui"
+               value="${c ? rcppEsc(c.nif) : ''}"
+               oninput="rcppRegistoNifEscrito(this.value)" onchange="rcppRegistoNifEscrito(this.value)"></div>
       <div><span class="rcpp-cr">Nome do cliente *</span>
         <input class="form-input" id="rn-nome" value="${c ? rcppEsc(c.nome) : ''}"
                onkeydown="if(event.key==='Enter'){event.preventDefault();rcppRegistoPorNome();}"></div>
-      <div><span class="rcpp-cr">NIF</span>
-        <input class="form-input" id="rn-nif" maxlength="9" value="${c ? rcppEsc(c.nif) : ''}" onchange="rcppRegistoPorNif(this.value)"></div>
       <div><span class="rcpp-cr">&nbsp;</span>
-        <button class="rcpp-b" onclick="rcppRegistoPorNome()" title="Procurar este nome entre os clientes">🔍 pelo nome</button></div>
+        <button class="rcpp-b" onclick="rcppRegistoPorNome()" title="Não sabes o NIF? Procura pelo nome">🔍 pelo nome</button></div>
     </div>
     <div id="rn-aviso"></div>
     <div class="rcpp-grid" style="grid-template-columns:repeat(4,1fr); margin-top:.5rem">
@@ -4832,20 +4836,34 @@ function rcppRegistoForm(cliente) {
       <button class="rcpp-b" onclick="rcppRegistoForm()">Limpar</button>
     </div>
     <div class="rcpp-nota" style="margin-top:.5rem">Um 4P com dois móveis são três linhas.
-      Escreve o NIF e sai do campo, ou procura pelo nome: se o cliente já existir, o resto preenche-se sozinho.
-      Sem NIF não se cria ficha e a renovação futura fica mais frágil.</div>`;
+      <strong>Começa pelo NIF:</strong> assim que o escreveres, se o cliente já existir o resto preenche-se sozinho.
+      Não sabes o NIF? Procura pelo nome. O NIF é obrigatório porque é ele que identifica o cliente —
+      sem ele, a mesma pessoa ficava com uma ficha nova a cada venda.</div>`;
 
   if (c && c.loja) { const sl = document.getElementById('rn-loja'); if (sl) sl.value = c.loja; }
   rcppLinhaMais('novo');
-  const foco = document.getElementById(c ? 'rn-nif' : 'rn-nome');
+  RCPP_NIF_PROCURADO = c ? String(c.nif || '') : '';
+  const foco = document.getElementById('rn-nif');
   if (foco) foco.focus();
 }
 
-async function rcppRegistoPorNif(valor) {
+// Dispara mal os nove algarismos estejam escritos, sem ser preciso sair
+// do campo. Guarda o último procurado para não repetir o pedido a cada
+// tecla depois do nono algarismo.
+let RCPP_NIF_PROCURADO = '';
+async function rcppRegistoNifEscrito(valor) {
   const nif = String(valor || '').replace(/\D/g, '');
   const aviso = document.getElementById('rn-aviso');
   if (!aviso) return;
-  if (nif.length !== 9) { aviso.innerHTML = ''; return; }
+  if (nif.length !== 9) {
+    RCPP_NIF_PROCURADO = '';
+    aviso.innerHTML = nif.length
+      ? '<p class="rodape-nota">O NIF tem nove algarismos.</p>'
+      : '';
+    return;
+  }
+  if (nif === RCPP_NIF_PROCURADO) return;
+  RCPP_NIF_PROCURADO = nif;
   await rcppRegistoPreencher(nif, true);
 }
 
@@ -4908,6 +4926,7 @@ async function rcppRegistoPreencher(nif, soVazios) {
   };
   por('rn-nome', r.cliente.nome);
   por('rn-nif', r.cliente.nif);
+  RCPP_NIF_PROCURADO = r.cliente.nif;
   const t = (r.cliente.contactos || []).find(x => x.valor && !x.valor.includes('@'));
   const m = (r.cliente.contactos || []).find(x => (x.valor || '').includes('@'));
   por('rn-tel', t ? t.valor : '');
@@ -4922,6 +4941,12 @@ async function rcppRegistoPreencher(nif, soVazios) {
 
 async function rcppRegistarVenda(botao) {
   const v = id => (document.getElementById(id) || {}).value || '';
+  const nif = v('rn-nif').replace(/\D/g, '');
+  if (nif.length !== 9) {
+    alert('O NIF é obrigatório e tem nove algarismos.\n\nÉ ele que identifica o cliente: sem NIF, a mesma pessoa fica com uma ficha nova a cada venda, e daqui a dois anos aparecem duas renovações com metade da história cada uma.');
+    const e = document.getElementById('rn-nif'); if (e) e.focus();
+    return;
+  }
   const nome = v('rn-nome').trim();
   if (!nome) { alert('Indica o nome do cliente.'); return; }
   const linhas = rcppLerLinhas('rcpp-linhas-novo', 'rcppl');
@@ -4931,7 +4956,7 @@ async function rcppRegistarVenda(botao) {
   // vezes, cada uma com documento próprio e sem forma de as reconhecer.
   botao.disabled = true; botao.textContent = 'A registar…';
   const r = await chamarApi({
-    acao: 'novoRcpp', cliente_nome: nome, cliente_nif: v('rn-nif').trim(),
+    acao: 'novoRcpp', cliente_nome: nome, cliente_nif: nif,
     loja: v('rn-loja'), tipo: v('rn-tipo'), contacto: v('rn-tel').trim(),
     email: v('rn-email').trim(), data_inicio: v('rn-data'), linhas,
     paraUsername: RCPP.como || undefined,
