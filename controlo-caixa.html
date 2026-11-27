@@ -384,6 +384,11 @@
   .rcpp-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem .9rem; }
   .rcpp-cr { font-size:.66rem; color:var(--text-muted); display:block; text-transform:uppercase; letter-spacing:.03em; }
   .rcpp-hl { font-size:.82rem; color:var(--text); padding:.18rem 0; }
+  .rcpp-lembrete { font-size:.8rem; padding:.45rem .7rem; border-radius:7px; margin-top:.4rem; line-height:1.45; }
+  .rcpp-lembrete.aviso { background:#fff4f4; border-left:3px solid var(--danger); color:#8a1f1f; }
+  .rcpp-lembrete.dica { background:var(--off-white); border-left:3px solid var(--teal); }
+  .rcpp-forajanela { font-size:.76rem; color:var(--danger); font-weight:600; }
+
   .rcpp-vazio { text-align:center; color:var(--text-muted); padding:2.5rem 1rem; font-size:.9rem; }
 
   .rcpp-ficha-cab { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;
@@ -947,6 +952,16 @@
         <li><strong>Não comissionável</strong> — para marcares uma renovação que sabes que não vai ser paga e que fizeste na mesma. Não é uma opção do plano: é nossa, para estas aparecerem na contagem em vez de se esconderem.</li>
       </ul>
       <div class="alerta alerta-aviso">⚠️ No NBA, <strong>conclui sempre a campanha</strong> com Aceitar, Rejeitar ou Adiar. O plano é claro: só o <em>Aceitar</em> faz uma renovação contar como NBA. Deixar a campanha por fechar transforma uma renovação de 100% numa de 50%.</div>
+
+      <h3>As cinco regras da janela</h3>
+      <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.8">
+        <li><strong>A janela abre no mês 22.</strong> Num contrato de 24 meses, o mês 22 começa três meses antes do fim. É aí que a renovação passa de "refidelização antecipada" a "final de contrato".</li>
+        <li><strong>Renovar cedo de mais custa cinco vezes.</strong> Fechar no mês 22 vale cerca de cinco vezes mais do que fechar antes dele. Antes do mês 22, uma renovação em NBA vale 20% do que valeria; fora do NBA não vale nada.</li>
+        <li><strong>Concluir a campanha do NBA.</strong> Tem de ser terminada com Aceitar, Rejeitar ou Adiar — e só o <em>Aceitar</em> faz a renovação contar como NBA.</li>
+        <li><strong>A oferta pública aceite em NBA é NBA.</strong> Quando o NBA mostra o valor mínimo com oferta pública e se aceita, para a Vodafone isso é uma renovação NBA e vale o mesmo.</li>
+        <li><strong>Onde se confirma.</strong> No Portal ICM, em <em>Commissions UNP</em>, a coluna <em>RetentionType</em> diz como a Vodafone classificou cada renovação: Renewal (NBA), Renewal P1 (App Retenção), NotApplicable (nenhum dos dois), Ret Offer 1 (retenção). É por aí que se confere se o que se registou aqui bate certo.</li>
+      </ol>
+      <p class="rodape-nota">A aplicação lembra-te destas no momento em que elas contam: o cartão avisa quando estás fora da janela, e o painel de fecho muda o aviso conforme o canal que escolheres.</p>
       <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
         <li><strong>Nome</strong> — vem preenchido se o cliente já existir.</li>
         <li><strong>Loja</strong> e <strong>tipo de negócio</strong> — abre em Refidelização, que é o caso mais comum. Muda se for activação ou retenção.</li>
@@ -4405,9 +4420,14 @@ function rcppCartao(p) {
   const tel = num
     ? `<span class="rcpp-num">${rcppEsc(num)}</span>${p.contacto ? '' : ' <em class="rcpp-nota">(nº do serviço)</em>'}`
     : '<span class="rcpp-nota">sem contacto</span>';
+  // Fora da janela, renovar é penalizado — e isso tem de se ver no
+  // cartão, não só no momento de fechar. Quem liga ao cliente decide
+  // antes de abrir o painel.
   const janela = p.na_janela
     ? '<span class="rcpp-jan ok">✔ Na janela — altura certa para fechar</span>'
-    : (p.dias_janela !== null ? `<span class="rcpp-jan">Janela abre ${rcppData(p.data_janela)} — faltam ${p.dias_janela} dias</span>` : '');
+    : (p.dias_janela !== null
+        ? `<span class="rcpp-forajanela">⚠ Fora da janela — faltam ${p.dias_janela} dias (abre ${rcppData(p.data_janela)}). Fechar agora é penalizado.</span>`
+        : '');
   const linhas = p.linhas.map(l =>
     `<div class="rcpp-ln">${rcppEsc(l.produto || '(sem produto)')}${l.servico ? ' · ' + rcppEsc(l.servico) : ''}${l.meses ? ' · ' + l.meses + 'm' : ''}</div>`).join('');
   const adiado = p.estagio === 'adiado' && p.data_retoma
@@ -4538,16 +4558,36 @@ function rcppPainel(id, tipo) {
       </div>
       <div class="rcpp-acc">
         <label class="rcpp-nota">Renovou por onde? *</label>
-        <select class="form-input" style="max-width:300px" id="rcpp-canal-${id}">${rcppOpcoesCanal(reguaDoFecho)}</select>
+        <select class="form-input" style="max-width:300px" id="rcpp-canal-${id}"
+                onchange="rcppLembretes('${id}', '${reguaDoFecho}')">${rcppOpcoesCanal(reguaDoFecho)}</select>
         <button class="rcpp-b ok" onclick="rcppFechar('${id}', this)">Registar e fechar</button>
       </div>
+      <div id="rcpp-lem-${id}"></div>
       <div class="rcpp-nota" style="margin-top:.4rem">Um 4P com dois móveis são três linhas.
         A percentagem ao lado de cada canal é o que <em>esta</em> renovação vale por aí — só tu sabes por onde foi.
         O <strong>Nº RC</strong> é o que liga este registo ao contrato na Vodafone: sem ele, conferir a comissão
         depois obriga a procurar pelo nome e pela data. O sistema calcula o fim da permanência e abre sozinho a
         próxima renovação.</div>`;
     rcppLinhaMais(id);
+    rcppLembretes(id, reguaDoFecho);
   }
+}
+
+// Os lembretes mudam com a escolha do canal, e só dizem o que se aplica:
+// dentro da janela e em NBA não há nada a avisar, e encher o ecrã de
+// avisos que não interessam é a melhor forma de os pôr a ignorar todos.
+function rcppLembretes(id, regua) {
+  const el = document.getElementById('rcpp-lem-' + id);
+  if (!el) return;
+  const canal = (document.getElementById('rcpp-canal-' + id) || {}).value || '';
+  el.innerHTML = rcppLembretesHtml(regua, canal);
+}
+
+function rcppLembretesHtml(regua, canal) {
+  const mapa = rcppCat(regua).lembretes || {};
+  const lista = mapa[canal] || mapa[''] || [];
+  return lista.map(l =>
+    `<div class="rcpp-lembrete ${l.tipo === 'aviso' ? 'aviso' : 'dica'}">${l.tipo === 'aviso' ? '⚠ ' : '💡 '}${rcppEsc(l.texto)}</div>`).join('');
 }
 
 // Uma linha do negócio. Usada no fecho e no registo novo — o mesmo desenho
@@ -4918,8 +4958,9 @@ function rcppRegistoForm(cliente) {
     <div class="rcpp-grid" style="grid-template-columns:2fr 1fr; margin-top:.5rem">
       <div><span class="rcpp-cr">E-mail</span><input class="form-input" id="rn-email" value="${mail && mail.valor ? rcppEsc(mail.valor) : ''}"></div>
       <div id="rn-canal-caixa"><span class="rcpp-cr">Renovou por onde? *</span>
-        <select class="form-input" id="rn-canal">${rcppOpcoesCanal('final_contrato')}</select></div>
+        <select class="form-input" id="rn-canal" onchange="rcppRegistoLembretes()">${rcppOpcoesCanal('final_contrato')}</select></div>
     </div>
+    <div id="rn-lembretes"></div>
     <div class="rcpp-fl">Linhas do negócio</div>
     <div id="rcpp-linhas-novo"></div>
     <div class="rcpp-acc">
@@ -4951,6 +4992,15 @@ function rcppRegistoCanal() {
   const tipo = (document.getElementById('rn-tipo') || {}).value || '';
   const caixa = document.getElementById('rn-canal-caixa');
   if (caixa) caixa.style.display = tipo === 'ativacao' ? 'none' : '';
+  rcppRegistoLembretes();
+}
+
+function rcppRegistoLembretes() {
+  const el = document.getElementById('rn-lembretes');
+  if (!el) return;
+  const tipo = (document.getElementById('rn-tipo') || {}).value || '';
+  if (tipo === 'ativacao') { el.innerHTML = ''; return; }
+  el.innerHTML = rcppLembretesHtml('final_contrato', (document.getElementById('rn-canal') || {}).value || '');
 }
 
 async function rcppRegistoNifEscrito(valor) {
