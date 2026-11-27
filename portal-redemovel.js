@@ -4549,7 +4549,8 @@ function rcppBuscaRender() {
           <div class="rcpp-sub">${esc(c.nif)}${c.nif_valido ? '' : ' <i>NIF a confirmar</i>'}${c.loja ? ' · ' + esc(c.loja) : ''}${c.n_contratos ? ' · ' + c.n_contratos + ' contrato' + (c.n_contratos === 1 ? '' : 's') : ''}${c.sem_ficha ? ' · <i>sem ficha</i>' : ''}</div></div>
         <div class="rcpp-dir">${c.meu
           ? '<span class="rcpp-est">na tua carteira</span>'
-          : `<span class="rcpp-est">de ${esc(c.username || '—')}</span>`}</div>
+          : `<span class="rcpp-est">de ${esc(c.username || '—')}</span>`}
+          ${c.meu ? `<div><button class="rcpp-b ok" style="margin-top:.35rem" onclick="event.stopPropagation();rcppNovoPara('${esc(c.nif)}')">+ Registo novo</button></div>` : ''}</div>
       </div>
       ${c.meu ? `<div class="rcpp-meta">${tels}${mails}</div>` : '<div class="rcpp-nota">Cliente de outro assistente — fala com quem o tem.</div>'}
       <div class="rcpp-det" id="rbf-${esc(c.nif)}"></div>
@@ -4614,10 +4615,12 @@ const RCPP_TIPOS = {
   retencao: 'Retenção',
 };
 
-function rcppNovoForm() {
+// `cliente` vem da ficha que já existe (rcppNovoPara) ou de lado nenhum,
+// quando é mesmo um cliente novo.
+function rcppNovoForm(cliente) {
   const el = document.getElementById('rcpp-novo');
   if (!el) return;
-  if (el.innerHTML) { el.innerHTML = ''; return; }
+  if (el.innerHTML && !cliente) { el.innerHTML = ''; return; }
   document.querySelectorAll('.rcpp-form').forEach(x => { x.innerHTML = ''; });
 
   const lojas = (RCPP.dados && RCPP.dados.lojas) || [];
@@ -4625,19 +4628,35 @@ function rcppNovoForm() {
   const opTipo = Object.keys(RCPP_TIPOS).map(k => `<option value="${k}">${RCPP_TIPOS[k]}</option>`).join('');
   const hoje = new Date().toISOString().slice(0, 10);
 
+  // Um cliente já conhecido entra com a ficha dele preenchida. Escrever o
+  // nome outra vez à mão criava um "Joana C. F. Sousa" ao lado da "Joana
+  // Catarina Fontes de Sousa" que já lá estava, e a partir daí são dois
+  // clientes diferentes para o sistema.
+  const c = cliente || null;
+  const tel = c ? (c.contactos || []).find(x => x.valor && !x.valor.includes('@')) : null;
+  const mail = c ? (c.contactos || []).find(x => (x.valor || '').includes('@')) : null;
+  const vl = v => esc(String(v == null ? '' : v));
+
   el.innerHTML = `<div class="rcpp-fl">Registo novo — venda que não vem de uma renovação</div>
+    ${RCPP.como ? `<div class="rcpp-nota" style="color:#c60;margin:0 0 .4rem">A venda fica em nome de <b>${esc(RCPP.como)}</b>, de quem é esta mesa.</div>` : ''}
+    ${c ? `<div class="rcpp-nota" style="color:var(--success,#070);margin:0 0 .4rem">
+        Sobre a ficha de <b>${esc(c.nome)}</b>${c.n_contratos ? ` · ${c.n_contratos} contrato${c.n_contratos === 1 ? '' : 's'} no histórico` : ''}.
+        A ficha não é alterada: o que escreveres aqui vale só para esta venda.
+      </div>` : ''}
     <div class="rcpp-acc">
-      <input type="text" id="rn-nome" placeholder="Nome do cliente *" style="flex:1;min-width:180px">
-      <input type="text" id="rn-nif" placeholder="NIF" style="width:110px" maxlength="9">
+      <input type="text" id="rn-nome" placeholder="Nome do cliente *" style="flex:1;min-width:180px" value="${c ? vl(c.nome) : ''}">
+      <input type="text" id="rn-nif" placeholder="NIF" style="width:110px" maxlength="9" value="${c ? vl(c.nif) : ''}"
+             onchange="rcppNovoPorNif(this.value)">
       <select id="rn-loja">${opLoja || '<option value="">(sem lojas)</option>'}</select>
       <select id="rn-tipo">${opTipo}</select>
     </div>
     <div class="rcpp-acc" style="margin-top:.35rem">
-      <input type="text" id="rn-tel" placeholder="Telefone" style="width:130px">
-      <input type="text" id="rn-email" placeholder="E-mail" style="flex:1;min-width:150px">
+      <input type="text" id="rn-tel" placeholder="Telefone" style="width:130px" value="${tel ? vl(tel.valor) : ''}">
+      <input type="text" id="rn-email" placeholder="E-mail" style="flex:1;min-width:150px" value="${mail ? vl(mail.valor) : ''}">
       <span class="rcpp-nota" style="width:auto">Início da permanência</span>
       <input type="date" id="rn-data" value="${hoje}">
     </div>
+    <div id="rn-aviso"></div>
     <div class="rcpp-fl" style="margin-top:.6rem">Linhas do negócio</div>
     <div id="rn-linhas"></div>
     <div class="rcpp-acc" style="margin-top:.35rem">
@@ -4645,8 +4664,57 @@ function rcppNovoForm() {
       <button class="rcpp-b ok" onclick="rcppNovoGravar(this)">Registar venda</button>
       <button class="rcpp-b" onclick="rcppNovoForm()">Cancelar</button>
     </div>
-    <div class="rcpp-nota">Sem NIF não se cria ficha de cliente e a renovação futura fica mais frágil — mete-o sempre que puderes. Se a venda se registar por engano, a coordenação apaga no Controlo de Caixa.</div>`;
+      <div class="rcpp-nota">Escreve o NIF e sai do campo: se o cliente já existir, o resto preenche-se sozinho. Sem NIF não se cria ficha e a renovação futura fica mais frágil — mete-o sempre que puderes. Se a venda se registar por engano, a coordenação apaga no Controlo de Caixa.</div>`;
+  if (c && c.loja) { const sl = document.getElementById('rn-loja'); if (sl) sl.value = c.loja; }
   rcppNovoLinha();
+  const foco = document.getElementById(c ? 'rn-nif' : 'rn-nome');
+  if (foco) foco.focus();
+  el.scrollIntoView({ block: 'nearest' });
+}
+
+// Escrever o NIF e sair do campo procura a ficha. Só preenche o que estiver
+// VAZIO: o que já foi escrito à mão nunca é substituído por baixo da mão de
+// quem está a escrever.
+async function rcppNovoPorNif(valor) {
+  const nif = String(valor || '').replace(/\D/g, '');
+  const aviso = document.getElementById('rn-aviso');
+  if (!aviso) return;
+  if (nif.length !== 9) { aviso.innerHTML = ''; return; }
+
+  aviso.innerHTML = '<div class="rcpp-nota">A procurar a ficha…</div>';
+  const r = await rcppApi({ acao: 'fichaClienteRcpp', nif });
+  if (!r || !r.ok) {
+    aviso.innerHTML = `<div class="rcpp-nota">${r && /carteira/.test(r.erro || '')
+      ? 'Este NIF é de um cliente de outro assistente. Fala com a coordenação antes de registares.'
+      : 'Cliente novo — não há ficha com este NIF.'}</div>`;
+    return;
+  }
+
+  const porPor = (id, v) => { const e = document.getElementById(id); if (e && !e.value.trim() && v) e.value = v; };
+  porPor('rn-nome', r.cliente.nome);
+  const t = (r.cliente.contactos || []).find(x => x.valor && !x.valor.includes('@'));
+  const m = (r.cliente.contactos || []).find(x => (x.valor || '').includes('@'));
+  porPor('rn-tel', t ? t.valor : '');
+  porPor('rn-email', m ? m.valor : '');
+  const sl = document.getElementById('rn-loja');
+  if (sl && r.cliente.loja) sl.value = r.cliente.loja;
+
+  aviso.innerHTML = `<div class="rcpp-nota" style="color:var(--success,#070)">
+    Ficha encontrada: <b>${esc(r.cliente.nome)}</b> · ${r.n_contratos} contrato${r.n_contratos === 1 ? '' : 's'},
+    ${r.n_ativos} em vigor${r.projetos.length ? ` · ${r.projetos.length} RCPP` : ''}.
+  </div>`;
+}
+
+// Do resultado da busca para o registo novo, já com a ficha em cima.
+async function rcppNovoPara(nif) {
+  let r = RCPP.fichas[nif];
+  if (!r) {
+    r = await rcppApi({ acao: 'fichaClienteRcpp', nif });
+    if (!r || !r.ok) { alert((r && r.erro) || 'Erro.'); return; }
+    RCPP.fichas[nif] = r;
+  }
+  rcppFecharBusca();
+  rcppNovoForm(Object.assign({ n_contratos: r.n_contratos }, r.cliente));
 }
 
 function rcppNovoLinha() {
@@ -4682,6 +4750,9 @@ async function rcppNovoGravar(botao) {
     acao: 'novoRcpp', cliente_nome: nome, cliente_nif: val('rn-nif').trim(),
     loja: val('rn-loja'), tipo: val('rn-tipo'), contacto: val('rn-tel').trim(),
     email: val('rn-email').trim(), data_inicio: val('rn-data'), linhas,
+    // A ver a mesa de outro, a venda é DESSE — senão a coordenação ficava
+    // com vendas em nome dela só por ter aberto a mesa de alguém.
+    paraUsername: RCPP.como || undefined,
   });
   if (r && r.ok) {
     alert(`Venda registada com ${r.linhas} linha(s).\nA permanência termina a ${rcppDataPT(r.data_fim)} e a janela de renovação abre a ${rcppDataPT(r.data_janela)}.`);
@@ -4747,6 +4818,8 @@ window.rcppBuscar = rcppBuscar;
 window.rcppFecharBusca = rcppFecharBusca;
 window.rcppFicha = rcppFicha;
 window.rcppNovoForm = rcppNovoForm;
+window.rcppNovoPorNif = rcppNovoPorNif;
+window.rcppNovoPara = rcppNovoPara;
 window.rcppNovoLinha = rcppNovoLinha;
 window.rcppNovoGravar = rcppNovoGravar;
 window.rcppInstalarSeparador = rcppInstalarSeparador;
