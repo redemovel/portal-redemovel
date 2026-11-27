@@ -4644,7 +4644,9 @@ function rcppNovoForm(cliente) {
         A ficha não é alterada: o que escreveres aqui vale só para esta venda.
       </div>` : ''}
     <div class="rcpp-acc">
-      <input type="text" id="rn-nome" placeholder="Nome do cliente *" style="flex:1;min-width:180px" value="${c ? vl(c.nome) : ''}">
+      <input type="text" id="rn-nome" placeholder="Nome do cliente *" style="flex:1;min-width:180px" value="${c ? vl(c.nome) : ''}"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();rcppNovoPorNome();}">
+      <button class="rcpp-b" type="button" onclick="rcppNovoPorNome()" title="Procurar este nome entre os teus clientes">🔍 pelo nome</button>
       <input type="text" id="rn-nif" placeholder="NIF" style="width:110px" maxlength="9" value="${c ? vl(c.nif) : ''}"
              onchange="rcppNovoPorNif(this.value)">
       <select id="rn-loja">${opLoja || '<option value="">(sem lojas)</option>'}</select>
@@ -4680,27 +4682,86 @@ async function rcppNovoPorNif(valor) {
   const aviso = document.getElementById('rn-aviso');
   if (!aviso) return;
   if (nif.length !== 9) { aviso.innerHTML = ''; return; }
+  await rcppNovoPreencher(nif, true);
+}
 
-  aviso.innerHTML = '<div class="rcpp-nota">A procurar a ficha…</div>';
+/**
+ * Procurar pelo nome sem sair do formulário — para quando não se sabe o
+ * NIF, que é o caso mais vezes do que o contrário ao balcão.
+ *
+ * Mostra os clientes que calham e deixa escolher. Não escolhe sozinho,
+ * nem quando só há um: dois clientes com o mesmo apelido são frequentes,
+ * e preencher a ficha errada é pior do que não preencher nenhuma.
+ */
+async function rcppNovoPorNome() {
+  const campo = document.getElementById('rn-nome');
+  const aviso = document.getElementById('rn-aviso');
+  if (!campo || !aviso) return;
+  const termo = campo.value.trim();
+  if (termo.length < 3) { alert('Escreve pelo menos 3 letras do nome.'); return; }
+
+  aviso.innerHTML = '<div class="rcpp-nota">A procurar…</div>';
+  const r = await rcppApi({ acao: 'buscarRcpp', termo });
+  if (!r || !r.ok) {
+    aviso.innerHTML = `<div class="rcpp-nota" style="color:var(--danger)">${esc((r && r.erro) || 'Erro.')}</div>`;
+    return;
+  }
+
+  const meus = (r.clientes || []).filter(c => c.meu);
+  const outros = (r.clientes || []).length - meus.length;
+  if (!meus.length) {
+    aviso.innerHTML = `<div class="rcpp-nota">Nenhum cliente teu com esse nome${outros ? ` (há ${outros} de outros assistentes)` : ''}.
+      Procura-se <b>palavra inteira</b> — escreve só o apelido, por exemplo. Se for mesmo cliente novo, segue em frente e mete o NIF.</div>`;
+    return;
+  }
+
+  aviso.innerHTML = `<div class="rcpp-fl" style="margin-top:.4rem">${meus.length} cliente${meus.length === 1 ? '' : 's'} com esse nome — escolhe:</div>`
+    + meus.slice(0, 8).map(c => {
+      const tel = (c.contactos || []).find(x => x.valor && !x.valor.includes('@'));
+      return `<div class="rcpp-hl" style="cursor:pointer;padding:.25rem .35rem;border-radius:5px;border:1px solid var(--gray-light,#eee);margin-bottom:.2rem"
+                   onclick="rcppNovoPreencher('${esc(c.nif)}')">
+        <b>${esc(c.nome)}</b> · ${esc(c.nif)}${c.loja ? ' · ' + esc(c.loja) : ''}${tel ? ' · ' + esc(tel.valor) : ''}${c.n_contratos ? ` · ${c.n_contratos} contrato${c.n_contratos === 1 ? '' : 's'}` : ''}
+      </div>`;
+    }).join('')
+    + (meus.length > 8 ? '<div class="rcpp-nota">Só os primeiros 8 — afina o nome.</div>' : '');
+}
+
+/**
+ * Ir buscar a ficha e deitá-la no formulário.
+ * @param {boolean} soVazios  true só preenche campos vazios (veio do NIF
+ *   escrito à mão — não se mexe no que a pessoa está a escrever);
+ *   false substitui (escolheu-se um cliente de propósito numa lista).
+ */
+async function rcppNovoPreencher(nif, soVazios) {
+  const aviso = document.getElementById('rn-aviso');
+  if (!aviso) return;
+  aviso.innerHTML = '<div class="rcpp-nota">A carregar a ficha…</div>';
+
   const r = await rcppApi({ acao: 'fichaClienteRcpp', nif });
   if (!r || !r.ok) {
     aviso.innerHTML = `<div class="rcpp-nota">${r && /carteira/.test(r.erro || '')
-      ? 'Este NIF é de um cliente de outro assistente. Fala com a coordenação antes de registares.'
+      ? 'Este cliente é de outro assistente. Fala com a coordenação antes de registares.'
       : 'Cliente novo — não há ficha com este NIF.'}</div>`;
     return;
   }
 
-  const porPor = (id, v) => { const e = document.getElementById(id); if (e && !e.value.trim() && v) e.value = v; };
-  porPor('rn-nome', r.cliente.nome);
+  const por = (id, v) => {
+    const e = document.getElementById(id);
+    if (!e || !v) return;
+    if (soVazios && e.value.trim()) return;
+    e.value = v;
+  };
+  por('rn-nome', r.cliente.nome);
+  por('rn-nif', r.cliente.nif);
   const t = (r.cliente.contactos || []).find(x => x.valor && !x.valor.includes('@'));
   const m = (r.cliente.contactos || []).find(x => (x.valor || '').includes('@'));
-  porPor('rn-tel', t ? t.valor : '');
-  porPor('rn-email', m ? m.valor : '');
+  por('rn-tel', t ? t.valor : '');
+  por('rn-email', m ? m.valor : '');
   const sl = document.getElementById('rn-loja');
   if (sl && r.cliente.loja) sl.value = r.cliente.loja;
 
   aviso.innerHTML = `<div class="rcpp-nota" style="color:var(--success,#070)">
-    Ficha encontrada: <b>${esc(r.cliente.nome)}</b> · ${r.n_contratos} contrato${r.n_contratos === 1 ? '' : 's'},
+    Ficha de <b>${esc(r.cliente.nome)}</b> · ${r.n_contratos} contrato${r.n_contratos === 1 ? '' : 's'},
     ${r.n_ativos} em vigor${r.projetos.length ? ` · ${r.projetos.length} RCPP` : ''}.
   </div>`;
 }
@@ -4819,6 +4880,8 @@ window.rcppFecharBusca = rcppFecharBusca;
 window.rcppFicha = rcppFicha;
 window.rcppNovoForm = rcppNovoForm;
 window.rcppNovoPorNif = rcppNovoPorNif;
+window.rcppNovoPorNome = rcppNovoPorNome;
+window.rcppNovoPreencher = rcppNovoPreencher;
 window.rcppNovoPara = rcppNovoPara;
 window.rcppNovoLinha = rcppNovoLinha;
 window.rcppNovoGravar = rcppNovoGravar;
