@@ -887,10 +887,13 @@
       <h3>Fechar um negócio</h3>
       <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
         <li>Carrega em <strong>Fechou negócio</strong>.</li>
-        <li>Escreve uma linha por cada serviço contratado. <strong>Um 4P com dois móveis adicionais são três linhas</strong>, não três registos.</li>
+        <li>Escreve uma linha por cada serviço contratado, escolhendo a <strong>referência</strong> na lista e deixando o nome comercial como está na venda. <strong>Um 4P com dois móveis adicionais são três linhas</strong>, não três registos.</li>
         <li>Escolhe a permanência de cada linha (24 meses é o normal).</li>
+        <li>Mete o <strong>Nº RC</strong> do contrato.</li>
+        <li>Indica <strong>por onde renovaste</strong>. Ao lado de cada opção está quanto vale esta renovação por aí — e isso muda conforme a altura: dentro da janela o NBA vale 100% e fora dele 50%, mas numa renovação feita cedo de mais, fora do NBA, aparece <strong>NÃO COMISSIONÁVEL</strong>, porque é mesmo isso que acontece.</li>
         <li>Confirma a data de início e carrega em <strong>Registar e fechar</strong>.</li>
       </ol>
+      <div class="alerta alerta-aviso">⚠️ O canal é o único dado deste fecho que <strong>ninguém consegue saber depois</strong> — nem tu, daqui a um mês. Escolhe o que aconteceu de verdade: a resposta certa vale mais do que a bonita, porque é com ela que se confere a comissão que a Vodafone paga.</div>
       <p style="font-size:.85rem">O sistema calcula o fim da permanência e abre sozinho o RCPP da renovação seguinte, quando chegar a altura. Não tens de fazer mais nada.</p>
       <div class="alerta alerta-ok">Enganaste-te? A coordenação anula. O negócio volta à tua mesa e o contrato criado por engano é apagado. Pede, não deixes ficar errado.</div>
 
@@ -930,6 +933,8 @@
       <h3>Preencher</h3>
       <ol style="margin:.3rem 0 .75rem 1.2rem; font-size:.85rem; line-height:1.9">
         <li><strong>NIF</strong> — obrigatório, e é por aqui que se começa. É validado pelo dígito de controlo, por isso um engano a escrever é apanhado logo.</li>
+        <li><strong>Nº RC</strong> — obrigatório. É o que liga este registo ao contrato na Vodafone: sem ele, conferir uma comissão depois obriga a procurar pelo nome do cliente e pela data.</li>
+        <li><strong>Renovou por onde?</strong> — NBA, App Retenção, Upgrade com oferta pública, nenhum dos três, ou retenção. Ao lado de cada opção está <strong>quanto vale</strong> esta renovação por aí. Só aparece em refidelizações e retenções: numa activação não há renovação nenhuma.</li>
         <li><strong>Nome</strong> — vem preenchido se o cliente já existir.</li>
         <li><strong>Loja</strong> e <strong>tipo de negócio</strong> — abre em Refidelização, que é o caso mais comum. Muda se for activação ou retenção.</li>
         <li><strong>Telefone</strong> e <strong>e-mail</strong> — é por aqui que se contacta o cliente daqui a dois anos.</li>
@@ -4232,23 +4237,34 @@ const RCPP = {
 
 // As referências e os canais vêm do servidor (lib/rcppCatalogo.js) e não
 // mudam durante a sessão — carregam-se uma vez.
-async function rcppCatalogo() {
-  if (RCPP.catalogo) return RCPP.catalogo;
-  const r = await chamarApi({ acao: 'catalogoRcpp' });
-  RCPP.catalogo = r.ok ? r : { referencias: [], canais: [] };
-  return RCPP.catalogo;
+// As percentagens dos canais dependem de onde o contrato está na régua,
+// por isso o catálogo guarda-se por régua. As referências são as mesmas.
+async function rcppCatalogo(regua) {
+  const chave = regua || 'final_contrato';
+  RCPP.catalogo = RCPP.catalogo || {};
+  if (RCPP.catalogo[chave]) return RCPP.catalogo[chave];
+  const r = await chamarApi({ acao: 'catalogoRcpp', regua: chave });
+  RCPP.catalogo[chave] = r.ok ? r : { referencias: [], canais: [] };
+  return RCPP.catalogo[chave];
+}
+
+function rcppCat(regua) {
+  return (RCPP.catalogo && RCPP.catalogo[regua || 'final_contrato']) || { referencias: [], canais: [] };
 }
 
 function rcppOpcoesRef(seleccionada) {
-  const refs = (RCPP.catalogo && RCPP.catalogo.referencias) || [];
+  const refs = rcppCat().referencias;
   return '<option value="">— referência —</option>' + refs.map(r =>
     `<option value="${rcppEsc(r.codigo)}"${r.codigo === seleccionada ? ' selected' : ''}>${rcppEsc(r.designacao)}</option>`).join('');
 }
 
-function rcppOpcoesCanal() {
-  const cs = (RCPP.catalogo && RCPP.catalogo.canais) || [];
+// O rótulo traz a percentagem que ESTE contrato vale por aquele canal:
+// o mesmo NBA vale 100% no final do contrato e 20% numa refidelização
+// antecipada. Decorar a tabela do plano não é trabalho de quem atende.
+function rcppOpcoesCanal(regua) {
+  const cs = rcppCat(regua).canais;
   return '<option value="">— como foi? —</option>' + cs.map(c =>
-    `<option value="${rcppEsc(c.codigo)}">${rcppEsc(c.nome)}</option>`).join('');
+    `<option value="${rcppEsc(c.codigo)}">${rcppEsc(c.rotulo || c.nome)}</option>`).join('');
 }
 
 function rcppEsc(s) {
@@ -4277,7 +4293,8 @@ function rcppGestao() { return typeof ehMasterOuCoordenador === 'function' && eh
 function rcppEntrar() {
   const btnCoord = document.querySelector('.rcpp-sb[data-rcpp="coordenacao"]');
   if (btnCoord) btnCoord.hidden = !rcppGestao();
-  rcppCatalogo();
+  rcppCatalogo('final_contrato');
+  rcppCatalogo('antecipada');
   rcppCarregarMesa();
 }
 
@@ -4491,20 +4508,31 @@ function rcppPainel(id, tipo) {
       </div>
       <div class="rcpp-nota" style="margin-top:.4rem">Vai para a coordenação analisar. Se for engano, a coordenação anula.</div>`;
   } else {
+    // Onde está este contrato na régua decide quanto vale cada canal. A
+    // janela do RCPP abre no mês 22, por isso quem fecha dentro da janela
+    // está em final de contrato; quem fecha antes, está em antecipada —
+    // e aí quase nada é comissionado.
+    const p = (RCPP.mesa && RCPP.mesa.projetos || []).find(x => x.id === id);
+    const reguaDoFecho = (p && p.na_janela) ? 'final_contrato' : 'antecipada';
     el.innerHTML = `<div class="rcpp-fl" style="margin-top:0">Contrato novo</div>
       <div id="rcpp-linhas-${id}"></div>
       <div class="rcpp-acc">
         <button class="rcpp-b" onclick="rcppLinhaMais('${id}')">+ Linha</button>
         <label class="rcpp-nota">Início</label>
         <input class="form-input" style="max-width:170px" type="date" id="rcpp-ini-${id}" value="${rcppHoje()}">
-        <label class="rcpp-nota">Renovou por onde?</label>
-        <select class="form-input" style="max-width:190px" id="rcpp-canal-${id}">${rcppOpcoesCanal()}</select>
+        <label class="rcpp-nota">Nº RC *</label>
+        <input class="form-input" style="max-width:150px" type="text" id="rcpp-nrc-${id}" placeholder="do contrato">
+      </div>
+      <div class="rcpp-acc">
+        <label class="rcpp-nota">Renovou por onde? *</label>
+        <select class="form-input" style="max-width:300px" id="rcpp-canal-${id}">${rcppOpcoesCanal(reguaDoFecho)}</select>
         <button class="rcpp-b ok" onclick="rcppFechar('${id}', this)">Registar e fechar</button>
       </div>
       <div class="rcpp-nota" style="margin-top:.4rem">Um 4P com dois móveis são três linhas.
-        <strong>O canal é obrigatório</strong> e só tu sabes: a mesma renovação vale o dobro feita em NBA.
-        Se não foi por NBA nem pela App Retenção, escolhe "Nem NBA nem App" — a resposta honesta vale mais
-        do que a bonita. O sistema calcula o fim da permanência e abre sozinho a próxima renovação.</div>`;
+        A percentagem ao lado de cada canal é o que <em>esta</em> renovação vale por aí — só tu sabes por onde foi.
+        O <strong>Nº RC</strong> é o que liga este registo ao contrato na Vodafone: sem ele, conferir a comissão
+        depois obriga a procurar pelo nome e pela data. O sistema calcula o fim da permanência e abre sozinho a
+        próxima renovação.</div>`;
     rcppLinhaMais(id);
   }
 }
@@ -4581,13 +4609,21 @@ async function rcppPerder(id) {
 async function rcppFechar(id, botao) {
   const linhas = rcppLerLinhas('rcpp-linhas-' + id, 'rcppl');
   if (!linhas.length) { alert('Indica pelo menos um produto.'); return; }
+  // Pela ordem em que os campos aparecem no ecrã, e igual à do registo
+  // novo: quem aprende num sabe usar o outro.
+  const nrc = ((document.getElementById('rcpp-nrc-' + id) || {}).value || '').trim();
+  if (!nrc) {
+    alert('Falta o Nº RC.\n\nÉ o que liga este registo ao contrato na Vodafone — sem ele, conferir a comissão depois obriga a procurar pelo nome do cliente e pela data.');
+    const e = document.getElementById('rcpp-nrc-' + id); if (e) e.focus();
+    return;
+  }
   const canal = (document.getElementById('rcpp-canal-' + id) || {}).value || '';
   if (!canal) {
-    alert('Indica por onde foi a renovação.\n\nNBA, App Retenção, ou nem uma nem outra. É o único dado deste fecho que ninguém consegue saber depois, e vale metade da comissão.');
+    alert('Indica por onde foi a renovação.\n\nÉ o único dado deste fecho que ninguém consegue saber depois, e a percentagem ao lado de cada opção mostra quanto vale.');
     return;
   }
   if (botao) { botao.disabled = true; botao.textContent = 'A registar…'; }
-  const r = await chamarApi({ acao: 'fecharRcpp', id, canal,
+  const r = await chamarApi({ acao: 'fecharRcpp', id, canal, nrc,
     data_inicio: document.getElementById('rcpp-ini-' + id).value, linhas });
   if (r.ok) alert(`Contrato registado com ${r.linhas} linha(s).\nA permanência termina a ${rcppData(r.data_fim)}.`);
   else if (botao) { botao.disabled = false; botao.textContent = 'Registar e fechar'; }
@@ -4858,17 +4894,18 @@ function rcppRegistoForm(cliente) {
         <button class="rcpp-b" onclick="rcppRegistoPorNome()" title="Não sabes o NIF? Procura pelo nome">🔍 pelo nome</button></div>
     </div>
     <div id="rn-aviso"></div>
-    <div class="rcpp-grid" style="grid-template-columns:repeat(4,1fr); margin-top:.5rem">
+    <div class="rcpp-grid" style="grid-template-columns:repeat(5,1fr); margin-top:.5rem">
       <div><span class="rcpp-cr">Loja *</span><select class="form-input" id="rn-loja">${opLoja || '<option value="">(abre os Negócios primeiro)</option>'}</select></div>
       <div><span class="rcpp-cr">Tipo de negócio *</span>
         <select class="form-input" id="rn-tipo" onchange="rcppRegistoCanal()">${opTipo}</select></div>
       <div><span class="rcpp-cr">Telefone</span><input class="form-input" id="rn-tel" value="${tel ? rcppEsc(tel.valor) : ''}"></div>
       <div><span class="rcpp-cr">Início da permanência</span><input class="form-input" type="date" id="rn-data" value="${rcppHoje()}"></div>
+      <div><span class="rcpp-cr">Nº RC *</span><input class="form-input" id="rn-nrc" placeholder="do contrato"></div>
     </div>
     <div class="rcpp-grid" style="grid-template-columns:2fr 1fr; margin-top:.5rem">
       <div><span class="rcpp-cr">E-mail</span><input class="form-input" id="rn-email" value="${mail && mail.valor ? rcppEsc(mail.valor) : ''}"></div>
       <div id="rn-canal-caixa"><span class="rcpp-cr">Renovou por onde? *</span>
-        <select class="form-input" id="rn-canal">${rcppOpcoesCanal()}</select></div>
+        <select class="form-input" id="rn-canal">${rcppOpcoesCanal('final_contrato')}</select></div>
     </div>
     <div class="rcpp-fl">Linhas do negócio</div>
     <div id="rcpp-linhas-novo"></div>
@@ -5003,6 +5040,12 @@ async function rcppRegistarVenda(botao) {
   if (!nome) { alert('Indica o nome do cliente.'); return; }
   const linhas = rcppLerLinhas('rcpp-linhas-novo', 'rcppl');
   if (!linhas.length) { alert('Indica pelo menos um produto.'); return; }
+  const nrc = v('rn-nrc').trim();
+  if (!nrc) {
+    alert('Falta o Nº RC.\n\nÉ o que liga este registo ao contrato na Vodafone — sem ele, conferir a comissão depois obriga a procurar pelo nome do cliente e pela data.');
+    const e = document.getElementById('rn-nrc'); if (e) e.focus();
+    return;
+  }
   const tipo = v('rn-tipo');
   const canal = v('rn-canal');
   if (tipo !== 'ativacao' && !canal) {
@@ -5014,7 +5057,7 @@ async function rcppRegistarVenda(botao) {
   // vezes, cada uma com documento próprio e sem forma de as reconhecer.
   botao.disabled = true; botao.textContent = 'A registar…';
   const r = await chamarApi({
-    acao: 'novoRcpp', cliente_nome: nome, cliente_nif: nif,
+    acao: 'novoRcpp', cliente_nome: nome, cliente_nif: nif, nrc,
     loja: v('rn-loja'), tipo, canal: tipo === 'ativacao' ? '' : canal, contacto: v('rn-tel').trim(),
     email: v('rn-email').trim(), data_inicio: v('rn-data'), linhas,
     paraUsername: RCPP.como || undefined,
